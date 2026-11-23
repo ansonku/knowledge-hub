@@ -31,8 +31,7 @@ const router = createRouter({
         { path: 'recent/', name: 'app-recent', component: () => import('./app/RecentPage.vue') },
         { path: 'favorites/', name: 'app-favorites', component: () => import('./app/LibraryPage.vue'), meta: { preset: 'favorites' } },
         { path: 'published/', name: 'app-published', component: () => import('./app/LibraryPage.vue'), meta: { preset: 'published' } },
-        // The redesigned trash lands in P2d; until then it opens the legacy page.
-        { path: 'trash/', name: 'app-trash', redirect: '/library/trash/' },
+        { path: 'trash/', name: 'app-trash', component: () => import('./app/TrashPage.vue') },
         { path: 'collections/:id/', name: 'app-collection', component: () => import('./app/LibraryPage.vue') },
         { path: 'docs/:id/', name: 'app-document', component: () => import('./app/DocumentPage.vue') },
         { path: 'docs/:id/compare/', name: 'app-compare', component: () => import('./app/ComparePage.vue') },

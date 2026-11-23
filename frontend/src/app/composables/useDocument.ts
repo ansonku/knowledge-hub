@@ -24,6 +24,10 @@ export type DocumentDetails = {
   current_version: VersionInfo
   updated_at: string
   preview_available?: boolean
+  /** Viewer-specific and publication fields returned by GET only. */
+  is_favorite?: boolean
+  is_public?: boolean
+  published_version?: number | null
 }
 
 export type PublicationStatus = {

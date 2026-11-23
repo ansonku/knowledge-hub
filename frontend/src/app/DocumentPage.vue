@@ -22,12 +22,13 @@ import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
 import { useDocument, type DocumentDetails, type PublicationStatus } from './composables/useDocument'
 import InfoTab from './inspector/InfoTab.vue'
+import ActivityTab from './inspector/ActivityTab.vue'
 import PublishTab from './inspector/PublishTab.vue'
 import VersionsTab from './inspector/VersionsTab.vue'
 import { formatLabel, longDateTime, shortDate, type DocumentRow } from './types'
 
 type Mode = 'read' | 'edit' | 'split'
-type Tab = 'info' | 'versions' | 'publish'
+type Tab = 'info' | 'versions' | 'activity' | 'publish'
 
 const route = useRoute()
 const router = useRouter()
@@ -154,15 +155,41 @@ async function loadPublication() {
   }
 }
 watch(() => file.value?.id, loadPublication)
-const publishedNumber = computed(() => publication.value?.publication?.version__number)
+// Admins get live status from the publication API; everyone else uses the detail fields.
+const publishedNumber = computed(() => publication.value
+  ? publication.value.publication?.version__number
+  : file.value?.published_version ?? undefined)
 const visibility = computed(() => {
-  if (!publication.value) return undefined
+  if (!file.value || (session.isAdmin && !publication.value)) return undefined
   const published = publishedNumber.value
   if (!published) return { kind: 'private', label: '私人' }
   const behind = (file.value?.current_version.number ?? published) - published
   return behind > 0
     ? { kind: 'lagging', label: `公開 v${published} · 落後 ${behind} 版` }
     : { kind: 'public', label: `公開 v${published}` }
+})
+
+// ---- Favourite and recent views ----------------------------------------------------
+const favoriteBusy = ref(false)
+async function toggleFavorite() {
+  const current = file.value
+  if (!current || favoriteBusy.value) return
+  const next = !current.is_favorite
+  favoriteBusy.value = true
+  doc.applyMetadata({ is_favorite: next })
+  try {
+    await api(`/api/documents/${encodeURIComponent(current.id)}/favorite/`, next ? 'PUT' : 'DELETE')
+    toast.add({ severity: 'success', summary: next ? '已加入收藏' : '已取消收藏', life: 2000 })
+  } catch (cause) {
+    doc.applyMetadata({ is_favorite: !next })
+    toast.add({ severity: 'error', summary: '無法更新收藏', detail: cause instanceof Error ? cause.message : '', life: 4000 })
+  } finally {
+    favoriteBusy.value = false
+  }
+}
+// Record the visit once per document load (private to the viewer).
+watch(() => file.value?.id, id => {
+  if (id) void api(`/api/documents/${encodeURIComponent(id)}/view/`, 'POST').catch(() => undefined)
 })
 
 // ---- Inspector -------------------------------------------------------------------
@@ -176,6 +203,7 @@ const tab = ref<Tab>(route.query.panel === 'versions' ? 'versions' : 'info')
 const tabs = computed(() => [
   { value: 'info' as const, label: '資訊' },
   { value: 'versions' as const, label: '版本' },
+  { value: 'activity' as const, label: '活動' },
   ...(session.isAdmin ? [{ value: 'publish' as const, label: '公開' }] : []),
 ])
 function setInspector(open: boolean) {
@@ -295,6 +323,10 @@ onBeforeUnmount(() => {
         </template>
       </nav>
       <div v-if="file" class="actions">
+        <button type="button" class="icon-button star" :class="{ on: file.is_favorite }" :aria-pressed="Boolean(file.is_favorite)"
+          :aria-label="file.is_favorite ? '取消收藏' : '加入收藏'" :disabled="favoriteBusy" @click="toggleFavorite">
+          <UiIcon name="star" :size="18" :filled="file.is_favorite" />
+        </button>
         <Button v-if="session.isAdmin" outlined severity="secondary" size="small" class="action-button" @click="openTab('publish')">
           <UiIcon name="globe" :size="16" /><span>公開設定</span>
         </Button>
@@ -418,6 +450,7 @@ onBeforeUnmount(() => {
             :editable="session.canEdit" @jump="jump" @updated="doc.applyMetadata" />
           <VersionsTab v-else-if="tab === 'versions'" :document="file" :shown-id="historical?.id" :can-restore="session.canEdit"
             :published-number="publishedNumber" @restored="onRestored" />
+          <ActivityTab v-else-if="tab === 'activity'" :document-id="file.id" :revision="`${file.current_version.id}-${file.updated_at}`" />
           <PublishTab v-else :document="file" :status="publication" :error="publicationError"
             @changed="status => { publication = status }" />
         </div>
@@ -447,6 +480,8 @@ onBeforeUnmount(() => {
   border-radius: var(--ui-radius-md); background: var(--ui-bg-surface); color: var(--ui-text-secondary); cursor: pointer;
 }
 .icon-button:hover { background: var(--ui-bg-subtle); }
+.icon-button.star { border-color: transparent; }
+.icon-button.star.on { color: #d99a00; }
 .icon-button.pressed { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-accent-on-soft); }
 
 .layout { flex: 1; display: flex; align-items: stretch; min-height: 0; }
