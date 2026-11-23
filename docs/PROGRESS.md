@@ -1,6 +1,6 @@
 # Knowledge Hub 開發進度與交接
 
-截至 2026-11-23，M0 至 M5 已推送到 GitHub 的 `main`，M5 的 GitHub Actions 已通過。本機提交 `630b7f0` 為公開入口與登入介面的版型更新。M6 公開文章已完成本機實作與驗收。 [M5 提交](https://github.com/ansonku/knowledge-hub/commit/452eed4319501085da72b09046334b7db8d4232c) · [M5 驗收](https://github.com/ansonku/knowledge-hub/actions/runs/45167016845)
+截至 2026-11-23，M0 至 M6 與整站介面改版已推送到 GitHub 的 `main`。下一個里程碑是 M7 NAS 部署與安全強化。 [M6 提交](https://github.com/ansonku/knowledge-hub/commit/38d0e78) · [介面改版](https://github.com/ansonku/knowledge-hub/commit/a239409)
 
 ## 已完成
 
@@ -28,5 +28,11 @@ HTML 可能引用外部 HTTPS 資源，因此決定保留「開啟 HTML 預覽�
 ## M6 文章公開與未登入閱讀
 
 既有與新文章預設 Private。Admin 可確認指定版本後發布，首頁與 `/library/` 共用知識總覽，訪客可搜尋與閱讀公開文章。後續內部更新維持未發布狀態，直到 Admin 發布新版。下架或移入回收桶會讓舊公開網址回傳 404。從回收桶還原後維持 Private。公開 HTML 採靜態閱讀版。39 項 Django 測試已通過。Firefox 已驗證 Admin 發布 v2 後，訪客可在無痕視窗從首頁閱讀，且下架後舊網址及 API 立即回傳 404。首頁改版後已再驗證兩個入口的公開搜尋，以及 Visitor、Viewer 與 Admin 的介面。 [M6 實作計畫](docs/IMPLEMENTATION_PLAN.md#m6--article-publication-and-anonymous-reading)
+
+## 整站介面改版
+
+知識總覽以搜尋為主，窄螢幕可展開格式與標籤篩選，並移除已套用的條件。登入後保留「公開／私人」狀態標籤。公開與會員閱讀頁共用樣式，Markdown 標準版的目錄可在窄螢幕收合。登入、個人設定、帳號管理、版本歷史與回收桶共用頁首及主要操作樣式。
+
+39 項 Django 測試通過。Firefox 已在 500、768、1280 px 驗證文章清單、篩選、目錄、鍵盤導覽與角色權限，並確認 OBMF 公開文章的 MMIO SVG 和 GPIO 50 欄圖在窄螢幕可讀。 [介面改版提交](https://github.com/ansonku/knowledge-hub/commit/a239409)
 
 NAS 部署與安全強化順延為 M7。 [M7 實作計畫](docs/IMPLEMENTATION_PLAN.md#m7--nas-deployment-and-hardening)
