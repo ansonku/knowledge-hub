@@ -12,10 +12,12 @@ from users.permissions import CanReadLibrary
 
 from . import services, storage
 from .models import Category, Document, Tag
+from .preview import local_preview_enabled
 from .serializers import (
     CategorySerializer,
     DocumentMetadata,
     DocumentSerializer,
+    MarkdownEdit,
     NewUpload,
     TagSerializer,
     VersionUpload,
@@ -88,15 +90,18 @@ def document_detail(request, document_id):
         document = services.change_document(request.user, document_id, form.validated_data)
     else:
         document = get_object_or_404(document_list(), pk=document_id)
-    return Response(DocumentSerializer(document).data)
+    return Response({
+        **DocumentSerializer(document).data,
+        "preview_available": document.format == Document.Format.HTML and local_preview_enabled(request),
+    })
 
 
 @never_cache
 @api_view(["POST"])
 @permission_classes([CanReadLibrary])
-def new_version(request, document_id):
+def new_version(request, document_id, edit=False):
     services.require_editor(request.user)
-    form = VersionUpload(data=request.data)
+    form = (MarkdownEdit if edit else VersionUpload)(data=request.data)
     form.is_valid(raise_exception=True)
     document = services.add_upload(request.user, form.validated_data, document_id)
     return Response(DocumentSerializer(document).data, status=201)
@@ -110,6 +115,9 @@ def download(request, document_id):
     version = document.current_version
     if not version or version.path != f"versions/{document.id}/{version.id}":
         raise Http404
+    requested = request.query_params.get("version")
+    if requested and requested != str(version.pk):
+        return Response({"detail": "文件已有新版本，請重新載入。"}, status=status.HTTP_409_CONFLICT)
     try:
         file = (storage.root() / version.path).open("rb")
     except FileNotFoundError:

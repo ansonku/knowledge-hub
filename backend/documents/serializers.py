@@ -45,3 +45,7 @@ class VersionUpload(serializers.Serializer):
 
 class NewUpload(DocumentMetadata, VersionUpload):
     pass
+
+
+class MarkdownEdit(VersionUpload):
+    base_version = serializers.UUIDField()

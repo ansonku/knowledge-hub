@@ -9,6 +9,7 @@ import MultiSelect from 'primevue/multiselect'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 type Format = 'html' | 'md'
 type Mode = 'single' | 'batch' | 'version'
@@ -39,7 +40,8 @@ const tags = ref<Label[]>([])
 const formats = [{ id: '', name: '全部格式' }, { id: 'html', name: 'HTML' }, { id: 'md', name: 'Markdown' }]
 const role = ref('')
 const csrf = ref('')
-const category = ref('')
+const route = useRoute()
+const category = ref(typeof route.query.category === 'string' ? route.query.category : '')
 const format = ref('')
 const tag = ref<string | null>(null)
 const page = ref(1)
@@ -157,6 +159,7 @@ onMounted(async () => {
     role.value = account.role
     csrf.value = account.csrf_token
     await loadTaxonomy()
+    if (!navigation.value.some(item => item.id === category.value)) category.value = ''
     await loadDocuments()
   } catch (error) {
     if (error instanceof ApiError && error.status === 403) {
@@ -398,8 +401,9 @@ function sizeLabel(size: number) {
             <Column field="title" header="文件標題">
               <template #body="{ data }">
                 <div class="document-title">
-                  <strong>{{ data.title }}</strong>
-                  <Tag :value="data.format" :severity="data.format === 'HTML' ? 'info' : 'secondary'" />
+                  <RouterLink class="reader-link"
+                    :to="{ name: 'document-reader', params: { id: data.id } }">{{ data.title }}</RouterLink>
+                  <Tag :value="formatLabel(data.format)" :severity="data.format === 'html' ? 'info' : 'secondary'" />
                 </div>
               </template>
             </Column>
@@ -561,6 +565,7 @@ function sizeLabel(size: number) {
 .library-panel { margin-top: 1rem; border: 1px solid #dfe6f0; border-radius: .75rem; background: white; overflow: hidden; }
 .library-toolbar, .library-count { padding: 1rem 1.15rem; }
 .library-count { font-size: .875rem; border-top: 1px solid #e3eaf2; }
+.reader-link { color: #1746a2; font-weight: 700; text-underline-offset: .18em; }
 .document-actions { flex-wrap: nowrap; }
 .dropzone {
   margin: 1rem 0; border: 1px dashed #82a5e8; border-radius: .6rem;

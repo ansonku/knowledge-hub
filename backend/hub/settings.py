@@ -14,6 +14,7 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "documents.middleware.SameOriginApiMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -140,3 +141,5 @@ MFA_ENCRYPTION_KEY = os.getenv("MFA_ENCRYPTION_KEY")
 DOCUMENT_STORAGE = os.getenv("DOCUMENT_STORAGE", "/var/lib/knowledge-hub/documents")
 DOCUMENT_MAX_BYTES = int(os.getenv("DOCUMENT_MAX_BYTES") or 50 * 1024 * 1024)
 DOCUMENT_MAX_BATCH = int(os.getenv("DOCUMENT_MAX_BATCH") or 20)
+
+LOCAL_HTML_PREVIEW = os.getenv("LOCAL_HTML_PREVIEW", "false").lower() == "true"

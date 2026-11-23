@@ -21,6 +21,12 @@ class DuplicateContent(APIException):
     default_code = "duplicate_content"
 
 
+class VersionConflict(APIException):
+    status_code = 409
+    default_detail = "文件已有新版本。請保留草稿並重新載入最新版本。"
+    default_code = "version_conflict"
+
+
 def require_editor(actor):
     if not has_role(actor, User.Role.ADMIN, User.Role.EDITOR):
         raise PermissionDenied()
@@ -33,6 +39,8 @@ def active_documents():
 def add_upload(actor, data, document_id=None):
     require_editor(actor)
     upload = data["file"]
+    base_version = data.get("base_version")
+    filename = upload.name
     suffix = Path(upload.name).suffix.lower().removeprefix(".")
     if suffix not in Document.Format.values:
         raise ValidationError({"file": "只接受 .html 或 .md 檔案。"})
@@ -56,6 +64,12 @@ def add_upload(actor, data, document_id=None):
             if document.format != suffix:
                 raise ValidationError({"file": "新版本必須維持原始文件格式。"})
             current = document.current_version
+            if base_version is not None:
+                if document.format != Document.Format.MARKDOWN:
+                    raise ValidationError({"file": "只支援編輯 Markdown 文件。"})
+                if current.pk != base_version:
+                    raise VersionConflict()
+                filename = current.filename
             if current.sha256 == sha256 and not data["force"]:
                 raise DuplicateContent()
             number = current.number + 1
@@ -63,8 +77,9 @@ def add_upload(actor, data, document_id=None):
         version_id = uuid.uuid4()
         path = storage.publish(temporary, document.id, version_id)
         version = Version.objects.create(
-            id=version_id, document=document, number=number, path=path, filename=upload.name,
+            id=version_id, document=document, number=number, path=path, filename=filename,
             sha256=sha256, size=size, note=data.get("note", ""), created_by=actor,
+            source="markdown_edit" if base_version else "upload",
         )
         document.current_version = version
         document.save(update_fields=["current_version", "updated_at"])

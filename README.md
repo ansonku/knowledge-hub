@@ -76,3 +76,17 @@ docker compose exec backend python manage.py create_hub_admin <帳號名稱> <�
 ```bash
 docker compose exec backend python manage.py check_document_storage
 ```
+
+## M3 Markdown 閱讀
+
+從知識總覽點選 Markdown 文件標題進入閱讀頁。標準版面包含分類與文章目錄，寬版維持閱讀寬度，全頁使用可用空間。版面偏好儲存在瀏覽器。Viewer 可以閱讀、點選目錄和下載目前版本的原始檔。
+
+Admin 和 Editor 可在 Markdown 閱讀頁切換至 Monaco 編輯器，或以分割模式查看即時預覽。儲存會新增版本並保留舊稿。若另一位使用者已更新目前版本，系統會顯示版本衝突並保留編輯區中的草稿。
+
+### 本機 HTML 預覽
+
+HTML 文件頁可開啟沙箱預覽，也可直接下載原始檔。預覽需要登入，並使用版本專屬的 60 秒一次性連結。iframe 和直接開啟連結收到的 HTML 都受沙箱限制。相容模式允許載入外部 HTTPS 資源，第三方服務可能收到連線資訊。
+
+Compose 的 `LOCAL_HTML_PREVIEW` 預設供本機 HTTP 使用，可設為 `false` 關閉。只有 loopback 的 `PUBLIC_ORIGIN` 與請求主機可開啟預覽。HTTPS、對外主機和 Cloudflare 轉送的請求一律關閉。外部部署應使用實際的公開網址設定 `PUBLIC_ORIGIN`，保留附件下載。
+
+Markdown 閱讀與分割預覽共用渲染器。支援表格、刪除線及唯讀任務清單，並可用 `mermaid` 程式碼區塊繪圖、以 `$...$` 或 `$$...$$` 顯示 KaTeX 公式。指定已支援的語言可顯示程式碼高亮。Mermaid 在只能載入本機靜態資產的沙箱中繪圖，頁面以圖片顯示結果。圖表無法繪製時會保留原始語法。

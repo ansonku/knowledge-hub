@@ -59,3 +59,11 @@ class Version(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["document", "number"], name="unique_document_version")]
+
+
+class PreviewTicket(models.Model):
+    digest = models.CharField(primary_key=True, max_length=64)
+    version = models.ForeignKey(Version, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    session_version = models.PositiveBigIntegerField()
+    expires_at = models.DateTimeField(db_index=True)

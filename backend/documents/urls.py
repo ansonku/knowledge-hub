@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
-from . import views
+from . import preview, views
 
 router = SimpleRouter()
 router.register("categories", views.CategoryViewSet)
@@ -11,6 +11,8 @@ urlpatterns = [
     path("documents/", views.documents),
     path("documents/<uuid:document_id>/", views.document_detail),
     path("documents/<uuid:document_id>/versions/", views.new_version),
+    path("documents/<uuid:document_id>/markdown/", views.new_version, {"edit": True}),
     path("documents/<uuid:document_id>/download/", views.download),
+    path("documents/<uuid:document_id>/preview/", preview.issue_preview),
     path("", include(router.urls)),
 ]

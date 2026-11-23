@@ -1,0 +1,50 @@
+<script setup lang="ts">
+import { editor } from 'monaco-editor/editor/editor.api'
+import 'monaco-editor/languages/definitions/markdown/register'
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+
+const value = defineModel<string>({ required: true })
+const props = defineProps<{ readonly: boolean }>()
+const host = ref<HTMLElement>()
+let instance: ReturnType<typeof editor.create> | undefined
+let model: ReturnType<typeof editor.createModel> | undefined
+
+onMounted(() => {
+  if (!host.value) return
+  const environment = globalThis as typeof globalThis & { MonacoEnvironment?: { getWorker: () => Worker } }
+  environment.MonacoEnvironment ??= { getWorker: () => new EditorWorker() }
+  model = editor.createModel(value.value, 'markdown')
+  instance = editor.create(host.value, {
+    model,
+    ariaLabel: 'Markdown 編輯器',
+    automaticLayout: true,
+    minimap: { enabled: false },
+    readOnly: props.readonly,
+    scrollBeyondLastLine: false,
+    wordWrap: 'on',
+    fontSize: 15,
+  })
+  instance.onDidChangeModelContent(() => {
+    if (model) value.value = model.getValue()
+  })
+})
+
+watch(value, text => {
+  if (model && text !== model.getValue()) model.setValue(text)
+})
+watch(() => props.readonly, readOnly => instance?.updateOptions({ readOnly }))
+
+onBeforeUnmount(() => {
+  instance?.dispose()
+  model?.dispose()
+})
+</script>
+
+<template>
+  <div ref="host" class="editor-host" />
+</template>
+
+<style scoped>
+.editor-host { height: clamp(28rem, 65vh, 56rem); border-radius: .5rem; overflow: hidden; }
+</style>

@@ -3,4 +3,9 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [vue()],
+  build: {
+    rolldownOptions: {
+      input: ['index.html', 'markdown-diagram.html'],
+    },
+  },
 })
