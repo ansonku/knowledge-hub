@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from users.permissions import CanReadLibrary
 
 from . import services, storage
-from .models import Category, Document, Tag
+from .models import Category, Document, Tag, Version
 from .preview import local_preview_enabled
 from .serializers import (
     CategorySerializer,
@@ -19,13 +19,15 @@ from .serializers import (
     DocumentSerializer,
     MarkdownEdit,
     NewUpload,
+    RestoreVersion,
     TagSerializer,
+    VersionSerializer,
     VersionUpload,
 )
 
 
 def document_list():
-    return services.active_documents().select_related("category", "current_version").prefetch_related("tags")
+    return services.active_documents().select_related("category", "current_version__created_by", "current_version__restored_from").prefetch_related("tags")
 
 
 def ids_in_subtree(parent):
@@ -97,14 +99,50 @@ def document_detail(request, document_id):
 
 
 @never_cache
-@api_view(["POST"])
+@api_view(["GET", "POST"])
 @permission_classes([CanReadLibrary])
 def new_version(request, document_id, edit=False):
+    if request.method in ("GET", "HEAD"):
+        if edit:
+            return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return version_history(request, document_id)
     services.require_editor(request.user)
     form = (MarkdownEdit if edit else VersionUpload)(data=request.data)
     form.is_valid(raise_exception=True)
     document = services.add_upload(request.user, form.validated_data, document_id)
     return Response(DocumentSerializer(document).data, status=201)
+
+
+def document_versions(document_id):
+    return Version.objects.filter(document_id=document_id, document__is_trashed=False).select_related(
+        "created_by", "restored_from",
+    )
+
+
+def version_history(request, document_id):
+    current = get_object_or_404(services.active_documents().only("current_version"), pk=document_id).current_version_id
+    page = serializers.IntegerField(min_value=1, max_value=1_000_000).run_validation(request.query_params.get("page", 1))
+    size = 25
+    query = document_versions(document_id).order_by("-number")
+    return Response({
+        "current": current, "count": query.count(), "page_size": size,
+        "results": VersionSerializer(query[(page - 1) * size:page * size], many=True).data,
+    })
+
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([CanReadLibrary])
+def version_detail(request, document_id, version_id):
+    return Response(VersionSerializer(get_object_or_404(document_versions(document_id), pk=version_id)).data)
+
+
+def version_attachment(version, document_id):
+    file = storage.open_version(version, document_id)
+    response = FileResponse(file, as_attachment=True, filename=version.filename, content_type="application/octet-stream")
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Security-Policy"] = "sandbox; default-src 'none'"
+    return response
 
 
 @never_cache
@@ -113,19 +151,30 @@ def new_version(request, document_id, edit=False):
 def download(request, document_id):
     document = get_object_or_404(document_list(), pk=document_id)
     version = document.current_version
-    if not version or version.path != f"versions/{document.id}/{version.id}":
+    if not version:
         raise Http404
     requested = request.query_params.get("version")
     if requested and requested != str(version.pk):
         return Response({"detail": "文件已有新版本，請重新載入。"}, status=status.HTTP_409_CONFLICT)
-    try:
-        file = (storage.root() / version.path).open("rb")
-    except FileNotFoundError:
-        raise Http404 from None
-    response = FileResponse(file, as_attachment=True, filename=version.filename, content_type="application/octet-stream")
-    response["X-Content-Type-Options"] = "nosniff"
-    response["Content-Security-Policy"] = "sandbox; default-src 'none'"
-    return response
+    return version_attachment(version, document_id)
+
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([CanReadLibrary])
+def download_version(request, document_id, version_id):
+    return version_attachment(get_object_or_404(document_versions(document_id), pk=version_id), document_id)
+
+
+@never_cache
+@api_view(["POST"])
+@permission_classes([CanReadLibrary])
+def restore_version(request, document_id, version_id):
+    services.require_editor(request.user)
+    form = RestoreVersion(data=request.data)
+    form.is_valid(raise_exception=True)
+    document = services.restore_version(request.user, document_id, version_id, **form.validated_data)
+    return Response(DocumentSerializer(document).data, status=201)
 
 
 class TaxonomyViewSet(viewsets.ModelViewSet):

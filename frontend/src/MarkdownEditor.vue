@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { editor } from 'monaco-editor/editor/editor.api'
-import 'monaco-editor/languages/definitions/markdown/register'
-import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
+import { editor } from './monaco'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const value = defineModel<string>({ required: true })
@@ -12,8 +10,6 @@ let model: ReturnType<typeof editor.createModel> | undefined
 
 onMounted(() => {
   if (!host.value) return
-  const environment = globalThis as typeof globalThis & { MonacoEnvironment?: { getWorker: () => Worker } }
-  environment.MonacoEnvironment ??= { getWorker: () => new EditorWorker() }
   model = editor.createModel(value.value, 'markdown')
   instance = editor.create(host.value, {
     model,

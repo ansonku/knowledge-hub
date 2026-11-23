@@ -16,9 +16,18 @@ class TagSerializer(serializers.ModelSerializer):
 
 
 class VersionSerializer(serializers.ModelSerializer):
+    author = serializers.SerializerMethodField()
+    restored_from_number = serializers.IntegerField(source="restored_from.number", read_only=True, default=None)
+
+    def get_author(self, version):
+        user = version.created_by
+        return user.display_name or user.username if user else None
     class Meta:
         model = Version
-        fields = ["id", "number", "filename", "sha256", "size", "note", "created_at", "source", "created_by"]
+        fields = [
+            "id", "number", "filename", "sha256", "size", "note", "created_at", "source", "created_by",
+            "author", "restored_from", "restored_from_number",
+        ]
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -49,3 +58,8 @@ class NewUpload(DocumentMetadata, VersionUpload):
 
 class MarkdownEdit(VersionUpload):
     base_version = serializers.UUIDField()
+
+
+class RestoreVersion(serializers.Serializer):
+    base_version = serializers.UUIDField()
+    note = serializers.CharField(max_length=500, required=False, allow_blank=True)

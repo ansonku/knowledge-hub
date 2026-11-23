@@ -1,6 +1,7 @@
 import uuid
 from pathlib import Path
 
+from django.core.files import File
 from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
@@ -9,7 +10,7 @@ from users.models import User
 from users.permissions import has_role
 
 from . import storage
-from .models import Document, Version
+from .models import Document, Version, VersionRestoreAudit
 
 
 STORAGE_LOCK_KEY = "knowledge-hub:document-files"
@@ -45,10 +46,7 @@ def add_upload(actor, data, document_id=None):
     if suffix not in Document.Format.values:
         raise ValidationError({"file": "只接受 .html 或 .md 檔案。"})
     with storage.stage(upload) as (temporary, sha256, size), transaction.atomic():
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_advisory_xact_lock_shared(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
-            # Serialize duplicate checks with other writes of identical bytes.
-            cursor.execute("SELECT pg_advisory_xact_lock(%s)", [int.from_bytes(bytes.fromhex(sha256[:16]), "big", signed=True)])
+        lock_storage(sha256)
         if document_id is None:
             duplicate = Version.objects.filter(sha256=sha256, document__is_trashed=False).exists()
             if duplicate and not data["force"]:
@@ -74,15 +72,10 @@ def add_upload(actor, data, document_id=None):
                 raise DuplicateContent()
             number = current.number + 1
 
-        version_id = uuid.uuid4()
-        path = storage.publish(temporary, document.id, version_id)
-        version = Version.objects.create(
-            id=version_id, document=document, number=number, path=path, filename=filename,
-            sha256=sha256, size=size, note=data.get("note", ""), created_by=actor,
-            source="markdown_edit" if base_version else "upload",
+        publish_version(
+            document, actor, temporary, sha256, size, number, filename,
+            data.get("note", ""), "markdown_edit" if base_version else "upload",
         )
-        document.current_version = version
-        document.save(update_fields=["current_version", "updated_at"])
     return document
 
 
@@ -100,4 +93,49 @@ def change_document(actor, document_id, data=None):
         if "tags" in data:
             document.tags.set(data["tags"])
         document.save(update_fields=[*fields, "updated_at"])
+    return document
+
+
+def lock_storage(sha256):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock_shared(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
+        # Serialize duplicate checks with other writes of identical bytes.
+        cursor.execute("SELECT pg_advisory_xact_lock(%s)", [int.from_bytes(bytes.fromhex(sha256[:16]), "big", signed=True)])
+
+
+def publish_version(document, actor, temporary, sha256, size, number, filename, note, source, restored_from=None):
+    version_id = uuid.uuid4()
+    path = storage.publish(temporary, document.id, version_id)
+    version = Version.objects.create(
+        id=version_id, document=document, number=number, path=path, filename=filename,
+        sha256=sha256, size=size, note=note, created_by=actor, source=source,
+        restored_from=restored_from,
+    )
+    document.current_version = version
+    document.save(update_fields=["current_version", "updated_at"])
+    return version
+
+
+def restore_version(actor, document_id, version_id, *, base_version, note=""):
+    require_editor(actor)
+    selected = get_object_or_404(Version, pk=version_id, document_id=document_id, document__is_trashed=False)
+    with storage.open_version(selected, document_id) as original, storage.stage(
+        File(original), max_bytes=selected.size,
+    ) as (temporary, sha256, size), transaction.atomic():
+        if sha256 != selected.sha256 or size != selected.size:
+            raise ValidationError({"detail": "舊版檔案完整性檢查失敗。"})
+        lock_storage(sha256)
+        document = get_object_or_404(active_documents().select_for_update(), pk=document_id)
+        previous = document.current_version
+        if previous.pk != base_version:
+            raise VersionConflict()
+        if previous.pk == selected.pk:
+            raise ValidationError({"detail": "選擇一個舊版才能還原。"})
+        version = publish_version(
+            document, actor, temporary, sha256, size, previous.number + 1,
+            selected.filename, note, "restore", restored_from=selected,
+        )
+        VersionRestoreAudit.objects.create(
+            document=document, actor=actor, restored_from=selected, previous_version=previous, new_version=version,
+        )
     return document

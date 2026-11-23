@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from django.conf import settings
+from django.http import Http404
 from rest_framework.exceptions import ValidationError
 
 
@@ -14,7 +15,8 @@ def root():
 
 
 @contextmanager
-def stage(upload):
+def stage(upload, *, max_bytes=None):
+    limit = settings.DOCUMENT_MAX_BYTES if max_bytes is None else max_bytes
     directory = root() / "staging"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     sha = hashlib.sha256()
@@ -24,7 +26,7 @@ def stage(upload):
         try:
             for chunk in upload.chunks():
                 size += len(chunk)
-                if size > settings.DOCUMENT_MAX_BYTES:
+                if size > limit:
                     raise ValidationError({"file": "檔案超過大小上限。"})
                 decoder.decode(chunk)
                 sha.update(chunk)
@@ -58,3 +60,13 @@ def publish(temporary, document_id, version_id):
     sync_directory(directory)
     sync_directory(root())
     return str(destination.relative_to(root()))
+
+
+def open_version(version, document_id):
+    expected = f"versions/{document_id}/{version.pk}"
+    if version.document_id != document_id or version.path != expected:
+        raise Http404
+    try:
+        return (root() / expected).open("rb")
+    except FileNotFoundError:
+        raise Http404 from None

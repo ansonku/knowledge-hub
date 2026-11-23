@@ -19,7 +19,7 @@ from users.models import User
 from users.permissions import CanReadLibrary, has_role
 
 from . import storage
-from .models import Document, PreviewTicket
+from .models import Document, PreviewTicket, Version
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
 TICKET_LIFETIME = timedelta(seconds=60)
@@ -62,18 +62,23 @@ def ticket_digest(token):
 @never_cache
 @api_view(["POST"])
 @permission_classes([CanReadLibrary])
-def issue_preview(request, document_id):
+def issue_preview(request, document_id, version_id=None):
+    allow_historical = version_id is not None
     if not local_preview_enabled(request):
         raise Http404
     document = get_object_or_404(Document, pk=document_id, format=Document.Format.HTML, is_trashed=False)
-    if not document.current_version_id or str(document.current_version_id) != request.data.get("version"):
-        return Response({"detail": "文件已有新版本，請重新載入。"}, status=409)
+    if version_id is not None:
+        get_object_or_404(Version, pk=version_id, document=document)
+    else:
+        version_id = document.current_version_id
+        if not version_id or str(version_id) != request.data.get("version"):
+            return Response({"detail": "文件已有新版本，請重新載入。"}, status=409)
 
     now = timezone.now()
     PreviewTicket.objects.filter(expires_at__lte=now).delete()
     token = secrets.token_urlsafe(32)
     PreviewTicket.objects.create(
-        digest=ticket_digest(token), version_id=document.current_version_id, user=request.user,
+        digest=ticket_digest(token), version_id=version_id, user=request.user, allow_historical=allow_historical,
         session_version=request.user.session_version, expires_at=now + TICKET_LIFETIME,
     )
     return Response({"url": reverse("html-preview", kwargs={"token": token})}, status=201)
@@ -101,17 +106,14 @@ def html_preview(request, token):
             and ticket.user.session_version == ticket.session_version
             and document.format == Document.Format.HTML
             and not document.is_trashed
-            and document.current_version_id == version.pk
+            and (ticket.allow_historical or document.current_version_id == version.pk)
             and version.path == f"versions/{document.id}/{version.id}"
         )
         ticket.delete()
     if not allowed:
         raise Http404
 
-    try:
-        file = (storage.root() / version.path).open("rb")
-    except FileNotFoundError:
-        raise Http404 from None
+    file = storage.open_version(version, document.id)
     response = FileResponse(file, content_type="text/html; charset=utf-8")
     response["Content-Security-Policy"] = PREVIEW_POLICY
     response["Content-Disposition"] = "inline"

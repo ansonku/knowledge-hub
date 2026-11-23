@@ -11,6 +11,7 @@ const router = createRouter({
   routes: [
     { path: '/', component: Home },
     { path: '/library/', component: () => import('./Library.vue') },
+    { path: '/library/:id/versions/', name: 'version-history', component: () => import('./VersionHistory.vue') },
     { path: '/library/:id/', name: 'document-reader', component: () => import('./DocumentReader.vue') },
     { path: '/accounts/profile/', component: Profile },
     { path: '/accounts/manage/:id?', component: () => import('./ManageAccounts.vue') },

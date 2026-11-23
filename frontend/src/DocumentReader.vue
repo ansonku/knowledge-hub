@@ -33,6 +33,8 @@ const previewUrl = ref('')
 const htmlPreviewError = ref('')
 const htmlPreviewLoading = ref(false)
 const file = ref<DocumentDetails>()
+const historicalVersion = ref<DocumentDetails['current_version']>()
+const shownVersion = computed(() => historicalVersion.value ?? file.value?.current_version)
 const source = ref('')
 const draft = ref('')
 const previewSource = ref('')
@@ -43,7 +45,7 @@ const saving = ref(false)
 const editorError = ref('')
 const savedMessage = ref('')
 const note = ref('')
-const canEdit = computed(() => file.value?.format === 'md' && ['admin', 'editor'].includes(role.value))
+const canEdit = computed(() => !historicalVersion.value && file.value?.format === 'md' && ['admin', 'editor'].includes(role.value))
 const dirty = computed(() => draft.value !== source.value)
 const Monaco = defineAsyncComponent({
   loader: () => import('./MarkdownEditor.vue'),
@@ -63,9 +65,13 @@ const dateFormatter = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium' })
 const categoryRoute = computed(() => file.value
   ? { path: '/library/', query: { category: file.value.category ?? 'uncategorized' } }
   : { path: '/library/' })
-const downloadUrl = computed(() => file.value
-  ? `/api/documents/${file.value.id}/download/?version=${file.value.current_version.id}`
-  : '')
+const downloadUrl = computed(() => {
+  if (!file.value) return ''
+  const endpoint = `/api/documents/${file.value.id}/`
+  return historicalVersion.value
+    ? `${endpoint}versions/${historicalVersion.value.id}/download/`
+    : `${endpoint}download/?version=${file.value.current_version.id}`
+})
 const categoryPath = computed(() => {
   const byId = new Map(categoryList.value.map(category => [category.id, category]))
   const result: Category[] = []
@@ -133,6 +139,7 @@ async function loadDocument() {
   loading.value = true
   error.value = ''
   file.value = undefined
+  historicalVersion.value = undefined
   source.value = ''
   draft.value = ''
   mode.value = 'read'
@@ -151,6 +158,17 @@ async function loadDocument() {
     if (request.signal.aborted) return
     const details = await response.json() as DocumentDetails
     if (request.signal.aborted) return
+    const version = route.query.version
+    if (typeof version === 'string') {
+      const history = await fetch(`/api/documents/${id}/versions/${encodeURIComponent(version)}/`, {
+        cache: 'no-store', signal: request.signal,
+      })
+      if (history.status === 403) return redirectToLogin()
+      if (!history.ok) throw new Error('找不到指定的文件版本。')
+      const selected = await history.json() as DocumentDetails['current_version']
+      if (request.signal.aborted) return
+      if (selected.id !== details.current_version.id) historicalVersion.value = selected
+    }
     file.value = details
     restoreLayout(details.format)
     if (details.format !== 'md') return
@@ -193,10 +211,12 @@ async function startHtmlPreview() {
     const account = await fetch('/api/auth/me', { cache: 'no-store', signal })
     if (!account.ok) throw new Error('登入狀態已失效，請重新登入。')
     const { csrf_token } = await account.json()
-    const response = await fetch(`/api/documents/${document.id}/preview/`, {
+    const endpoint = `/api/documents/${document.id}/`
+    const previewPath = historicalVersion.value ? `versions/${historicalVersion.value.id}/preview/` : 'preview/'
+    const response = await fetch(endpoint + previewPath, {
       method: 'POST', cache: 'no-store', signal,
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
-      body: JSON.stringify({ version: document.current_version.id }),
+      body: JSON.stringify({ version: shownVersion.value?.id }),
     })
     if (response.status === 409) throw new Error('文件已有新版本，請重新載入頁面。')
     if (!response.ok) throw new Error('目前無法開啟 HTML 預覽。')
@@ -252,13 +272,13 @@ function beforeUnload(event: BeforeUnloadEvent) {
   }
 }
 onBeforeRouteLeave(canLeave)
-onBeforeRouteUpdate((to, from) => to.params.id === from.params.id || canLeave())
+onBeforeRouteUpdate((to, from) => (to.params.id === from.params.id && to.query.version === from.query.version) || canLeave())
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onBeforeUnmount(() => {
   currentRequest?.abort()
   window.removeEventListener('beforeunload', beforeUnload)
 })
-watch(() => route.params.id, loadDocument, { immediate: true })
+watch([() => route.params.id, () => route.query.version], loadDocument, { immediate: true })
 </script>
 
 <template>
@@ -281,22 +301,27 @@ watch(() => route.params.id, loadDocument, { immediate: true })
         <Message severity="error">{{ error }}</Message>
         <Button label="重新載入" outlined @click="loadDocument" />
       </div>
-      <template v-else-if="file">
+      <template v-else-if="file && shownVersion">
         <div class="reading-toolbar">
           <div class="identity">
             <h1>{{ file.title }}</h1>
             <Tag :value="file.format === 'md' ? 'Markdown' : 'HTML'" severity="info" />
-            <Tag :value="`v${file.current_version.number}`" severity="secondary" />
+            <Tag :value="`v${shownVersion.number}`" severity="secondary" />
           </div>
           <div class="reader-actions">
             <Select v-if="mode === 'read'" v-model="layout" :options="layouts" option-label="label"
               option-value="value" aria-label="閱讀版面" />
             <Button v-if="mode === 'read'" :label="layout === 'full' ? '還原版面' : '最大化'"
               severity="secondary" outlined @click="toggleFullPage" />
+            <RouterLink :to="{ name: 'version-history', params: { id: file.id } }">版本歷史</RouterLink>
             <Button as="a" :href="downloadUrl" label="下載原始檔" />
           </div>
         </div>
 
+        <Message v-if="historicalVersion" severity="info" class="editor-notice">
+          正在查看舊版 v{{ historicalVersion.number }}。
+          <RouterLink :to="{ name: 'document-reader', params: { id: file.id } }">回到目前版本</RouterLink>
+        </Message>
         <nav v-if="canEdit" class="editor-modes" aria-label="Markdown 模式">
           <Button v-for="choice in modes" :key="choice.value" :label="choice.label" :outlined="mode !== choice.value"
             :aria-pressed="mode === choice.value" :disabled="saving" @click="mode = choice.value" />
@@ -312,7 +337,7 @@ watch(() => route.params.id, loadDocument, { immediate: true })
             <RouterLink v-if="!categoryPath.length" :to="categoryRoute">{{ file.category_name ?? '未分類' }}</RouterLink>
           </aside>
           <section class="reading-paper" aria-label="文章內容">
-            <p class="version-date">版本日期 · {{ dateFormatter.format(new Date(file.current_version.created_at)) }}</p>
+            <p class="version-date">版本日期 · {{ dateFormatter.format(new Date(shownVersion.created_at)) }}</p>
             <div ref="article"><MarkdownBody :rendered="rendered" /></div>
           </section>
           <aside v-if="layout === 'standard' && rendered.headings.length" class="reader-sidebar reader-toc">

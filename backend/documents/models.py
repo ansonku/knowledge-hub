@@ -67,3 +67,14 @@ class PreviewTicket(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     session_version = models.PositiveBigIntegerField()
     expires_at = models.DateTimeField(db_index=True)
+
+    allow_historical = models.BooleanField(default=False)
+
+
+class VersionRestoreAudit(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="restore_audits")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    restored_from = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="+")
+    previous_version = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="+")
+    new_version = models.OneToOneField(Version, on_delete=models.CASCADE, related_name="restore_audit")
+    created_at = models.DateTimeField(auto_now_add=True)

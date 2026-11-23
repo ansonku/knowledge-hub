@@ -4,6 +4,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from threading import Barrier
+from uuid import UUID
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -14,8 +15,8 @@ from django.utils import timezone
 
 from users.models import User
 
-from .models import Document, PreviewTicket, Version
-from .services import add_upload
+from .models import Document, PreviewTicket, Version, VersionRestoreAudit
+from .services import VersionConflict, add_upload, restore_version
 
 
 class DocumentTests(TransactionTestCase):
@@ -198,6 +199,96 @@ class DocumentTests(TransactionTestCase):
         response = self.client.get(endpoint + "download/", {"version": latest["current_version"]["id"]})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), b"# Second version")
+
+    def test_history_download_and_restore_preserve_originals_and_record_audit(self):
+        created = self.post_file(b"# Before", "article.md").json()
+        document_id = created["id"]
+        endpoint = f"/api/documents/{document_id}/versions/"
+        current = self.post_file(b"# After", "updated.md", endpoint).json()["current_version"]
+        original = created["current_version"]
+        restore_url = f"{endpoint}{original['id']}/restore/"
+        request = {"base_version": current["id"], "note": "Restore reviewed text"}
+
+        viewer = Client()
+        viewer.force_login(self.viewer)
+        listing = viewer.get(endpoint).json()
+        self.assertEqual(listing["current"], current["id"])
+        self.assertEqual([entry["number"] for entry in listing["results"]], [2, 1])
+        self.assertEqual(listing["results"][1]["author"], self.editor.username)
+        self.assertEqual(viewer.get(f"{endpoint}{original['id']}/").json()["number"], 1)
+        old_download = viewer.get(f"{endpoint}{original['id']}/download/")
+        self.assertIn("article.md", old_download["Content-Disposition"])
+        self.assertEqual(b"".join(old_download.streaming_content), b"# Before")
+        self.assertEqual(Client().get(endpoint).status_code, 403)
+        self.assertEqual(viewer.post(restore_url, request, content_type="application/json").status_code, 403)
+
+        browser = Client(enforce_csrf_checks=True)
+        browser.force_login(self.editor)
+        self.assertEqual(browser.post(restore_url, request, content_type="application/json").status_code, 403)
+        token = browser.get("/api/auth/me").json()["csrf_token"]
+        response = browser.post(restore_url, request, content_type="application/json", headers={"X-CSRFToken": token})
+        self.assertEqual(response.status_code, 201, response.content)
+        new = response.json()["current_version"]
+        self.assertEqual(new["number"], 3)
+        self.assertEqual(new["note"], request["note"])
+        self.assertEqual(new["source"], "restore")
+        self.assertEqual(new["restored_from"], original["id"])
+        restored, original_row = Version.objects.get(pk=new["id"]), Version.objects.get(pk=original["id"])
+        self.assertNotEqual(restored.path, original_row.path)
+        self.assertEqual(new["sha256"], original["sha256"])
+        self.assertEqual(original_row.sha256, original["sha256"])
+        self.assertEqual((self.storage / original_row.path).read_bytes(), b"# Before")
+        self.assertEqual((self.storage / restored.path).read_bytes(), b"# Before")
+        audit = VersionRestoreAudit.objects.get(new_version_id=new["id"])
+        self.assertEqual(str(audit.previous_version_id), current["id"])
+        self.assertEqual(str(audit.restored_from_id), original["id"])
+        self.assertEqual(audit.actor_id, self.editor.pk)
+        self.assertEqual(self.client.post(restore_url, request, content_type="application/json").status_code, 409)
+
+    @override_settings(LOCAL_HTML_PREVIEW=True, PUBLIC_ORIGIN="http://localhost:18080")
+    def test_history_is_scoped_to_document_and_historical_preview_keeps_the_sandbox(self):
+        first = self.post_file(b"<p>First</p>", "example.html").json()
+        second = self.post_file(b"<p>Other</p>", "other.html").json()
+        original = first["current_version"]["id"]
+        endpoint = f"/api/documents/{first['id']}/versions/"
+        update = self.post_file(b"<p>Latest</p>", "example.html", endpoint)
+        self.assertEqual(update.status_code, 201)
+        viewer = Client()
+        viewer.force_login(self.viewer)
+        for action in ("", "download/"):
+            path = f"/api/documents/{second['id']}/versions/{original}/{action}"
+            self.assertEqual(viewer.get(path).status_code, 404)
+        ticket = viewer.post(f"{endpoint}{original}/preview/", {}, content_type="application/json", HTTP_HOST="localhost")
+        self.assertEqual(ticket.status_code, 201, ticket.content)
+        preview = Client().get(ticket.json()["url"], HTTP_HOST="localhost")
+        self.assertEqual(b"".join(preview.streaming_content), b"<p>First</p>")
+        self.assertIn("sandbox allow-scripts", preview["Content-Security-Policy"])
+        self.assertEqual(Client().get(ticket.json()["url"], HTTP_HOST="localhost").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/documents/{first['id']}/").status_code, 204)
+        self.assertEqual(viewer.get(f"{endpoint}{original}/download/").status_code, 404)
+
+    def test_concurrent_restores_with_same_base_accept_only_one(self):
+        first = self.post_file(b"# Old version").json()
+        document_id = UUID(first["id"])
+        target = UUID(first["current_version"]["id"])
+        result = self.post_file(b"# New version", url=f"/api/documents/{document_id}/versions/").json()
+        base = UUID(result["current_version"]["id"])
+        barrier = Barrier(2)
+
+        def restore_simultaneously(_):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                try:
+                    return restore_version(self.editor, document_id, target, base_version=base).current_version.number
+                except VersionConflict:
+                    return "conflict"
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            self.assertEqual(set(executor.map(restore_simultaneously, range(2), timeout=10)), {3, "conflict"})
+        self.assertEqual(VersionRestoreAudit.objects.filter(document_id=document_id).count(), 1)
 
     def test_filter_by_html_and_markdown(self):
         html = self.post_file(b"<p>HTML document</p>", "example.html")
