@@ -1,0 +1,9 @@
+{% extends "allauth/layouts/credentials.html" %}
+{% block head_title %}帳號未啟用 · Knowledge Hub{% endblock %}
+{% block content %}
+<section class="login-card" aria-labelledby="inactive-title">
+  <h1 id="inactive-title">帳號未啟用</h1>
+  <p class="login-description">請使用啟用郵件中的連結，或聯絡管理員確認帳號狀態。</p>
+  <p class="login-return"><a href="{% url 'account_login' %}">返回登入</a></p>
+</section>
+{% endblock %}

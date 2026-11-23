@@ -1,20 +1,43 @@
-{% extends "allauth/layouts/base.html" %}
+{% extends "allauth/layouts/credentials.html" %}
 {% load socialaccount %}
+
 {% block head_title %}登入 · Knowledge Hub{% endblock %}
+
 {% block content %}
-<h1>登入</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  {{ redirect_field }}
-  <button type="submit">登入</button>
-</form>
-<p><a href="{% url 'account_reset_password' %}">忘記密碼</a></p>
-{% get_providers as providers %}
-{% if providers %}
-  <form action="{% provider_login_url 'google' %}" method="post">
+<section class="login-card" aria-labelledby="login-title">
+  <h1 id="login-title">登入</h1>
+  <form class="login-form" method="post">
     {% csrf_token %}
-    <button type="submit">使用 Google 登入</button>
+    {{ redirect_field }}
+    {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+    {% if form.non_field_errors %}
+      <div class="login-errors" role="alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div class="login-field">
+      <label for="{{ form.login.id_for_label }}">電子郵件</label>
+      {{ form.login }}
+      {{ form.login.errors }}
+    </div>
+    <div class="login-field">
+      <label for="{{ form.password.id_for_label }}">密碼</label>
+      {{ form.password }}
+      {{ form.password.errors }}
+    </div>
+    <div class="login-options">
+      {% if form.remember and not form.remember.is_hidden %}
+        <label class="remember" for="{{ form.remember.id_for_label }}">{{ form.remember }} 保持登入</label>
+      {% endif %}
+      <a href="{% url 'account_reset_password' %}">忘記密碼</a>
+    </div>
+    <button class="login-action" type="submit">登入</button>
   </form>
-{% endif %}
+  {% get_providers as providers %}
+  {% if providers %}
+    <form class="login-alternative" action="{% provider_login_url 'google' %}" method="post">
+      {% csrf_token %}
+      {{ redirect_field }}
+      <button class="login-action google-action" type="submit">使用 Google 登入</button>
+    </form>
+  {% endif %}
+</section>
 {% endblock %}

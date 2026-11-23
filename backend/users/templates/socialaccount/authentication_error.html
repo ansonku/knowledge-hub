@@ -1,0 +1,9 @@
+{% extends "allauth/layouts/credentials.html" %}
+{% block head_title %}Google 登入失敗 · Knowledge Hub{% endblock %}
+{% block content %}
+<section class="login-card" aria-labelledby="google-error-title">
+  <h1 id="google-error-title">Google 登入失敗</h1>
+  <p class="login-description">請回到登入頁重試，或使用電子郵件與密碼登入。</p>
+  <p class="login-return"><a href="{% url 'account_login' %}">返回登入</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "allauth/layouts/credentials.html" %}
+{% block head_title %}Google 登入已取消 · Knowledge Hub{% endblock %}
+{% block content %}
+<section class="login-card" aria-labelledby="google-cancel-title">
+  <h1 id="google-cancel-title">Google 登入已取消</h1>
+  <p class="login-description">你可以返回登入頁，選擇登入方式。</p>
+  <p class="login-return"><a href="{% url 'account_login' %}">返回登入</a></p>
+</section>
+{% endblock %}

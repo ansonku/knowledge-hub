@@ -18,7 +18,8 @@
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+{% block site_header %}
 <header>
   <nav aria-label="主要導覽">
     <a href="/">Knowledge Hub</a>
@@ -31,6 +32,7 @@
     {% endif %}
   </nav>
 </header>
+{% endblock site_header %}
 <main>
   {% block body %}
     {% if messages %}

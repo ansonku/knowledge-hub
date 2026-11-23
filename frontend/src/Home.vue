@@ -5,15 +5,16 @@ import { onMounted, ref } from 'vue'
 type Account = { display_name: string; username: string; role: string }
 
 const account = ref<Account | null>(null)
-const accountReady = ref(false)
 
 async function loadAccount() {
   try {
     const response = await fetch('/api/auth/me', { cache: 'no-store', signal: AbortSignal.timeout(5000) })
-    if (response.ok) account.value = await response.json()
-    accountReady.value = response.ok || response.status === 403
+    if (response.ok) {
+      account.value = await response.json()
+      void checkHealth()
+    }
   } catch {
-    accountReady.value = false
+    account.value = null
   }
 }
 
@@ -39,30 +40,42 @@ async function checkHealth() {
   }
 }
 
-onMounted(() => {
-  void loadAccount()
-  void checkHealth()
-})
+onMounted(loadAccount)
 </script>
 
 <template>
-  <header>
-    <span>Knowledge Hub</span>
-    <RouterLink to="/library/">知識總覽</RouterLink>
-    <nav v-if="accountReady" aria-label="帳號">
-      <template v-if="account">
+  <template v-if="account">
+    <header>
+      <span>Knowledge Hub</span>
+      <RouterLink to="/library/">知識總覽</RouterLink>
+      <nav aria-label="帳號">
         <a href="/accounts/profile/">{{ account.display_name || account.username }}</a>
         <a v-if="account.role === 'admin'" href="/accounts/manage/">帳號管理</a>
         <a href="/accounts/logout/">登出</a>
-      </template>
-      <a v-else href="/accounts/login/">登入</a>
-    </nav>
-  </header>
-  <main>
-    <h1>系統狀態</h1>
-    <p role="status">{{ status }}</p>
-    <Button label="重新檢查" :disabled="checking" @click="checkHealth" />
-  </main>
+      </nav>
+    </header>
+    <main>
+      <h1>系統狀態</h1>
+      <p role="status">{{ status }}</p>
+      <Button label="重新檢查" :disabled="checking" @click="checkHealth" />
+    </main>
+  </template>
+  <div v-else class="entry-page">
+    <header class="login-header">
+      <nav aria-label="主要導覽"><RouterLink to="/">Knowledge Hub</RouterLink></nav>
+    </header>
+    <main class="entry-home">
+      <div class="entry-intro">
+        <h1>團隊的技術知識庫</h1>
+        <p>集中管理 Markdown 與 HTML 文件，搜尋正文並追蹤版本。</p>
+      </div>
+      <section class="login-card" aria-labelledby="home-login">
+        <h2 id="home-login">進入知識庫</h2>
+        <a class="login-action" href="/accounts/login/?next=/library/">登入</a>
+        <p class="login-return"><a href="/accounts/password/reset/">忘記密碼</a></p>
+      </section>
+    </main>
+  </div>
 </template>
 
 <style>

@@ -1,0 +1,111 @@
+  .entry-page {
+    min-height: 100svh;
+    color: #152b49;
+    background: radial-gradient(ellipse at 85% 90%, #174a8b, transparent 56%), linear-gradient(145deg, #09162d, #112f57 72%);
+  }
+  .login-header {
+    max-width: 76rem;
+    margin: auto;
+    padding: 1.5rem clamp(1.25rem, 5vw, 3.5rem);
+    background: transparent;
+  }
+  .login-header a { text-decoration: none; font-size: 1.05rem; letter-spacing: .01em; }
+  .entry-page > main {
+    box-sizing: border-box;
+    max-width: 32rem;
+    margin: clamp(1.5rem, 7vh, 5rem) auto 0;
+    padding: 0 1rem 2.5rem;
+  }
+  .entry-page > main > ul[role="status"] {
+    margin: 0 0 1rem;
+    padding: .8rem 1.2rem .8rem 2rem;
+    border-radius: .7rem;
+    background: #e8f0ff;
+  }
+  .login-card {
+    background: white;
+    border: 1px solid #dbe5f3;
+    border-radius: 1.1rem;
+    padding: clamp(1.5rem, 5vw, 2.65rem);
+    box-shadow: 0 1.5rem 4.5rem #030b2160;
+  }
+  .login-card h1 {
+    margin: 0 0 1.65rem;
+    font-size: clamp(1.9rem, 7vw, 2.55rem);
+    line-height: 1.15;
+    letter-spacing: -.025em;
+    color: #102747;
+  }
+  .login-form { display: grid; gap: 1rem; }
+  .login-field { display: grid; gap: .35rem; }
+  .login-field label { font-weight: 650; }
+  .login-field input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 3rem;
+    padding: .7rem .85rem;
+    border: 1px solid #a7b8cc;
+    border-radius: .55rem;
+    background: #fbfcfe;
+    color: #102747;
+  }
+  .login-field input:hover { border-color: #52739a; }
+  .login-field input[aria-invalid="true"] { border-color: #a12028; }
+  .login-field input::placeholder { color: #62738a; opacity: 1; }
+  .login-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; }
+  .login-options > a { margin-inline-start: auto; font-weight: 600; text-underline-offset: .18em; }
+  .remember { display: flex; align-items: center; gap: .4rem; margin-inline-end: auto; }
+  .remember input { width: 1rem; height: 1rem; accent-color: #1254c5; }
+  .login-action {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: .6rem .85rem;
+    text-decoration: none;
+    color: #fff;
+    width: 100%;
+    min-height: 3rem;
+    border-radius: .55rem;
+    font-weight: 700;
+    background: #1254c5;
+  }
+  .login-action:hover { background: #1047a7; }
+  .google-action { border: 1px solid #a7b8cc; background: white; color: #173862; }
+  .google-action:hover { background: #eff5ff; }
+  .login-alternative { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #dfe8f3; }
+  .login-card a:focus-visible, .login-card button:focus-visible, .login-card input:focus-visible, .login-header a:focus-visible {
+    outline: 2px solid #2369e0;
+    outline-offset: 3px;
+  }
+  .login-card .errorlist { margin: 0; padding-inline-start: 1.25rem; }
+  .login-errors {
+    color: #911d28;
+    background: #fff1f2;
+    border: 1px solid #f3cbd0;
+    border-radius: .55rem;
+    padding: .65rem .85rem;
+  }
+  .login-field .helptext { color: #495e78; font-size: .9rem; }
+  .login-field .helptext ul { margin-top: .3rem; padding-inline-start: 1.2rem; }
+  .login-description { margin: -1rem 0 1.5rem; color: #495e78; }
+  .login-return { margin: 1.25rem 0 0; text-align: center; }
+  .login-return a { font-weight: 600; text-underline-offset: .18em; }
+
+.entry-page > .entry-home {
+  max-width: 76rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, .9fr);
+  align-items: center;
+  gap: clamp(2rem, 8vw, 7rem);
+  margin-top: clamp(2.75rem, 13vh, 9rem);
+  padding: 0 clamp(1.25rem, 5vw, 3.5rem) 3.5rem;
+}
+.entry-intro { color: white; }
+.entry-intro h1 { margin: 0; font-size: clamp(2.25rem, 5vw, 4.5rem); line-height: 1.12; letter-spacing: -.035em; }
+.entry-intro p { max-width: 30rem; margin: 1.15rem 0 0; color: #d6e5fb; font-size: clamp(1rem, 2vw, 1.22rem); line-height: 1.65; }
+.entry-home .login-card h2 { margin: 0 0 1.15rem; color: #102747; font-size: clamp(1.45rem, 4vw, 1.85rem); line-height: 1.25; }
+.entry-home .login-return a { color: #0649af; }
+@media (max-width: 700px) {
+  .entry-page > .entry-home { grid-template-columns: minmax(0, 1fr); gap: 2rem; margin-top: 2rem; }
+}

@@ -1,0 +1,9 @@
+{% extends "allauth/layouts/credentials.html" %}
+{% block head_title %}需帳號邀請 · Knowledge Hub{% endblock %}
+{% block content %}
+<section class="login-card" aria-labelledby="invitation-title">
+  <h1 id="invitation-title">需帳號邀請</h1>
+  <p class="login-description">請聯絡管理員取得邀請，或使用現有帳號登入。</p>
+  <p class="login-return"><a href="{% url 'account_login' %}">返回登入</a></p>
+</section>
+{% endblock %}
