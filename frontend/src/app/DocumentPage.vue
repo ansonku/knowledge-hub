@@ -297,7 +297,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="layout">
-      <section class="content" :class="{ editing: mode !== 'read' }" aria-label="文件內容">
+      <section class="content" :class="{ wide: mode !== 'read' || file?.format === 'html' }" aria-label="文件內容">
         <div v-if="loading" class="skeleton" aria-busy="true">
           <Skeleton width="60%" height="2.25rem" />
           <Skeleton width="40%" />
@@ -434,8 +434,9 @@ onBeforeUnmount(() => {
 
 .layout { flex: 1; display: flex; align-items: stretch; min-height: 0; }
 .content { flex: 1; min-width: 0; padding: var(--ui-space-6) clamp(1rem, 4vw, 3.5rem) var(--ui-space-7); box-sizing: border-box; }
-.content > *, .head { max-width: 48rem; margin-inline: auto; }
-.content.editing > *, .content .html { max-width: 72rem; }
+/* Markdown reads at a 48rem measure; HTML previews and the editor use a wider column, title included. */
+.content > * { max-width: 48rem; margin-inline: auto; }
+.content.wide > * { max-width: 72rem; }
 .skeleton { display: grid; gap: var(--ui-space-3); }
 .skeleton .gap { margin-top: var(--ui-space-5); }
 .state { display: grid; justify-items: center; gap: var(--ui-space-3); padding: var(--ui-space-7) 0; color: var(--ui-text-muted); text-align: center; }

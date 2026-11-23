@@ -218,11 +218,11 @@ function onSaved() {
         <thead>
           <tr>
             <th scope="col">文件</th>
-            <th scope="col">標籤</th>
-            <th scope="col">可見性</th>
-            <th scope="col">版本</th>
-            <th scope="col">更新</th>
-            <th scope="col"><span class="ui-visually-hidden">操作</span></th>
+            <th scope="col" class="col-tags">標籤</th>
+            <th scope="col" class="col-status">可見性</th>
+            <th scope="col" class="col-version">版本</th>
+            <th scope="col" class="col-date">更新</th>
+            <th scope="col" class="col-actions"><span class="ui-visually-hidden">操作</span></th>
           </tr>
         </thead>
         <tbody v-if="loading && !rows.length">
@@ -239,10 +239,10 @@ function onSaved() {
           <tr v-for="row in rows" :key="row.id">
             <td>
               <div class="doc">
-                <span class="format" :class="row.format">{{ row.format === 'html' ? 'HTML' : 'MD' }}</span>
+                <span class="format" :class="row.format" :title="formatLabel(row.format)">{{ row.format === 'html' ? 'HTML' : 'MD' }}</span>
                 <div class="doc-text">
                   <RouterLink :to="{ name: 'app-document', params: { id: row.id } }" class="doc-title">{{ row.title }}</RouterLink>
-                  <span class="doc-path">{{ taxonomy.pathLabel(row.category) }} · {{ formatLabel(row.format) }}</span>
+                  <span class="doc-path">{{ taxonomy.pathLabel(row.category) }}</span>
                 </div>
               </div>
             </td>
@@ -304,7 +304,7 @@ function onSaved() {
 </template>
 
 <style scoped>
-.page { box-sizing: border-box; max-width: 80rem; margin: 0 auto; padding: var(--ui-space-6) var(--ui-gutter) var(--ui-space-7); }
+.page { box-sizing: border-box; max-width: 100rem; padding: var(--ui-space-6) var(--ui-gutter) var(--ui-space-7); }
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--ui-space-4); margin-bottom: var(--ui-space-5); }
 .titles { min-width: 0; }
 .crumbs { display: flex; flex-wrap: wrap; gap: .375rem; margin-bottom: var(--ui-space-1); font-size: var(--ui-text-sm); color: var(--ui-text-muted); }
@@ -322,7 +322,7 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .search-box:focus-within { border-color: var(--ui-accent); box-shadow: var(--ui-focus-ring); }
 .search-box input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ui-text); font: inherit; font-size: var(--ui-text-md); }
 .search-box input:focus-visible { box-shadow: none; }
-.facet { min-width: 9.5rem; }
+.facet { min-width: 9.5rem; min-height: 2.5rem; align-items: center; }
 .error { margin-bottom: var(--ui-space-4); }
 
 .table-wrap { overflow-x: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }
@@ -337,9 +337,9 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .table tbody tr:hover td { background: var(--ui-bg-subtle); }
 .stale { opacity: .6; transition: opacity .15s; }
 .doc { display: flex; align-items: center; gap: var(--ui-space-3); }
-.format { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--ui-radius-md); font-size: .65625rem; font-weight: 700; letter-spacing: .02em; }
+.format { flex: none; display: grid; place-items: center; min-width: 2.25rem; height: 2rem; padding: 0 .25rem; box-sizing: border-box; border-radius: var(--ui-radius-md); font-size: .65625rem; font-weight: 700; letter-spacing: .02em; }
 .format.md { background: var(--ui-accent-selected); color: var(--ui-accent-on-soft); }
-.format.html { background: var(--ui-lagging-bg); color: var(--ui-lagging-text); }
+.format.html { background: var(--ui-format-html-bg); color: var(--ui-format-html-text); }
 .doc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .doc-title { color: var(--ui-text); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .doc-title:hover { color: var(--ui-accent); text-decoration: underline; text-underline-offset: .18em; }
@@ -354,7 +354,13 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .status.private { background: var(--ui-private-bg); color: var(--ui-private-text); }
 .status.private .dot { background: var(--ui-private-dot); }
 .num, .date { white-space: nowrap; }
-.actions { width: 3rem; text-align: right; }
+.actions { text-align: right; }
+/* Fixed side columns keep the table compact on wide screens; the document column takes the rest. */
+.col-tags { width: 14rem; }
+.col-status { width: 8rem; }
+.col-version { width: 4.5rem; }
+.col-date { width: 8rem; }
+.col-actions { width: 3rem; }
 .row-menu { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-muted); cursor: pointer; }
 .row-menu:hover { background: var(--ui-bg-muted); color: var(--ui-text); }
 

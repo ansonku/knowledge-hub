@@ -143,7 +143,7 @@ const initial = computed(() => Array.from(session.displayName)[0]?.toUpperCase()
 }
 .search:hover { border-color: var(--ui-border-strong); }
 .search span { flex: 1; }
-.search kbd { font-size: .6875rem; font-weight: 500; padding: 1px 5px; border: 1px solid var(--ui-border); border-radius: 4px; background: var(--ui-bg-subtle); color: var(--ui-text-muted); }
+.search kbd { font-family: var(--ui-font-sans); font-size: .6875rem; font-weight: 500; padding: 1px 5px; border: 1px solid var(--ui-border); border-radius: 4px; background: var(--ui-bg-subtle); color: var(--ui-text-muted); }
 .group { display: flex; flex-direction: column; gap: 2px; }
 .group-head { display: flex; align-items: center; justify-content: space-between; padding: 0 .625rem var(--ui-space-1); }
 .group-head > span { font-size: var(--ui-text-xs); font-weight: 600; color: var(--ui-text-muted); letter-spacing: .02em; }
