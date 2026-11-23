@@ -13,6 +13,10 @@ export function setCsrfToken(token: string) {
   csrfToken = token
 }
 
+export function getCsrfToken() {
+  return csrfToken
+}
+
 export function errorMessage(body: unknown): string {
   if (typeof body === 'string') return body
   if (Array.isArray(body)) return body.map(errorMessage).filter(Boolean).join(' ')

@@ -22,6 +22,18 @@ const router = createRouter({
     { path: '/library/:id/', name: 'document-reader', component: () => import('./DocumentReader.vue') },
     { path: '/accounts/profile/', component: Profile },
     { path: '/accounts/manage/:id?', component: () => import('./ManageAccounts.vue') },
+    {
+      path: '/app/',
+      component: () => import('./app/AppLayout.vue'),
+      children: [
+        { path: '', redirect: { name: 'app-library' } },
+        { path: 'library/', name: 'app-library', component: () => import('./app/LibraryPage.vue') },
+        { path: 'collections/:id/', name: 'app-collection', component: () => import('./app/LibraryPage.vue') },
+        // Until the new document page lands in P1c, documents open in the legacy reader.
+        { path: 'docs/:id/', name: 'app-document', redirect: to => `/library/${String(to.params.id)}/` },
+        { path: ':pathMatch(.*)*', redirect: { name: 'app-library' } },
+      ],
+    },
   ],
 })
 

@@ -141,6 +141,16 @@
   background: var(--ui-bg-shell);
   -webkit-font-smoothing: antialiased;
 }
+/* Neutralise legacy element rules in app.css (main max-width, nav flex-wrap). */
+.hub-app main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.hub-app nav {
+  flex-wrap: nowrap;
+  gap: 0;
+}
 .hub-app :focus-visible {
   outline: none;
   box-shadow: var(--ui-focus-ring);
@@ -156,3 +166,8 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* PrimeVue popups are teleported to <body>, outside scoped styles. */
+.p-menu .danger-item .p-menu-item-label { color: var(--ui-danger); }
+.p-menu .user-menu-email { opacity: 1; }
+.p-menu .user-menu-email .p-menu-item-label { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
