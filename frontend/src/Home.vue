@@ -48,6 +48,7 @@ onMounted(() => {
 <template>
   <header>
     <span>Knowledge Hub</span>
+    <RouterLink to="/library/">知識總覽</RouterLink>
     <nav v-if="accountReady" aria-label="帳號">
       <template v-if="account">
         <a href="/accounts/profile/">{{ account.display_name || account.username }}</a>

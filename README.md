@@ -62,3 +62,17 @@ docker compose exec backend python manage.py create_hub_admin <帳號名稱> <�
 - **HTTPS**。HTTPS 的 `PUBLIC_ORIGIN` 會啟用安全 Cookie，另請在 `DJANGO_ALLOWED_HOSTS` 保留 `127.0.0.1` 並加入對外的主機名稱。部署時入口代理必須覆寫可信的 `X-Forwarded-Proto`。對外開放前須驗證實際 Google 回呼、SMTP 寄達和入口代理設定。
 
 修改 `.env` 後，執行 `docker compose up --build --wait` 套用設定。Google 回呼的自動化測試以模擬 Google 交換授權碼和驗證權杖執行，其餘流程由 Django 與 PostgreSQL 實際處理。
+
+## M2 文件庫
+
+登入後開啟 [知識總覽](http://localhost:18080/library/)。Admin 和 Editor 可管理分類與標籤、上傳 UTF-8 Markdown 或 HTML，以及更新指定文件的版本。Viewer 可讀取清單與下載原始檔。瀏覽器會逐檔上傳批次中的文件，因此其中一檔失敗時，其他檔案仍可成功儲存。批次中的每個成功項目各自建立一份文件和 v1。
+
+開發環境預設每檔 50 MiB，每批最多 20 檔，可用 `DOCUMENT_MAX_BYTES` 和 `DOCUMENT_MAX_BATCH` 調整。提高單檔上限時，也要同步調整 Nginx 文件路徑的 `client_max_body_size`，並預留 multipart 表單額外大小。
+
+文件原始內容存在 Compose 的 `document_data` volume。備份須同時包含這個 volume 和 PostgreSQL 的 `postgres_data`。HTML 由下載端點以附件提供。文件移入回收桶後會從清單和下載端點隱藏，所有版本仍保留。
+
+可以用以下指令檢查版本檔和資料庫是否一致。若程序在發布檔案後、資料庫完成提交前中止，可加上 `--quarantine` 把沒有實際對應版本的檔案移到同一 volume 的隔離目錄。若有已提交版本缺檔，指令會回報並以失敗狀態結束。
+
+```bash
+docker compose exec backend python manage.py check_document_storage
+```

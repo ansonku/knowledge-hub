@@ -10,6 +10,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "rest_framework",
     "users",
+    "documents",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -135,3 +136,7 @@ EMAIL_BACKEND = (
 )
 EMAIL_FILE_PATH = "/tmp/hub-mail"
 MFA_ENCRYPTION_KEY = os.getenv("MFA_ENCRYPTION_KEY")
+
+DOCUMENT_STORAGE = os.getenv("DOCUMENT_STORAGE", "/var/lib/knowledge-hub/documents")
+DOCUMENT_MAX_BYTES = int(os.getenv("DOCUMENT_MAX_BYTES") or 50 * 1024 * 1024)
+DOCUMENT_MAX_BATCH = int(os.getenv("DOCUMENT_MAX_BATCH") or 20)
