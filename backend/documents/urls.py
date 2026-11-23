@@ -1,13 +1,16 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
-from . import preview, views
+from . import preview, publication, views
 
 router = SimpleRouter()
 router.register("categories", views.CategoryViewSet)
 router.register("tags", views.TagViewSet)
 
 urlpatterns = [
+    path("public/articles/", publication.public_articles),
+    path("public/articles/<uuid:document_id>/", publication.public_article),
+    path("documents/<uuid:document_id>/publication/", publication.manage_publication),
     path("documents/", views.documents),
     path("trash/", views.trash_list),
     path("trash/<uuid:document_id>/restore/", views.restore_trashed_document),

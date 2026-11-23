@@ -15,7 +15,10 @@ from django.utils import timezone
 
 from users.models import User
 
-from .models import Document, DocumentTrashAudit, PendingDocumentDeletion, PreviewTicket, Version, VersionRestoreAudit
+from .models import (
+    ArticlePublicationAudit, Document, DocumentTrashAudit, PendingDocumentDeletion, PreviewTicket, Version,
+    VersionRestoreAudit,
+)
 from .services import VersionConflict, add_upload, restore_version
 
 
@@ -444,3 +447,126 @@ class DocumentTests(TransactionTestCase):
         self.assertIn("Unreferenced:", report.getvalue())
         self.assertFalse(orphan.exists())
         self.assertEqual((self.storage / "quarantine" / orphan.relative_to(self.storage)).read_bytes(), b"contents")
+
+    def test_article_publication_permissions_pin_and_withdrawal(self):
+        original = self.post_file(b"# Published content", title="Public title").json()
+        document_id = original["id"]
+        internal = f"/api/documents/{document_id}/"
+        manage = internal + "publication/"
+        listing = "/api/public/articles/"
+        public = listing + document_id + "/"
+        page = f"/articles/{document_id}/"
+        draft = self.post_file(b"Unpublished material", title="Private title").json()
+        visitor = Client()
+        version = original["current_version"]["id"]
+        payload = {"title": "Public title", "version": version}
+        def member_visibility(client):
+            return {row["id"]: row["is_public"] for row in client.get("/api/documents/").json()["results"]}
+
+        self.assertEqual(member_visibility(self.client), {document_id: False, draft["id"]: False})
+        self.assertEqual(visitor.get(listing).json()["results"], [])
+        self.assertEqual(visitor.get(public).status_code, 404)
+        self.assertEqual(visitor.get(page).status_code, 404)
+        self.assertEqual(visitor.post(manage, payload, content_type="application/json").status_code, 403)
+        self.assertEqual(self.client.post(manage, payload, content_type="application/json").status_code, 403)
+        viewer = Client()
+        viewer.force_login(self.viewer)
+        self.assertEqual(viewer.post(manage, payload, content_type="application/json").status_code, 403)
+        admin = User.objects.create_user("publisher", "publisher@example.test", role=User.Role.ADMIN)
+        browser = Client(enforce_csrf_checks=True)
+        browser.force_login(admin)
+        self.assertEqual(browser.post(manage, payload, content_type="application/json").status_code, 403)
+        csrf = browser.get("/api/auth/me").json()["csrf_token"]
+        headers = {"X-CSRFToken": csrf}
+        cross_document = payload | {"version": draft["current_version"]["id"]}
+        self.assertEqual(browser.post(manage, cross_document, content_type="application/json", headers=headers).status_code, 404)
+        response = browser.post(manage, payload, content_type="application/json", headers=headers)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["publication"]["version__number"], 1)
+        self.assertEqual(member_visibility(viewer), {document_id: True, draft["id"]: False})
+        self.assertEqual(visitor.get(page)["X-Accel-Redirect"], "/index.html")
+        result = visitor.get(public)
+        self.assertIn("no-store", result["Cache-Control"])
+        self.assertEqual(result.json(), {"title": "Public title", "body": "# Published content", "format": "md"})
+        self.assertEqual(visitor.get(internal + "download/").status_code, 403)
+        self.assertEqual(visitor.get(internal + "versions/").status_code, 403)
+        latest = self.post_file(b"Draft upload", url=internal + "versions/").json()["current_version"]["id"]
+        edited = self.post_file(b"Draft edit", url=internal + "markdown/", base_version=latest).json()
+        restore = internal + f"versions/{latest}/restore/"
+        self.assertEqual(self.client.post(
+            restore, {"base_version": edited["current_version"]["id"]}, content_type="application/json",
+        ).status_code, 201)
+        self.client.patch(internal, {"title": "Internal title"}, content_type="application/json")
+        self.assertEqual(visitor.get(public).json(), result.json())
+        for term in ("Private title", "Internal title", "Draft upload", "Draft edit", "Unpublished material"):
+            self.assertEqual(visitor.get(listing, {"q": term}).json()["results"], [])
+        matches = visitor.get(listing, {"q": "Published content"})
+        self.assertEqual(visitor.get(listing, {"q": "Published\x00content"}).json(), matches.json())
+        self.assertIn("no-store", matches["Cache-Control"])
+        self.assertEqual(matches.json()["results"], [{"document_id": document_id, "title": "Public title"}])
+        replacement = {"version": latest, "title": "Internal title"}
+        self.assertEqual(browser.post(manage, replacement, content_type="application/json", headers=headers).status_code, 200)
+        self.assertEqual(visitor.get(public).json()["body"], "Draft upload")
+        self.assertEqual(browser.delete(manage, headers=headers).status_code, 204)
+        self.assertFalse(member_visibility(viewer)[document_id])
+        self.assertEqual(visitor.get(page).status_code, 404)
+        self.assertEqual(visitor.get(public).status_code, 404)
+        self.assertIn("no-store", visitor.get(public)["Cache-Control"])
+        self.assertEqual(browser.post(manage, replacement, content_type="application/json", headers=headers).status_code, 200)
+        self.assertEqual(self.client.delete(internal).status_code, 204)
+        self.assertEqual(visitor.get(public).status_code, 404)
+        self.assertEqual(visitor.get(listing).json()["results"], [])
+        self.assertEqual(self.client.post(f"/api/trash/{document_id}/restore/").status_code, 200)
+        self.assertEqual(visitor.get(public).status_code, 404)
+        self.assertIsNone(browser.get(manage).json()["publication"])
+        audit = ArticlePublicationAudit.objects.filter(document_id=document_id).order_by("id")
+        self.assertEqual(list(audit.values_list("action", "actor_id", "version_number")), [
+            ("published", admin.id, 1), ("republished", admin.id, 2), ("withdrawn", admin.id, 2),
+            ("published", admin.id, 2), ("withdrawn", self.editor.id, 2),
+        ])
+
+    def test_public_html_exposes_only_static_reading_copy(self):
+        source = (
+            b"<html><head><title>Original metadata</title></head><body>"
+            b"<h2>Readable title</h2><table><tr><td>Table cell</td></tr></table>"
+            b"<style>.field-grid{display:grid;grid-template-columns:repeat(50,minmax(14px,1fr))}</style>"
+            b"<div class='field-grid'><div style='grid-column:span 32'>GPIO_NAME</div></div>"
+            b"<script>/* Script content */</script><style>/* Style content */</style>"
+            b"<img src='https://example.test/image.png'><iframe src='https://example.test/frame'></iframe>"
+            b"<svg id='diagram' viewBox='0 0 900 470' aria-label='Memory map'>"
+            b"<style>:root{--ink:#2f5d8a} #diagram .label{font:600 12px sans-serif;fill:var(--ink)}</style>"
+            b"<defs><marker id='arrow' markerWidth='7'><path d='M0,0 L10,5 L0,10 z'/></marker></defs>"
+            b"<line marker-end='url(#arrow)' x1='0' y1='0' x2='10' y2='10'/>"
+            b"<text class='label' x='20' y='22' style='fill:var(--ink)'>MMIO map</text>"
+            b"<rect width='30' height='20' style='fill:url(https://example.test/paint)'/>"
+            b"<use href='https://example.test/shape'/><foreignObject>Hidden diagram markup</foreignObject></svg>"
+            b"</body></html>"
+        )
+        document = self.post_file(source, "readable.html").json()
+        document_id = document["id"]
+        url = f"/api/documents/{document_id}/"
+        admin = User.objects.create_user("publisher", "publisher@example.test", role=User.Role.ADMIN)
+        self.client.force_login(admin)
+        response = self.client.post(
+            url + "publication/", {"version": document["current_version"]["id"], "title": document["title"]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        visitor = Client()
+        article = visitor.get(f"/api/public/articles/{document_id}/").json()
+        self.assertIn("<h2>Readable title</h2>", article["body"])
+        self.assertIn("<td>Table cell</td>", article["body"])
+        for text in (
+            'viewBox="0 0 900 470"', 'marker-end="url(#arrow)"', 'fill:var(--ink)', 'MMIO map',
+            'class="field-grid"', 'grid-template-columns:repeat(50,minmax(14px,1fr))', 'grid-column:span 32',
+        ):
+            self.assertIn(text, article["body"])
+        self.assertEqual(len(visitor.get("/api/public/articles/", {"q": "MMIO map"}).json()["results"]), 1)
+        for text in (
+            "Original metadata", "Script content", "Style content", "<img", "<iframe",
+            "example.test", "Hidden diagram markup",
+        ):
+            self.assertNotIn(text, article["body"])
+            self.assertEqual(visitor.get("/api/public/articles/", {"q": text}).json()["results"], [])
+        download = self.client.get(url + "download/")
+        self.assertEqual(b"".join(download.streaming_content), source)

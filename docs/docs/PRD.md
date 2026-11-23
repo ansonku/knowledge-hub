@@ -7,13 +7,14 @@
 Status: approved baseline, 2026-11-21. This document records product decisions; implementation is not yet complete.
 
 ## Goal
-A multi-user, NAS-hosted knowledge library for AI-generated HTML and Markdown technical articles, accessible at `https://hub.sharegram.cc`, with immutable document history and comfortable reading.
+A multi-user, NAS-hosted knowledge library for AI-generated HTML and Markdown technical articles, accessible at `https://hub.sharegram.cc`, with immutable document history and comfortable reading. Visitors can read selected published articles from the home page without signing in.
 
 ## Users and permissions
-- Admin: read/search/download, create/upload, edit/version, manage categories/tags, preview/compare/restore, trash, permanently delete, manage users/roles.
-- Editor: all document operations except permanent deletion and user/role administration.
+- Admin: read/search/download, create/upload, edit/version, manage categories/tags, preview/compare/restore, trash, permanently delete, publish or withdraw articles, manage users/roles.
+- Editor: create and update documents, manage categories and tags, read, download and compare versions, move documents to trash, and restore documents and versions within the member library.
 - Viewer: read/search/download, preview/compare history; cannot mutate documents.
-- Shared library; editors can modify all documents in MVP. Enforce permissions in API and server-side service layer, not only UI.
+- The member library is shared. Editors can modify all documents. The API and service layer enforce access on every request.
+- Visitors can read the published title and body of Public articles. Member downloads, version history, categories, and tags require sign-in.
 
 ## Identity and account lifecycle
 - Support Django password login AND Google OAuth 2.0/OpenID Connect via django-allauth.
@@ -36,6 +37,13 @@ A multi-user, NAS-hosted knowledge library for AI-generated HTML and Markdown te
 - Concurrency-safe version numbers and file/database consistency; failed writes must be recoverable and not leave a version pointing at missing content.
 - Trash is soft delete of document and all its versions; restore preserves history. Admin alone can permanently delete.
 
+## Article publication (M6)
+- Existing and new articles start Private. The library is the homepage. Signed-out visitors can search and read Public articles with shareable URLs. The library enables member features after sign-in according to role.
+- Admin confirms the exact version before publishing. The public page retains the published title and version until the next explicit publication. Internal edits, uploads, and version restores remain inside the member library until publication.
+- Switching to Private or moving the article to trash removes it immediately from the home page and public queries. The previous public URL returns 404. Restoring a trashed article returns it to Private.
+- Audit publishing, publishing a replacement version, and withdrawal. Public API responses bypass browser and CDN caching so changes take effect on the next request.
+- Public Markdown uses the reader with its diagrams and math support. Public HTML uses a sanitized static reading view. Uploaded JavaScript is disabled and external resources do not load automatically in the public HTML view. Executable preview remains subject to the existing security gate.
+
 ## Reader and authoring
 - Three reader modes: Standard (category sidebar + article + TOC), Wide (hide sidebars, constrained readable width), Full Page (hide sidebars, maximize article width while retaining toolbar). Top-right layout selector and quick maximize; persist user preference. Defaults HTML Full Page, Markdown Standard.
 - Markdown view/edit/split; Monaco editor; GFM, Mermaid, KaTeX, syntax highlighting. Saving edits creates a new immutable version.
@@ -51,7 +59,7 @@ A multi-user, NAS-hosted knowledge library for AI-generated HTML and Markdown te
 - Explicit test gate before public deployment: iframe escape, direct preview URL, CSRF/cookie request behavior, CSP enforcement, cross-origin resource behavior, access control, token leakage, redirects/popups/downloads, malicious HTML and XSS.
 - If isolation cannot be verified, disable executable preview for public deployment or migrate to a separate site (different registrable domain). A same-origin path alone is NOT an isolation boundary.
 
-## Deployment
+## Deployment and hardening (M7)
 - NAS: UGREEN DXP6800 Pro / UGOS Pro. Docker Compose: Nginx, Django, PostgreSQL; isolated preview handling as required.
 - Nginx serves built Vue SPA and proxies API; host loopback bind proposed `127.0.0.1:18080:80` after port check.
 - Existing cloudflared runs on NAS host; add `hub.sharegram.cc` -> `http://localhost:18080`. Do not deploy another cloudflared container. No public database/backend port.

@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
 
 <template>
   <header>
-    <RouterLink to="/">Knowledge Hub</RouterLink>
+    <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
     <RouterLink to="/library/">知識總覽</RouterLink>
   </header>
   <main class="history-page">

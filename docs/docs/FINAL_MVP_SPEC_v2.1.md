@@ -6,9 +6,9 @@
 
 ## 1. 產品目標與範圍
 
-打造多人共用的 AI 技術知識庫，集中管理 AI 產生的 HTML/Markdown 技術文章（例如 OpenBMC、AST2700、LTPI、FPGA、OP-TEE）。提供分類、標籤、全文搜尋、互動 HTML 閱讀、Markdown 編輯、不可變版本歷史、差異比較與還原。正式站點 `https://hub.sharegram.cc`，透過 NAS 上既有 Cloudflare Tunnel 對外提供服務。
+打造多人共用的 AI 技術知識庫，集中管理 AI 產生的 HTML/Markdown 技術文章（例如 OpenBMC、AST2700、LTPI、FPGA、OP-TEE）。提供分類、標籤、全文搜尋、互動 HTML 閱讀、Markdown 編輯、不可變版本歷史、差異比較與還原。管理員可發布選定文章，讓訪客從首頁閱讀。正式站點 `https://hub.sharegram.cc`，透過 NAS 上既有 Cloudflare Tunnel 對外提供服務。
 
-**MVP 不包含**：公開註冊、文件逐篇 ACL、即時多人共同編輯、內建 HTML 原始碼編輯器、AI 自動生成文章、原生手機 App、進階全文搜尋引擎。
+**MVP 不包含**：公開註冊、逐篇指定使用者或群組權限、即時多人共同編輯、內建 HTML 原始碼編輯器、AI 自動生成文章、原生手機 App、進階全文搜尋引擎。
 
 ## 2. 技術架構（已確認）
 
@@ -56,9 +56,10 @@ Django -> SMTP                             Django -> SMTP / Google OIDC
 | 還原歷史版本 | ✓ | ✓ | — |
 | 移入回收桶、從回收桶還原 | ✓ | ✓ | — |
 | 永久刪除 | ✓ | — | — |
+| 發布公開文章、發布新版與下架 | ✓ | — | — |
 | 建立/停用帳號、變更角色 | ✓ | — | — |
 
-所有文章為共享文件庫，Editor 在 MVP 可編輯所有文章。每個 API、下載、預覽與版本還原皆由後端檢查權限，不能只依賴前端隱藏按鈕。
+登入後的文件庫採共享模式，Editor 可編輯所有文章。後端在每次 API 讀取與寫入、下載、預覽及還原時檢查權限。未登入訪客可透過公開端點閱讀已發布的文章。
 
 ### 3.2 帳號生命週期
 
@@ -106,6 +107,16 @@ Django -> SMTP                             Django -> SMTP / Google OIDC
 - 僅 Admin 可永久刪除；永久刪除需二次確認及稽核。
 - MVP 預設**不自動清空**回收桶。
 
+### 4.4 文章公開與未登入閱讀（M6，已確認）
+
+- 每篇文章可設為 `Private` 或 `Public`。既有文章遷移後與新上傳的文章都預設為 `Private`。`Private` 文章沿用登入後的共享文件庫權限。
+- 首頁和 `/library/` 共用知識總覽。未登入訪客可搜尋與閱讀公開文章，登入入口位於右上角。每篇公開文章有可分享的固定網址。訪客只能讀取已發布標題及正文。原始檔下載、版本歷史、內部分類與標籤沿用登入後的權限。
+- 只有 Admin 可發布、發布新版或下架。發布前介面須顯示即將公開的版號，經確認後才發布。Editor 可照既有權限編輯、上傳新版和還原內部版本。
+- 公開狀態須綁定明確發布的版本和公開標題。內部版本、標題或還原結果更新後，公開頁維持原先發布的內容，直到 Admin 明確發布新版。
+- 切回 `Private` 或移入回收桶時，首頁和公開查詢應立即移除該文章，舊的公開網址回傳 404。從回收桶還原時維持 `Private`。發布、發布新版、手動下架和移入回收桶時的下架均記錄操作者、文章、版號及時間。
+- 公開列表、正文及查詢由獨立的公開端點提供，每次讀取都檢查發布狀態及回收桶狀態。`Private` 文章的內容、標題與存在性不得藉由公開清單、搜尋、回傳的中繼資料或直連洩漏。公開正文、列表與查詢回應設為 `Cache-Control: no-store`，CDN 跳過快取。
+- 公開 Markdown 沿用現有閱讀器、目錄、Mermaid、KaTeX 和程式碼高亮。公開 HTML 由經清理的靜態閱讀版呈現標題、段落、表格等內容，移除可執行內容並阻止自動載入外部資源。靜態呈現可能與原始樣式或互動不同。可執行 HTML 預覽適用第 6 節的隔離驗收。
+
 ## 5. 閱讀與編輯介面（已確認）
 
 | 模式 | 佈局 |
@@ -137,7 +148,7 @@ Markdown：View / Edit / Split；Monaco、GFM、Mermaid、KaTeX、語法高亮�
 
 ## 7. 搜尋（已確認）
 
-搜尋標題、分類、標籤與文章全文；HTML 先抽取可搜尋文字，不執行 JS。MVP 採 PostgreSQL 全文搜尋；中文斷詞與召回率需實測，必要時改善索引策略。結果需遵守 RBAC 與回收桶可見性。
+搜尋標題、分類、標籤與文章全文；HTML 先抽取可搜尋文字，不執行 JS。MVP 採 PostgreSQL 全文搜尋；中文斷詞與召回率需實測，必要時改善索引策略。內部搜尋遵守 RBAC 與回收桶可見性。M6 的公開查詢僅使用已發布標題與已發布版本的公開正文。
 
 ## 8. 資料模型與檔案配置（實作基準）
 
@@ -147,6 +158,7 @@ SocialAccount(user_id, provider='google', provider_uid=Google sub)
 Category(id UUID, parent_id?, name, slug, sort_order)
 Tag(id UUID, name UNIQUE)
 Document(id UUID, title, format, category_id, tags[], current_version_id,
+         visibility, published_version_id?, published_title?, published_at?,
          is_trashed, created_by, timestamps)
 DocumentVersion(id UUID, document_id, version_number, storage_path,
                 sha256, byte_size, change_note, source, restored_from_id?,
@@ -165,6 +177,8 @@ AuditLog(id UUID, actor_id, action, target_type, target_id,
 | 帳號管理 | `/api/users/`、`/api/users/{id}/disable` | Admin |
 | 分類與標籤 | `/api/categories/`、`/api/tags/` | 讀取全員；寫入 Admin/Editor |
 | 文件 | `/api/documents/`、`/api/documents/{id}/` | 讀取全員；修改 Admin/Editor |
+| 公開閱讀 | `/api/public/articles/`、`/api/public/articles/{id}/` | 訪客可讀取已發布且未下架的內容 |
+| 發布與下架 | `/api/documents/{id}/publication/` | Admin，寫入須驗證 CSRF 並稽核 |
 | 批次新增 | `/api/documents/batch-upload` | Admin/Editor |
 | 更新版本 | `/api/documents/{id}/versions` | Admin/Editor |
 | 版本比較/還原 | `/api/documents/{id}/versions/{version}/...` | 依操作 RBAC |
@@ -217,13 +231,15 @@ codex --version
 | M3 Reader | 三種版面、Markdown View/Edit/Split、HTML Sandbox | 偏好記憶、編輯產生新版本、預覽隔離測試 |
 | M4 History | 版本時間軸、Diff、預覽、還原 | 還原只新增版本、不可覆寫歷史 |
 | M5 Search/Trash | 全文搜尋、回收桶、稽核 | 搜尋權限、刪除/還原/永久刪除測試 |
-| M6 Deployment | NAS、Tunnel、備份、安全強化 | 正式域名、還原演練、HTML 安全閘門通過 |
+| M6 公開文章 | Public／Private、首頁公開清單、發布版號、下架與稽核 | 無痕視窗可閱讀已發布文章；Private、下架與未發布新版不出現在公開端點；HTML 以靜態正文公開 |
+| M7 Deployment | NAS、Tunnel、備份、安全強化 | 正式域名、還原演練；可執行 HTML 預覽須通過安全閘門才可啟用 |
 
 ### 12.1 跨模組測試
 
 - Django unit/integration/API permission tests；Vue component/E2E tests；Docker smoke test。
 - 上傳惡意檔案、超限檔案、重複 SHA、併發版本、失敗中斷、DB/檔案復原。
 - Google 未授權帳號、Email 自動綁定攻擊、TOTP 旁路、備援碼重放、Admin MFA 重設稽核。
+- M6 公開首頁與直連、Private／回收桶文章的 404、Viewer 和 Editor 不可發布、未發布新版隔離、舊網址下架；公開 HTML 不執行腳本或自動載入外部資源。
 - HTML Preview 直接導頁、惡意 JS、CSP、Cookie/CSRF、外部 HTTPS 資源與跨角色讀取。
 
 ## 13. 最後未定案事項與決策分類
@@ -235,7 +251,7 @@ codex --version
 | 單檔大小 / 每批數量 | 50 MB / 20 檔，可配置 |
 | 回收桶 | 不自動清空 |
 | 中文搜尋 | PostgreSQL 起步，實測後改善 |
-| 文件權限 | 共享文件庫，無逐篇 ACL |
+| 文件權限 | 登入後共享文件庫；每篇預設 Private，由 Admin 明確發布到首頁 |
 | Email 啟用連結 | 24 小時、一次性、重新寄送失效 |
 | API 路徑、細部 UI 文案 | 由實作統一，需維持行為與權限 |
 
@@ -248,7 +264,7 @@ codex --version
 5. 備份頻率、保留期限、異地備份策略及實際還原演練。
 6. 管理員身分核對與 MFA 重設作業流程（SOP）；正式環境密鑰輪替、登入限速與告警。
 
-### C. **正式對外上線阻擋項目**
+### C. **可執行 HTML 預覽的對外啟用閘門**
 
 **同網域可執行 HTML Preview 的安全驗收**。若測試不能證明隔離足夠，必須停用對外 JS Preview，或遷移至不同 registrable domain 的獨立預覽站點；不得因相容模式而放寬此要求。
 
@@ -269,9 +285,9 @@ codex --version
 PrimeVue、PostgreSQL、Nginx、Health Check、.env.example、README、
 基礎測試。開發入口預設 http://localhost:18080。
 先提出檔案與實作計畫，再建立程式碼；完成後執行測試並報告。
-不要提前實作 M1～M6，也不要修改已確認的 MVP 產品決策。
+不要提前實作 M1～M7，也不要修改已確認的 MVP 產品決策。
 ```
 
 ---
 
-**版本紀錄**：v2.0 確認安全規格與 Codex 文件；v2.1 更新 Ubuntu 26.04 開發環境，合併完整產品需求、安全驗收、部署條件與 Codex 開發交付標準。
+**版本紀錄**：v2.0 確認安全規格與 Codex 文件；v2.1 更新 Ubuntu 26.04 開發環境，合併完整產品需求、安全驗收、部署條件與 Codex 開發交付標準。MVP 後續決議納入 M6 公開文章，原部署工作順延至 M7。

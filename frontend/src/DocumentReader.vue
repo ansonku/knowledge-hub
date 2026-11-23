@@ -8,9 +8,9 @@ import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import MarkdownBody from './MarkdownBody.vue'
 import { renderMarkdown } from './markdown'
+import { jumpToHeading, layouts, useReaderLayout } from './reader-layout'
 
 type Mode = 'read' | 'edit' | 'split'
-type Layout = 'standard' | 'wide' | 'full'
 type Category = { id: string; name: string; parent: string | null }
 type DocumentDetails = {
   id: string
@@ -23,12 +23,6 @@ type DocumentDetails = {
 }
 
 const route = useRoute()
-const layouts: { value: Layout; label: string }[] = [
-  { value: 'standard', label: '標準' },
-  { value: 'wide', label: '寬版' },
-  { value: 'full', label: '全頁' },
-]
-const preferenceKey = (format: DocumentDetails['format']) => `knowledge-hub.${format}.reader-layout`
 const previewUrl = ref('')
 const htmlPreviewError = ref('')
 const htmlPreviewLoading = ref(false)
@@ -58,8 +52,7 @@ const modes: { value: Mode; label: string }[] = [
 const categoryList = ref<Category[]>([])
 const loading = ref(true)
 const error = ref('')
-const layout = ref<Layout>('standard')
-const lastContainedLayout = ref<Exclude<Layout, 'full'>>('standard')
+const { layout, restoreLayout, toggleFullPage } = useReaderLayout(computed(() => file.value?.format))
 const article = ref<HTMLElement>()
 const dateFormatter = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium' })
 const categoryRoute = computed(() => file.value
@@ -91,40 +84,6 @@ watch(draft, (value, _, onCleanup) => {
   const refresh = setTimeout(() => { previewSource.value = value }, 170)
   onCleanup(() => clearTimeout(refresh))
 })
-
-function restoreLayout(format: DocumentDetails['format']) {
-  lastContainedLayout.value = 'standard'
-  layout.value = format === 'html' ? 'full' : 'standard'
-  try {
-    const stored = localStorage.getItem(preferenceKey(format))
-    if (stored === 'standard' || stored === 'wide' || stored === 'full') layout.value = stored
-    if (layout.value !== 'full') lastContainedLayout.value = layout.value
-  } catch {
-    // Browser storage may be disabled.
-  }
-}
-
-watch(layout, value => {
-  if (value !== 'full') lastContainedLayout.value = value
-  if (!file.value) return
-  try {
-    localStorage.setItem(preferenceKey(file.value.format), value)
-  } catch {
-    // Keep the current preference for this page.
-  }
-})
-
-function toggleFullPage() {
-  layout.value = layout.value === 'full' ? lastContainedLayout.value : 'full'
-}
-
-function jumpTo(id: string, updateAddress = true) {
-  const target = article.value?.querySelector<HTMLElement>(`[id="${id}"]`)
-  if (!target) return
-  target.focus({ preventScroll: true })
-  target.scrollIntoView({ block: 'start' })
-  if (updateAddress) history.replaceState(history.state, '', `#${id}`)
-}
 
 function redirectToLogin() {
   const next = encodeURIComponent(route.fullPath.split('#')[0])
@@ -195,7 +154,7 @@ async function loadDocument() {
       loading.value = false
       await nextTick()
       const anchor = window.location.hash.slice(1)
-      if (/^section-\d+$/.test(anchor)) jumpTo(anchor, false)
+      if (/^section-\d+$/.test(anchor)) jumpToHeading(article.value, anchor, false)
     }
   }
 }
@@ -284,7 +243,7 @@ watch([() => route.params.id, () => route.query.version], loadDocument, { immedi
 <template>
   <div class="reader">
     <header class="reader-header">
-      <RouterLink to="/">Knowledge Hub</RouterLink>
+      <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
       <RouterLink to="/library/">知識總覽</RouterLink>
     </header>
     <main class="reader-main" :class="{ 'reader-main-full': layout === 'full' }">
@@ -345,7 +304,7 @@ watch([() => route.params.id, () => route.query.version], loadDocument, { immedi
             <nav aria-label="本頁目錄">
               <a v-for="heading in rendered.headings" :key="heading.id" :href="`#${heading.id}`"
                 :style="{ paddingInlineStart: `${Math.max(0, heading.level - 1) * .5}rem` }"
-                @click.prevent="jumpTo(heading.id)">{{ heading.text }}</a>
+                @click.prevent="jumpToHeading(article, heading.id)">{{ heading.text }}</a>
             </nav>
           </aside>
         </div>
@@ -389,57 +348,16 @@ watch([() => route.params.id, () => route.query.version], loadDocument, { immedi
   </div>
 </template>
 
+<style scoped src="./reader.css"></style>
+
 <style scoped>
-.reader { min-height: 100vh; background: #f5f7fb; }
-.reader-header { padding: 1rem clamp(1rem, 4vw, 3rem); }
-.reader-header a { text-decoration: none; }
-.reader-main { max-width: 96rem; box-sizing: border-box; margin: 0 auto; padding: 1.5rem clamp(1rem, 3vw, 2.5rem); }
-.reader-main-full { max-width: none; }
-.breadcrumbs, .identity, .reader-actions, .reading-toolbar, .reader-feedback {
-  display: flex; align-items: center; flex-wrap: wrap; gap: .7rem;
-}
-.breadcrumbs a, .reader-sidebar a { color: #214d99; text-underline-offset: .18em; }
-.breadcrumbs { font-size: .9rem; color: #52647c; }
-.reading-toolbar { justify-content: space-between; gap: 1.25rem; margin: 1.1rem 0 1.5rem; }
-.identity h1 { margin: 0; font-size: clamp(1.75rem, 3vw, 2.4rem); overflow-wrap: anywhere; }
-.reader-feedback { margin-top: 1.5rem; }
-.reading-layout { display: grid; gap: clamp(.8rem, 2vw, 1.5rem); align-items: start; }
-.layout-standard { grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr) minmax(9rem, 13rem); }
-.layout-wide { max-width: 66rem; margin-inline: auto; }
-.reader-sidebar { position: sticky; top: 1rem; display: grid; gap: .65rem; background: #edf2fa; border-radius: .65rem; padding: 1rem; }
-.reader-sidebar > span { color: #435976; font-size: .8rem; font-weight: 700; }
-.reader-sidebar a { overflow-wrap: anywhere; font-size: .9rem; }
-.reader-toc nav { display: grid; gap: .5rem; max-height: 65vh; overflow-y: auto; }
-.reading-paper {
-  grid-column: 1; min-width: 0; padding: clamp(1rem, 3.5vw, 2.75rem); border: 1px solid #dee6f1;
-  border-radius: .75rem; background: white;
-}
-.layout-standard .reading-paper { grid-column: 2; }
 .editor-modes, .editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin: 0 0 1rem; }
 .editor-toolbar input { flex: 1 1 16rem; min-width: 0; padding: .65rem; border: 1px solid #b9c7d9; border-radius: .4rem; font: inherit; }
 .editor-panes { display: grid; gap: 1rem; }
 .editor-split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .preview-paper { grid-column: auto; max-height: clamp(28rem, 65vh, 56rem); overflow: auto; }
 .editor-notice { margin-bottom: 1rem; }
-.html-layout.layout-standard { grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr); }
-.html-preview { min-width: 0; display: grid; gap: 1rem; }
-.html-preview-controls { display: flex; flex-wrap: wrap; gap: .65rem; }
-.html-frame { width: 100%; min-height: 72vh; border: 1px solid #dee6f1; border-radius: .65rem; background: white; }
-.version-date { margin: 0 0 1.5rem; color: #52647c; font-size: .85rem; }
-:deep(.markdown-body) { color: #192e49; line-height: 1.75; overflow-wrap: anywhere; }
-:deep(.markdown-body h1), :deep(.markdown-body h2), :deep(.markdown-body h3),
-:deep(.markdown-body h4), :deep(.markdown-body h5), :deep(.markdown-body h6) { line-height: 1.25; scroll-margin-top: 1.25rem; }
-:deep(.markdown-body a) { color: #1746a2; text-underline-offset: .18em; }
-:deep(.markdown-body pre) { overflow-x: auto; padding: 1rem; border-radius: .45rem; background: #edf2fa; }
-:deep(.markdown-body img) { max-width: 100%; height: auto; }
-:deep(.markdown-body blockquote) { margin-inline: 0; padding-inline: 1rem; border-left: 3px solid #8ba8d2; }
-:deep(.markdown-body table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
-:deep(.markdown-body th), :deep(.markdown-body td) { border: 1px solid #dce5f0; padding: .4rem .7rem; }
 @media (max-width: 850px) {
-  .layout-standard, .html-layout.layout-standard { grid-template-columns: minmax(0, 1fr); }
-  .layout-standard .reading-paper { grid-column: 1; }
-  .reader-sidebar { position: static; }
   .editor-split { grid-template-columns: minmax(0, 1fr); }
-  .reader-toc { grid-row: 2; }
 }
 </style>

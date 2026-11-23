@@ -10,6 +10,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import PublicationDialog from './PublicationDialog.vue'
 
 type Format = 'html' | 'md'
 type Mode = 'single' | 'batch' | 'version'
@@ -23,6 +24,7 @@ type DocumentRow = {
   tags: Label[]
   format: Format
   current_version: { number: number }
+  is_public: boolean
   updated_at: string
 }
 type UploadRow = {
@@ -38,6 +40,12 @@ const rows = ref<DocumentRow[]>([])
 const categories = ref<Category[]>([])
 const tags = ref<Label[]>([])
 const formats = [{ id: '', name: '全部格式' }, { id: 'html', name: 'HTML' }, { id: 'md', name: 'Markdown' }]
+type PublicRow = { document_id: string; title: string }
+const publicRows = ref<PublicRow[]>([])
+const publicPages = ref(1)
+const access = ref<'loading' | 'guest' | 'member' | 'error'>('loading')
+const isMember = computed(() => access.value === 'member')
+const isGuest = computed(() => access.value === 'guest')
 const role = ref('')
 const csrf = ref('')
 const route = useRoute()
@@ -79,6 +87,7 @@ const taxonomyId = ref<string | null>(null)
 const taxonomyName = ref('')
 const taxonomyParent = ref<string | null>(null)
 const metadata = ref<DocumentRow>()
+const publication = ref<DocumentRow>()
 const metadataName = ref('')
 const metadataCategory = ref<string | null>(null)
 const metadataTags = ref<string[]>([])
@@ -135,10 +144,18 @@ async function loadDocuments() {
   libraryError.value = ''
   try {
     const params = new URLSearchParams({ page: String(page.value) })
+    if (keywords.value) params.set('q', keywords.value)
+    if (isGuest.value) {
+      const data = await api(`/api/public/articles/?${params}`)
+      if (request !== listRequest) return
+      publicRows.value = data.results
+      publicPages.value = data.pages
+      if (page.value !== data.page) page.value = data.page
+      return
+    }
     if (category.value) params.set('category', category.value)
     if (format.value) params.set('file_format', format.value)
     if (tag.value) params.set('tag', tag.value)
-    if (keywords.value) params.set('q', keywords.value)
     const data = await api(`/api/documents/?${params}`)
     if (request !== listRequest) return
     rows.value = data.results
@@ -165,14 +182,24 @@ onMounted(async () => {
     const account = await api('/api/auth/me')
     role.value = account.role
     csrf.value = account.csrf_token
+  } catch (error) {
+    if (error instanceof ApiError && [401, 403].includes(error.status)) {
+      access.value = 'guest'
+      await loadDocuments()
+    } else {
+      access.value = 'error'
+      loading.value = false
+      libraryError.value = '無法載入文件庫，請重新整理頁面。'
+    }
+    return
+  }
+  try {
     await loadTaxonomy()
     if (!navigation.value.some(item => item.id === category.value)) category.value = ''
+    access.value = 'member'
     await loadDocuments()
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 403) {
-      window.location.assign('/accounts/login/?next=/library/')
-      return
-    }
+  } catch {
+    access.value = 'error'
     loading.value = false
     libraryError.value = '無法載入文件庫，請重新整理頁面。'
   }
@@ -180,9 +207,9 @@ onMounted(async () => {
 
 watch([category, format, tag, keywords], () => {
   if (page.value !== 1) page.value = 1
-  else if (role.value) void loadDocuments()
+  else if (isMember.value || isGuest.value) void loadDocuments()
 })
-watch(page, () => { if (role.value) void loadDocuments() })
+watch(page, () => { if (isMember.value || isGuest.value) void loadDocuments() })
 
 function formatLabel(kind: Format) { return kind === 'html' ? 'HTML' : 'Markdown' }
 
@@ -371,15 +398,23 @@ function sizeLabel(size: number) {
 <template>
   <div class="library">
     <header class="library-header">
-      <RouterLink to="/">Knowledge Hub</RouterLink>
-      <a href="/accounts/profile/">個人設定</a>
+      <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
+      <nav v-if="isMember" aria-label="帳號">
+        <a href="/accounts/profile/">個人設定</a>
+        <a v-if="role === 'admin'" href="/accounts/manage/">帳號管理</a>
+        <a href="/accounts/logout/">登出</a>
+      </nav>
+      <a v-else-if="isGuest" :href="`/accounts/login/?next=${encodeURIComponent(route.fullPath)}`">登入</a>
     </header>
     <div class="library-layout">
-      <aside class="library-sidebar" aria-label="文件分類">
+      <aside class="library-sidebar" aria-label="文件導覽">
         <h2>文件庫</h2>
-        <nav>
+        <nav v-if="isMember">
           <button v-for="item in navigation" :key="item.id" type="button" :class="{ current: category === item.id }"
             :aria-pressed="category === item.id" @click="category = item.id">{{ item.name }}</button>
+        </nav>
+        <nav v-else-if="isGuest">
+          <span class="current" aria-current="page">全部文件</span>
         </nav>
       </aside>
       <main class="library-main">
@@ -395,14 +430,14 @@ function sizeLabel(size: number) {
 
         <Message v-if="libraryError" severity="error" size="small">{{ libraryError }}</Message>
         <Message v-if="notice" severity="success" size="small">{{ notice }}</Message>
-        <section class="library-panel" aria-label="文件清單">
+        <section v-if="access !== 'error'" class="library-panel" aria-label="文件清單">
           <div class="library-toolbar">
             <form class="library-search" role="search" @submit.prevent="keywords = searchText.trim()">
-              <InputText v-model="searchText" maxlength="240" placeholder="搜尋標題、分類、標籤或全文" aria-label="搜尋文件" />
+              <InputText v-model="searchText" maxlength="240" :placeholder="isMember ? '搜尋標題、分類、標籤或全文' : '搜尋公開標題或正文'" aria-label="搜尋文件" />
               <Button v-if="searchText" type="button" label="清除" text @click="searchText = ''; keywords = ''" />
               <Button type="submit" label="搜尋" outlined />
             </form>
-            <div class="library-filters" aria-label="文件格式">
+            <div v-if="isMember" class="library-filters" aria-label="文件格式">
               <Button v-for="item in formats" :key="item.id" :label="item.name" size="small"
                 :outlined="format !== item.id" :severity="format === item.id ? 'primary' : 'secondary'"
                 :aria-pressed="format === item.id" @click="format = item.id" />
@@ -410,22 +445,24 @@ function sizeLabel(size: number) {
             </div>
             <Button v-if="canUpload" label="＋ 上傳文件" @click="openUpload('single')" />
           </div>
-          <DataTable :value="rows" data-key="id" :loading="loading"
-            striped-rows table-style="min-width: 49rem">
-            <template #empty>{{ keywords ? "找不到符合條件的文件。" : "此分類與格式目前沒有文件。" }}</template>
+          <DataTable :value="isMember ? rows : publicRows" :data-key="isMember ? 'id' : 'document_id'" :loading="loading"
+            striped-rows :table-style="isMember ? 'min-width: 49rem' : undefined">
+            <template #empty>{{ keywords ? "找不到符合條件的文件。" : (isMember ? "此分類與格式目前沒有文件。" : "目前沒有公開文章。") }}</template>
             <Column field="title" header="文件標題">
               <template #body="{ data }">
                 <div class="document-title">
                   <RouterLink class="reader-link"
-                    :to="{ name: 'document-reader', params: { id: data.id } }">{{ data.title }}</RouterLink>
-                  <Tag :value="formatLabel(data.format)" :severity="data.format === 'html' ? 'info' : 'secondary'" />
+                    :to="isMember
+                      ? { name: 'document-reader', params: { id: data.id } }
+                      : { name: 'public-article', params: { id: data.document_id } }">{{ data.title }}</RouterLink>
+                  <Tag v-if="isMember" :value="formatLabel(data.format)" :severity="data.format === 'html' ? 'info' : 'secondary'" />
                 </div>
               </template>
             </Column>
-            <Column field="category_name" header="分類">
+            <Column v-if="isMember" field="category_name" header="分類">
               <template #body="{ data }">{{ data.category_name ?? '未分類' }}</template>
             </Column>
-            <Column header="標籤">
+            <Column v-if="isMember" header="標籤">
               <template #body="{ data }">
                 <div class="document-tags">
                   <Tag v-for="tag in data.tags" :key="tag.id" :value="tag.name" severity="secondary" />
@@ -433,13 +470,19 @@ function sizeLabel(size: number) {
                 </div>
               </template>
             </Column>
-            <Column header="版本">
+            <Column v-if="isMember" header="可見性">
+              <template #body="{ data }">
+                <Tag :value="data.is_public ? '公開' : '私人'"
+                  :severity="data.is_public ? 'success' : 'secondary'" />
+              </template>
+            </Column>
+            <Column v-if="isMember" header="版本">
               <template #body="{ data }">v{{ data.current_version.number }}</template>
             </Column>
-            <Column field="updated_at" header="更新日期">
+            <Column v-if="isMember" field="updated_at" header="更新日期">
               <template #body="{ data }">{{ dateFormatter.format(new Date(data.updated_at)) }}</template>
             </Column>
-            <Column header="操作">
+            <Column v-if="isMember" header="操作">
               <template #body="{ data }">
                 <div class="document-actions">
                   <Button as="a" :href="`/api/documents/${data.id}/download/`" label="下載" size="small" variant="text" />
@@ -448,11 +491,16 @@ function sizeLabel(size: number) {
               </template>
             </Column>
           </DataTable>
-          <footer class="library-count pagination">
+          <footer v-if="isMember" class="library-count pagination">
             <span>共 {{ count }} 份文件</span>
             <Button v-if="page > 1" label="上一頁" size="small" text @click="page--" />
             <Button v-if="page * pageSize < count" label="下一頁" size="small" text @click="page++" />
           </footer>
+          <nav v-else-if="isGuest && publicPages > 1" class="library-count pagination" aria-label="公開文章分頁">
+            <Button label="上一頁" text :disabled="loading || page === 1" @click="page--" />
+            <span>第 {{ page }} / {{ publicPages }} 頁</span>
+            <Button label="下一頁" text :disabled="loading || page === publicPages" @click="page++" />
+          </nav>
         </section>
       </main>
     </div>
@@ -530,6 +578,9 @@ function sizeLabel(size: number) {
       </form>
     </Dialog>
 
+    <PublicationDialog v-if="publication" :id="publication.id" :format="publication.format" :csrf="csrf"
+      @close="publication = undefined" @changed="loadDocuments" />
+
     <Dialog :visible="Boolean(metadata)" header="管理文件" modal :style="{ width: 'min(94vw, 34rem)' }"
       @update:visible="value => { if (!value) metadata = undefined }">
       <form v-if="metadata" class="title-field" @submit.prevent="saveMetadata()">
@@ -543,6 +594,8 @@ function sizeLabel(size: number) {
         <Message v-if="submitError" severity="error">{{ submitError }}</Message>
         <div class="document-actions">
           <Button type="submit" label="儲存" :loading="working" />
+          <Button v-if="role === 'admin'" type="button" label="公開設定" outlined :disabled="working"
+            @click="publication = metadata; metadata = undefined" />
           <Button type="button" label="新增版本" outlined :disabled="working" @click="openUpload('version', metadata); metadata = undefined" />
           <Button type="button" :label="removing ? '確認移入回收桶' : '移入回收桶'" severity="danger" outlined
             :disabled="working" @click="removing ? saveMetadata(true) : removing = true" />
@@ -556,18 +609,18 @@ function sizeLabel(size: number) {
 .library { min-height: 100vh; background: #f5f7fb; color: #152b49; }
 .library-header { padding: .95rem clamp(1rem, 3vw, 2.25rem); align-items: center; }
 .library-header a { text-decoration: none; }
-.library-header a:first-child { font-size: 1.12rem; }
 .library-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); min-height: calc(100vh - 3.5rem); }
 .library-search { display: flex; flex: 1 1 100%; gap: .5rem; }
 .library-search input { flex: 1; min-width: 0; }
 .library-sidebar { padding: 1.8rem .85rem; border-right: 1px solid #e0e7f0; background: #fbfcfe; }
 .library-sidebar h2 { font-size: .875rem; margin: 0 .65rem .7rem; color: #475b77; }
 .library-sidebar nav { display: grid; gap: .25rem; }
-.library-sidebar button {
+.library-sidebar button, .library-sidebar nav > span {
   padding: .65rem .8rem; border: 0; background: transparent; border-left: .2rem solid transparent;
-  border-radius: .35rem; text-align: left; cursor: pointer; color: #263c5b; font: inherit;
+  border-radius: .35rem; text-align: left; color: #263c5b; font: inherit;
 }
-.library-sidebar button.current { background: #e4edff; border-color: #2563eb; color: #1746a2; font-weight: 650; }
+.library-sidebar button { cursor: pointer; }
+.library-sidebar .current { background: #e4edff; border-color: #2563eb; color: #1746a2; font-weight: 650; }
 .library-sidebar button:hover { background: #eff4fd; }
 .library-main { width: 100%; max-width: 89rem; box-sizing: border-box; margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2.5rem); }
 .library-heading, .library-toolbar, .upload-file { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
@@ -582,7 +635,7 @@ function sizeLabel(size: number) {
 .library-panel { margin-top: 1rem; border: 1px solid #dfe6f0; border-radius: .75rem; background: white; overflow: hidden; }
 .library-toolbar, .library-count { padding: 1rem 1.15rem; }
 .library-count { font-size: .875rem; border-top: 1px solid #e3eaf2; }
-.reader-link { color: #1746a2; font-weight: 700; text-underline-offset: .18em; }
+.reader-link { overflow-wrap: anywhere; color: #1746a2; font-weight: 700; text-underline-offset: .18em; }
 .document-actions { flex-wrap: nowrap; }
 .dropzone {
   margin: 1rem 0; border: 1px dashed #82a5e8; border-radius: .6rem;
@@ -600,7 +653,7 @@ function sizeLabel(size: number) {
   .library-sidebar { border-right: 0; border-bottom: 1px solid #e0e7f0; padding: .65rem 1rem; }
   .library-sidebar h2 { display: none; }
   .library-sidebar nav { display: flex; overflow-x: auto; }
-  .library-sidebar button { white-space: nowrap; }
+  .library-sidebar button, .library-sidebar nav > span { white-space: nowrap; }
   .library-main { padding-top: 1.2rem; }
 }
 </style>

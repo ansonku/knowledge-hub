@@ -40,6 +40,13 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "format", "category", "category_name", "tags", "current_version", "updated_at"]
 
 
+class DocumentListSerializer(DocumentSerializer):
+    is_public = serializers.BooleanField(read_only=True)
+
+    class Meta(DocumentSerializer.Meta):
+        fields = [*DocumentSerializer.Meta.fields, "is_public"]
+
+
 class DocumentMetadata(serializers.Serializer):
     title = serializers.CharField(max_length=240, required=False)
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), allow_null=True, required=False)

@@ -96,3 +96,23 @@ class DocumentTrashAudit(models.Model):
 class PendingDocumentDeletion(models.Model):
     document_id = models.UUIDField(primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ArticlePublication(models.Model):
+    document = models.OneToOneField(Document, primary_key=True, on_delete=models.CASCADE)
+    version = models.ForeignKey(Version, on_delete=models.CASCADE)
+    title = models.CharField(max_length=240)
+    format = models.CharField(max_length=4, choices=Document.Format.choices)
+    body = models.TextField()
+    search_text = models.TextField()
+    published_at = models.DateTimeField(auto_now=True)
+
+
+class ArticlePublicationAudit(models.Model):
+    document_id = models.UUIDField(db_index=True)
+    version_id = models.UUIDField()
+    version_number = models.PositiveIntegerField()
+    title = models.CharField(max_length=240)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=16)
+    created_at = models.DateTimeField(auto_now_add=True)

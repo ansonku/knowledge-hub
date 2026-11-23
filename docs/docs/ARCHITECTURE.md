@@ -5,7 +5,9 @@
 Browser (Vue 3 + TS + Vite + PrimeVue + Pinia + Vue Router)
   | HTTPS hub.sharegram.cc (Cloudflare Tunnel, existing host cloudflared)
 NAS loopback :18080 -> Docker Nginx
-  |-- /             Vue SPA
+  |-- /             Vue SPA, knowledge library home
+  |-- /articles/     Vue SPA, public reader
+  |-- /api/public/   read-only published article list and body
   |-- /api/         Django REST Framework (session auth, CSRF, RBAC)
   |-- /accounts/    django-allauth password / Google OIDC / TOTP
   `-- /preview/...  authorized preview handler + HTTP CSP sandbox
@@ -24,7 +26,7 @@ Django -> SMTP for activation/reset/security notifications
 - SocialAccount from allauth: provider, provider_uid (`sub`), linked user.
 - Category(UUID, parent nullable, name, slug, ordering).
 - Tag(UUID, name unique).
-- Document(UUID, title, format, category FK, tags M2M, current_version FK nullable, is_trashed, created_by, timestamps).
+- Document(UUID, title, format, category FK, tags M2M, current_version FK nullable, visibility (Private by default), published_version FK nullable, published_title, published_at, is_trashed, created_by, timestamps).
 - DocumentVersion(UUID, document FK, version_number, storage_path, sha256, byte_size, change_note, source, restored_from FK nullable, created_by, created_at). Unique(document, version_number); immutable records.
 - AuditLog(UUID, actor, action, target_type, target_id, metadata with redaction, created_at).
 - Optional one-use activation/reset token records (prefer Django secure signed/password-reset tokens and server-side invalidation semantics).
@@ -40,6 +42,13 @@ Django -> SMTP for activation/reset/security notifications
 Storage example (verify NAS mount first):
 `documents/<document_uuid>/versions/v0001.html`
 `documents/<document_uuid>/versions/v0002.html`
+
+## Article publication (M6)
+- Use separate public list and reading endpoints. Validate Public status, a published version belonging to the requested document, and the active trash state on every request. Return the same 404 response for an unavailable article and an unknown public URL.
+- Resolve the title and content from the published snapshot. Internal readers continue to use the current version. Public responses expose only the published title and body. The public query scope uses the published snapshot and omits internal metadata and member downloads.
+- Publish and withdraw through Admin-only, CSRF-protected service operations. Lock the document and update the publication state and audit in one transaction. Keep the published pointer independent of internal version changes. Clear publication when trashing and restore from trash as Private.
+- Render public Markdown with the existing safe Markdown reader. Serve public HTML through a static, sanitized reading view that removes executable content and automatic external loads. Keep original uploads in protected storage. Set public list and reading responses to `Cache-Control: no-store` and configure the CDN to bypass caching.
+- Test public and member access separately. Include anonymous direct links, withheld draft versions, immediate withdrawal, trash and restore, unauthorized publication, and browser checks for public HTML.
 
 ## Preview security boundary: high-risk design
 - The same-origin preview choice is provisional for MVP only and requires a security gate before external use.
@@ -57,7 +66,7 @@ Storage example (verify NAS mount first):
 - Enforce TOTP after either primary login when enabled; 10 single-use recovery codes; admin reset requires verified process, audit, notification and step-up before sensitive changes.
 - Apply RBAC to every API endpoint, file download, version history, preview and restore.
 
-## Production readiness
+## Production readiness (M7)
 - Verify actual UGOS Pro mount paths, UID/GID, permissions, disk free space, localhost port, cloudflared route, backup/restore and email deliverability.
 - Configure Google OAuth authorized redirect URI from actual allauth route, e.g. `https://hub.sharegram.cc/accounts/google/login/callback/` after routing validation.
 

@@ -12,6 +12,7 @@ from users.permissions import has_role
 
 from . import search, storage
 from .models import Document, DocumentTrashAudit, Version, VersionRestoreAudit
+from .publication import withdraw_publication
 
 
 STORAGE_LOCK_KEY = "knowledge-hub:document-files"
@@ -85,6 +86,7 @@ def change_document(actor, document_id, data=None):
     require_editor(actor)
     document = get_object_or_404(active_documents().select_for_update(), pk=document_id)
     if data is None:
+        withdraw_publication(document, actor)
         document.is_trashed = True
         document.trashed_at = timezone.now()
         document.save(update_fields=["is_trashed", "trashed_at", "updated_at"])

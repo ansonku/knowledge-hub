@@ -94,7 +94,7 @@ onMounted(load)
 
 <template>
   <header class="admin-header">
-    <a href="/">Knowledge Hub</a>
+    <a href="/" class="site-brand">Knowledge Hub</a>
     <nav aria-label="帳號">
       <a href="/accounts/profile/">個人設定</a>
       <a href="/accounts/logout/">登出</a>

@@ -9,7 +9,6 @@
     padding: 1.5rem clamp(1.25rem, 5vw, 3.5rem);
     background: transparent;
   }
-  .login-header a { text-decoration: none; font-size: 1.05rem; letter-spacing: .01em; }
   .entry-page > main {
     box-sizing: border-box;
     max-width: 32rem;

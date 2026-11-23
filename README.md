@@ -17,7 +17,7 @@ docker compose up --build --wait
 如果主機透過 sudo 使用 Docker，把下列各處的 `docker compose` 改成 `sudo docker compose`，
 並以 `sudo bash scripts/smoke.sh` 執行 smoke test。
 
-開啟 `http://localhost:18080` 可查看系統狀態。Nginx 只在主機回環介面開放。
+開啟 `http://localhost:18080` 進入知識總覽。Nginx 只在主機回環介面開放。
 若需更換埠，請調整 `.env` 的 `HUB_PORT`。
 
 ## 測試
@@ -102,3 +102,11 @@ Admin 和 Editor 可從舊版選擇還原。系統會複製舊版內容，建立
 知識總覽可搜尋標題、分類、標籤及目前版本正文。HTML 索引只擷取文字，略過腳本與樣式。PostgreSQL 全文搜尋處理詞彙比對，中文可用連續字串查詢。啟動後會補建舊文件目前版本的索引；若需手動重試，可執行 `docker compose exec backend python manage.py index_document_search`。
 
 Admin 和 Editor 可在回收桶還原文件及所有版本。只有 Admin 可以永久刪除，必須打開確認視窗並輸入完整文件標題。移入回收桶、還原及永久刪除都會留下稽核紀錄。若檔案清理暫時失敗，系統保留清理工作，可在重新啟動環境時重試，或執行 `docker compose exec backend python manage.py finish_document_deletions`。
+
+## M6 公開文章
+
+既有及新上傳文章預設為 Private。Admin 可從「知識總覽 → 管理文件 → 公開設定」選擇版本、檢視原稿並確認發布。首頁與 `/library/` 共用知識總覽。未登入訪客可搜尋公開標題或正文，也可使用文章的固定網址閱讀。登入後可使用內部分類、標籤、檔案下載與版本歷史，管理操作依角色開放。
+
+公開頁固定顯示確認發布時的標題和版本。內部改名、編輯、上傳及還原版本會保留原公開內容，直到 Admin 再次發布。下架或移入回收桶後，固定網址會回傳 HTTP 404。從回收桶還原的文章維持 Private。
+
+公開 HTML 保留靜態文字和基本排版，可保留 SVG 向量圖及圖表所需的配色，並移除腳本及會自動載入外部資源的元素。公開文章與查詢回應包含 `Cache-Control: no-store`。NAS 部署若使用 CDN，自訂快取規則須略過 `/articles/` 與 `/api/public/articles/`。

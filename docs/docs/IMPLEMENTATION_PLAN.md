@@ -29,10 +29,18 @@ Implement in small reviewed milestones. Do not advance to production exposure wi
 - Metadata and extracted-text search; PostgreSQL indexes, Chinese search evaluation; soft delete/restore; Admin-only permanent delete; audit logs.
 - Tests: trashed docs hidden from default search, all versions restored, unauthorized permanent delete blocked.
 
-## M6 — NAS deployment and hardening
+## M6 — Article publication and anonymous reading
+- Migrate existing articles to Private and default new uploads to Private. Store the confirmed published version and public title separately from the internal current version and title.
+- Add an Admin-only publish, publish replacement, and withdraw workflow with version confirmation and audit. Trashing withdraws immediately. Restoring from trash returns the article to Private.
+- Use the library as the homepage. Signed-out visitors can search the Public article list and open its shareable reading routes. Show a sign-in link in the header and display member controls according to the signed-in role. Use dedicated read-only public endpoints for the published snapshot with no browser or CDN caching. Member library permissions continue to apply to source downloads, version history, categories, and tags.
+- Reuse the Markdown reader. Present HTML as sanitized static content with no uploaded JavaScript or automatic external resource requests. Keep runnable preview behind the existing gate.
+- First acceptance: an Admin publishes one article and a visitor can read it from the home page in an incognito session.
+- Tests: defaults and migration, Admin-only publishing, published content stays pinned across edits/uploads/restores, public queries do not reveal Private or trashed content, direct public URLs return 404 immediately after withdrawal, trash restore keeps Private, and public HTML remains static.
+
+## M7 — NAS deployment and hardening
 - Production Compose/Nginx, host cloudflared integration (no duplicate daemon), NAS bind mounts, SMTP/OAuth secrets, backup and restoration scripts, security headers, monitoring.
 - Tests: login via public domain, Google callback, activation email, backups/restoration, host loopback binding, negative preview security suite.
-- NO-GO if HTML sandbox security gate fails; disable executable preview or switch to separate registrable domain.
+- Release can offer static public HTML. Keep executable HTML preview disabled unless the browser security gate passes, or use an independently verified preview site on a separate registrable domain.
 
 ## Delivery discipline
 For each milestone: implement code + migrations + tests + documentation; run automated tests; provide a concise change summary, risks, and exact commands to reproduce. Ask before changing previously approved product decisions.

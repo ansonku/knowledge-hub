@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db import IntegrityError, connection, transaction
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -12,10 +12,11 @@ from rest_framework.response import Response
 from users.permissions import CanReadLibrary, IsAdmin
 
 from . import search, services, storage, trash
-from .models import Category, Document, Tag, Version
+from .models import ArticlePublication, Category, Document, Tag, Version
 from .preview import local_preview_enabled
 from .serializers import (
     CategorySerializer,
+    DocumentListSerializer,
     DocumentMetadata,
     DocumentSerializer,
     MarkdownEdit,
@@ -60,7 +61,9 @@ def documents(request):
         form.is_valid(raise_exception=True)
         document = services.add_upload(request.user, form.validated_data)
         return Response(DocumentSerializer(document).data, status=201)
-    query = document_list().order_by("-updated_at", "id")
+    query = document_list().annotate(
+        is_public=Exists(ArticlePublication.objects.filter(document_id=OuterRef("pk"))),
+    ).order_by("-updated_at", "id")
     filters = request.query_params
     if keywords := filters.get("q"):
         keywords = serializers.CharField(max_length=240, allow_blank=True).run_validation(keywords)
@@ -82,7 +85,7 @@ def documents(request):
         "count": count,
         "page": page,
         "page_size": size,
-        "results": DocumentSerializer(query[(page - 1) * size:page * size], many=True).data,
+        "results": DocumentListSerializer(query[(page - 1) * size:page * size], many=True).data,
         "limits": {"bytes": settings.DOCUMENT_MAX_BYTES, "batch": settings.DOCUMENT_MAX_BATCH},
     })
 

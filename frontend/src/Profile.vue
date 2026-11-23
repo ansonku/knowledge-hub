@@ -76,7 +76,7 @@ onMounted(loadProfile)
 <template>
   <div class="profile-page">
     <header class="profile-header">
-      <RouterLink to="/">Knowledge Hub</RouterLink>
+      <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
       <nav v-if="profile" aria-label="帳號">
         <a v-if="profile.role === 'admin'" href="/accounts/manage/">帳號管理</a>
         <a href="/accounts/logout/">登出</a>

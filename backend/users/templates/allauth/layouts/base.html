@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block head_title %}Knowledge Hub{% endblock %}</title>
+  <link rel="stylesheet" href="/assets/site-brand.css">
   <style>
     body { margin: 0; background: #f5f7fb; color: #152b49; font: 1rem/1.55 system-ui, sans-serif; }
     header { background: #102a51; color: white; padding: 1rem max(1.5rem, calc((100% - 48rem) / 2)); }
@@ -22,7 +23,7 @@
 {% block site_header %}
 <header>
   <nav aria-label="主要導覽">
-    <a href="/">Knowledge Hub</a>
+    <a href="/" class="site-brand">Knowledge Hub</a>
     {% if user.is_authenticated %}
       <a href="{% url 'profile' %}">個人設定</a>
       {% if user.role == 'admin' %}<a href="{% url 'manage_users' %}">帳號管理</a>{% endif %}
