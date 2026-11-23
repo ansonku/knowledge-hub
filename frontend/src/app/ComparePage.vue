@@ -6,6 +6,7 @@ import Select from 'primevue/select'
 import { computed, defineAsyncComponent, h, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
+import { useTheme } from '../stores/theme'
 import UiIcon from './components/UiIcon.vue'
 import { versionSource, type DocumentDetails, type VersionInfo } from './composables/useDocument'
 import { longDateTime } from './types'
@@ -19,6 +20,10 @@ const DiffEditor = defineAsyncComponent({
 })
 
 const route = useRoute()
+const theme = useTheme()
+watch(() => theme.isDark, dark => {
+  void import('../monaco').then(({ editor }) => editor.setTheme(dark ? 'vs-dark' : 'vs'))
+}, { immediate: true })
 const router = useRouter()
 const documentId = computed(() => String(route.params.id))
 const fromId = computed(() => typeof route.query.from === 'string' ? route.query.from : '')

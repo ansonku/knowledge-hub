@@ -10,11 +10,13 @@ export type Account = {
   display_name: string
   role: Role
 }
-type MeResponse = Account & { csrf_token: string }
+export type Limits = { bytes: number; batch: number }
+type MeResponse = Account & { csrf_token: string; limits?: Limits }
 
 // Visibility helpers only; the backend enforces every permission on each request.
 export const useSession = defineStore('session', () => {
   const account = ref<Account>()
+  const limits = ref<Limits>({ bytes: 50 * 1024 * 1024, batch: 20 })
   const status = ref<'idle' | 'loading' | 'member' | 'guest' | 'error'>('idle')
   let pending: Promise<void> | undefined
 
@@ -27,8 +29,9 @@ export const useSession = defineStore('session', () => {
     if (pending && !force) return pending
     status.value = 'loading'
     pending = api<MeResponse>('/api/auth/me')
-      .then(({ csrf_token, ...me }) => {
+      .then(({ csrf_token, limits: serverLimits, ...me }) => {
         setCsrfToken(csrf_token)
+        if (serverLimits) limits.value = serverLimits
         account.value = me
         status.value = 'member'
       })
@@ -40,5 +43,5 @@ export const useSession = defineStore('session', () => {
     return pending
   }
 
-  return { account, status, role, isAdmin, canEdit, displayName, load }
+  return { account, limits, status, role, isAdmin, canEdit, displayName, load }
 })

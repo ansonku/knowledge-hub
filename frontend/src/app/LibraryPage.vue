@@ -7,7 +7,7 @@ import Select from 'primevue/select'
 import Skeleton from 'primevue/skeleton'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { api, getCsrfToken } from '../api'
 import PublicationDialog from '../PublicationDialog.vue'
@@ -16,8 +16,9 @@ import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
-import { formatLabel, longDateTime, shortDate, type DocumentPage, type DocumentRow, type Format } from './types'
+import { formatLabel, longDateTime, shortDate, visibilityOf, type DocumentPage, type DocumentRow, type Format } from './types'
 
+const emit = defineEmits<{ upload: [] }>()
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
@@ -31,6 +32,9 @@ const category = computed(() => route.name === 'app-collection' ? String(route.p
 const keywords = computed(() => queryText('q'))
 const format = computed(() => queryText('format') as Format | '')
 const tag = computed(() => queryText('tag'))
+/** Fixed views reached from the sidebar: favourites and published articles. */
+const preset = computed(() => route.meta.preset as 'favorites' | 'published' | undefined)
+const visibility = computed(() => preset.value === 'published' ? (queryText('visibility') === 'lagging' ? 'lagging' : 'public') : '')
 const page = computed(() => Math.max(1, Number.parseInt(queryText('page') || '1', 10) || 1))
 
 function setQuery(patch: Record<string, string | number | undefined>, resetPage = true) {
@@ -67,6 +71,8 @@ async function load() {
   if (category.value) params.set('category', category.value)
   if (format.value) params.set('file_format', format.value)
   if (tag.value) params.set('tag', tag.value)
+  if (preset.value === 'favorites') params.set('favorite', '1')
+  if (visibility.value) params.set('visibility', visibility.value)
   try {
     const data = await api<DocumentPage>(`/api/documents/?${params}`)
     if (current !== request) return
@@ -83,7 +89,11 @@ async function load() {
   }
 }
 
-watch([category, keywords, format, tag, page], load, { immediate: true })
+watch([category, keywords, format, tag, page, preset, visibility], load, { immediate: true })
+// Uploads started from the layout (header button, command palette) refresh the list.
+const onChanged = () => { void load() }
+onMounted(() => window.addEventListener('hub:documents-changed', onChanged))
+onBeforeUnmount(() => window.removeEventListener('hub:documents-changed', onChanged))
 watch(() => taxonomy.categories, () => {
   if (category.value && category.value !== UNCATEGORIZED && !taxonomy.byId(category.value)) void router.replace({ name: 'app-library' })
   else void load()
@@ -91,6 +101,8 @@ watch(() => taxonomy.categories, () => {
 
 // ---- Heading ---------------------------------------------------------------
 const heading = computed(() => {
+  if (preset.value === 'favorites') return '收藏'
+  if (preset.value === 'published') return '已公開文章'
   if (!category.value) return '全部文件'
   if (category.value === UNCATEGORIZED) return '未分類'
   return taxonomy.byId(category.value)?.name ?? '集合'
@@ -189,8 +201,14 @@ function onSaved() {
         </nav>
         <h1>{{ heading }}</h1>
         <p class="subtitle" aria-live="polite">{{ loading ? '正在載入…' : `${count} 份文件` }}</p>
+        <div v-if="preset === 'published'" class="segments" role="group" aria-label="公開狀態">
+          <button type="button" class="segment" :class="{ on: visibility === 'public' }" :aria-pressed="visibility === 'public'"
+            @click="setQuery({ visibility: '' })">全部公開</button>
+          <button type="button" class="segment" :class="{ on: visibility === 'lagging' }" :aria-pressed="visibility === 'lagging'"
+            @click="setQuery({ visibility: 'lagging' })">落後內部版本</button>
+        </div>
       </div>
-      <Button v-if="session.canEdit" class="upload-button" @click="openUpload()">
+      <Button v-if="session.canEdit && !preset" class="upload-button" @click="emit('upload')">
         <UiIcon name="upload" :size="16" /><span>上傳</span>
       </Button>
     </header>
@@ -253,8 +271,8 @@ function onSaved() {
               </div>
             </td>
             <td class="cell-status">
-              <span class="status" :class="row.is_public ? 'public' : 'private'">
-                <span class="dot" aria-hidden="true" />{{ row.is_public ? '公開' : '私人' }}
+              <span class="status" :class="visibilityOf(row).kind">
+                <span class="dot" aria-hidden="true" />{{ visibilityOf(row).kind === 'lagging' ? `落後 ${row.current_version.number - (row.published_version ?? 0)} 版` : visibilityOf(row).label }}
               </span>
             </td>
             <td class="num">v{{ row.current_version.number }}</td>
@@ -270,10 +288,10 @@ function onSaved() {
       </table>
       <div v-if="!loading && !rows.length" class="empty">
         <UiIcon name="folder" :size="28" />
-        <p class="empty-title">{{ hasFilters ? '找不到符合條件的文件' : '這裡還沒有文件' }}</p>
-        <p class="empty-text">{{ hasFilters ? '換個關鍵字，或清除篩選條件再試一次。' : (session.canEdit ? '上傳 Markdown 或 HTML 檔案開始建立知識庫。' : '有文件加入後會顯示在這裡。') }}</p>
+        <p class="empty-title">{{ hasFilters ? '找不到符合條件的文件' : preset === 'favorites' ? '還沒有收藏的文件' : preset === 'published' ? (visibility === 'lagging' ? '所有公開文章都是最新版本' : '還沒有公開文章') : '這裡還沒有文件' }}</p>
+        <p class="empty-text">{{ hasFilters ? '換個關鍵字，或清除篩選條件再試一次。' : preset === 'favorites' ? '在文件頁按下星號，就能把常用文件收進這裡。' : preset === 'published' ? 'Admin 可在文件頁的「公開」分頁發布文章。' : (session.canEdit ? '上傳 Markdown 或 HTML 檔案開始建立知識庫。' : '有文件加入後會顯示在這裡。') }}</p>
         <Button v-if="hasFilters" label="清除篩選" outlined size="small" @click="searchText = ''; setQuery({ q: '', format: '', tag: '' })" />
-        <Button v-else-if="session.canEdit" label="上傳文件" size="small" @click="openUpload()" />
+        <Button v-else-if="session.canEdit && !preset" label="上傳文件" size="small" @click="emit('upload')" />
       </div>
     </div>
 
@@ -354,6 +372,11 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .status.public .dot { background: var(--ui-public-dot); }
 .status.private { background: var(--ui-private-bg); color: var(--ui-private-text); }
 .status.private .dot { background: var(--ui-private-dot); }
+.status.lagging { background: var(--ui-lagging-bg); color: var(--ui-lagging-text); }
+.status.lagging .dot { background: var(--ui-lagging-dot); }
+.segments { display: inline-flex; gap: 2px; margin-top: var(--ui-space-3); padding: 3px; border-radius: var(--ui-radius-md); background: var(--ui-bg-muted); }
+.segment { min-height: 1.875rem; padding: 0 .875rem; border: 0; border-radius: .375rem; background: transparent; color: var(--ui-text-muted); font: inherit; font-size: var(--ui-text-sm); cursor: pointer; }
+.segment.on { background: var(--ui-bg-surface); color: var(--ui-text); font-weight: 600; box-shadow: var(--ui-shadow-sm); }
 .num, .date { white-space: nowrap; }
 .actions { text-align: right; }
 /* Fixed side columns keep the table compact on wide screens; the document column takes the rest. */

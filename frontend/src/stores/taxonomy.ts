@@ -56,7 +56,18 @@ export const useTaxonomy = defineStore('taxonomy', () => {
     return path
   }
 
+  /** Document count of each collection including its sub-collections. */
+  const totals = computed(() => {
+    const result = new Map<string, number>()
+    for (const node of [...tree.value].reverse()) {
+      const children = categories.value.filter(child => child.parent === node.id)
+      result.set(node.id, (node.document_count ?? 0) + children.reduce((sum, child) => sum + (result.get(child.id) ?? 0), 0))
+    }
+    return result
+  })
+  const totalOf = (id: string) => totals.value.get(id) ?? 0
+
   const pathLabel = (id: string | null | undefined) => pathOf(id).map(item => item.name).join(' / ') || '未分類'
 
-  return { categories, tags, loaded, load, tree, categoryOptions, byId, pathOf, pathLabel }
+  return { categories, tags, loaded, load, tree, categoryOptions, byId, pathOf, pathLabel, totalOf }
 })

@@ -4,23 +4,31 @@ import ConfirmDialog from 'primevue/confirmdialog'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import Toast from 'primevue/toast'
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterView, useRoute, useRouter } from 'vue-router'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import { useSession } from '../stores/session'
 import { useTaxonomy } from '../stores/taxonomy'
+import { useTheme } from '../stores/theme'
+import { useWorkspace } from '../stores/workspace'
 import AppSidebar from './AppSidebar.vue'
+import CommandPalette from './components/CommandPalette.vue'
 import TaxonomyDialog from './components/TaxonomyDialog.vue'
 import UiIcon from './components/UiIcon.vue'
+import UploadDialog from './components/UploadDialog.vue'
 
 const session = useSession()
 const taxonomy = useTaxonomy()
+const workspace = useWorkspace()
+const theme = useTheme()
 const route = useRoute()
-const router = useRouter()
+const detachTheme = theme.attach()
 
 const ready = ref(false)
 const failed = ref(false)
 const drawerOpen = ref(false)
 const taxonomyOpen = ref(false)
+const paletteOpen = ref(false)
+const uploadOpen = ref(false)
 
 async function start() {
   failed.value = false
@@ -36,36 +44,48 @@ async function start() {
   try {
     await taxonomy.load()
     ready.value = true
+    void workspace.refresh(true)
   } catch {
     failed.value = true
   }
 }
 
-/** Library search is the P1 stand-in for the command palette. */
-async function openSearch() {
+function openSearch() {
   drawerOpen.value = false
-  if (route.name !== 'app-library' && route.name !== 'app-collection') await router.push({ name: 'app-library' })
-  await nextTick()
-  document.getElementById('library-search')?.focus()
+  paletteOpen.value = true
+}
+
+/** Collection the user is looking at, used as the default for new uploads. */
+const uploadCategory = () => route.name === 'app-collection' && route.params.id !== 'uncategorized' ? String(route.params.id) : null
+
+function onUploaded() {
+  void workspace.refresh(true)
+  window.dispatchEvent(new CustomEvent('hub:documents-changed'))
 }
 
 function onKeydown(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault()
-    void openSearch()
+    if (ready.value) paletteOpen.value = !paletteOpen.value
   } else if (event.key === 'Escape' && drawerOpen.value) {
     drawerOpen.value = false
   }
 }
 
-watch(() => route.fullPath, () => { drawerOpen.value = false })
+watch(() => route.fullPath, () => {
+  drawerOpen.value = false
+  void workspace.refresh()
+})
 
 onMounted(() => {
   document.title = 'Knowledge Hub'
   window.addEventListener('keydown', onKeydown)
   void start()
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  detachTheme()
+})
 </script>
 
 <template>
@@ -89,7 +109,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <UiIcon name="menu" :size="20" />
         </button>
         <span class="mobile-brand">Knowledge Hub</span>
-        <button type="button" class="mobile-toggle" aria-label="搜尋文件" @click="openSearch">
+        <button type="button" class="mobile-toggle" aria-label="搜尋或執行指令" @click="openSearch">
           <UiIcon name="search" :size="20" />
         </button>
       </header>
@@ -98,9 +118,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <AppSidebar @search="openSearch" @manage-taxonomy="taxonomyOpen = true" @navigate="drawerOpen = false" />
       </aside>
       <main id="app-main" class="main" tabindex="-1">
-        <RouterView />
+        <RouterView @upload="uploadOpen = true" />
       </main>
-      <TaxonomyDialog v-model:visible="taxonomyOpen" />
+      <TaxonomyDialog v-model:visible="taxonomyOpen" @changed="workspace.refresh(true)" />
+      <CommandPalette v-model:open="paletteOpen" @upload="uploadOpen = true" @manage-taxonomy="taxonomyOpen = true" />
+      <UploadDialog v-model:visible="uploadOpen" :default-category="uploadCategory()" :max-bytes="session.limits.bytes"
+        :max-batch="session.limits.batch" @uploaded="onUploaded" />
     </template>
   </div>
 </template>

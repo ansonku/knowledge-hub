@@ -15,6 +15,7 @@ import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import { jumpToHeading } from '../reader-layout'
 import { useSession } from '../stores/session'
+import { useTheme } from '../stores/theme'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
@@ -34,6 +35,7 @@ const session = useSession()
 const taxonomy = useTaxonomy()
 const confirm = useConfirm()
 const toast = useToast()
+const theme = useTheme()
 
 const documentId = computed(() => String(route.params.id))
 const versionId = computed(() => typeof route.query.version === 'string' ? route.query.version : undefined)
@@ -84,6 +86,10 @@ watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
 function setMode(next: Mode) {
   mode.value = next
 }
+// Monaco has one global theme; follow the workspace appearance whenever an editor is on screen.
+watch([() => theme.isDark, mode], ([dark, current]) => {
+  if (current !== 'read') void import('../monaco').then(({ editor }) => editor.setTheme(dark ? 'vs-dark' : 'vs'))
+}, { immediate: true })
 // Editing needs the width: hide the inspector while editing, restore the saved preference afterwards.
 watch(mode, (next, previous) => {
   if (next !== 'read' && previous === 'read') inspectorOpen.value = false
@@ -418,7 +424,7 @@ onBeforeUnmount(() => {
       </aside>
     </div>
 
-    <UploadDialog v-if="asRow" v-model:visible="uploadOpen" :target="asRow" :max-bytes="50 * 1024 * 1024" :max-batch="1"
+    <UploadDialog v-if="asRow" v-model:visible="uploadOpen" :target="asRow" :max-bytes="session.limits.bytes" :max-batch="1"
       @uploaded="onUploaded" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onMetadataSaved" />
   </div>

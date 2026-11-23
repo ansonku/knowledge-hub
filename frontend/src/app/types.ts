@@ -1,6 +1,13 @@
 export type Format = 'html' | 'md'
 export type Label = { id: string; name: string }
-export type Category = Label & { parent: string | null }
+export type CollectionColor = 'blue' | 'teal' | 'green' | 'amber' | 'orange' | 'red' | 'purple' | 'gray'
+export type Category = Label & {
+  parent: string | null
+  description?: string
+  color?: CollectionColor | ''
+  /** Direct, non-trashed documents (not including sub-collections). */
+  document_count?: number
+}
 
 export type DocumentRow = {
   id: string
@@ -11,7 +18,22 @@ export type DocumentRow = {
   tags: Label[]
   current_version: { number: number }
   is_public?: boolean
+  is_favorite?: boolean
+  /** Published version number, or null when the document is private. */
+  published_version?: number | null
   updated_at: string
+}
+
+export type Visibility = 'public' | 'private' | 'lagging'
+
+/** Public / lagging / private state derived from list or detail fields. */
+export function visibilityOf(row: Pick<DocumentRow, 'published_version' | 'is_public' | 'current_version'>) {
+  const published = row.published_version
+  if (!published && !row.is_public) return { kind: 'private' as const, label: '私人' }
+  if (published && published < row.current_version.number) {
+    return { kind: 'lagging' as const, label: `公開 · 落後 ${row.current_version.number - published} 版` }
+  }
+  return { kind: 'public' as const, label: '公開' }
 }
 
 export type DocumentPage = {

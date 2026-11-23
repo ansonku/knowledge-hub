@@ -198,3 +198,55 @@ body:has(.hub-app) .p-dialog-content {
   font-size: var(--ui-text-md);
 }
 body:has(.hub-app) .p-dialog-title { font-size: 1.125rem; }
+
+/* Collection colour marks (Category.color). Text pairs keep 4.5:1 on their background. */
+:root {
+  --ui-col-blue-bg: #e6ecfb;   --ui-col-blue-fg: #1a3fb0;
+  --ui-col-teal-bg: #e3f4f1;   --ui-col-teal-fg: #0f6b62;
+  --ui-col-green-bg: #e3f5e9;  --ui-col-green-fg: #17663a;
+  --ui-col-amber-bg: #fff1d6;  --ui-col-amber-fg: #8a4b00;
+  --ui-col-orange-bg: #fde7d6; --ui-col-orange-fg: #9a3d0a;
+  --ui-col-red-bg: #fde4e2;    --ui-col-red-fg: #a3241a;
+  --ui-col-purple-bg: #efe7fb; --ui-col-purple-fg: #5b2aa8;
+  --ui-col-gray-bg: #eef0f3;   --ui-col-gray-fg: #3d4757;
+}
+.hub-dark {
+  --ui-col-blue-bg: #1e2d52;   --ui-col-blue-fg: #b3c8ff;
+  --ui-col-teal-bg: #0f2e2b;   --ui-col-teal-fg: #7fe0d2;
+  --ui-col-green-bg: #12301f;  --ui-col-green-fg: #86e0a8;
+  --ui-col-amber-bg: #33240a;  --ui-col-amber-fg: #fdd88a;
+  --ui-col-orange-bg: #3a1f0e; --ui-col-orange-fg: #fdb98a;
+  --ui-col-red-bg: #3a1513;    --ui-col-red-fg: #fda29b;
+  --ui-col-purple-bg: #2a1d45; --ui-col-purple-fg: #d4bdfa;
+  --ui-col-gray-bg: #1d2738;   --ui-col-gray-fg: #d0d5dd;
+}
+.ui-col-mark { display: inline-grid; place-items: center; flex: none; border-radius: var(--ui-radius-sm); font-weight: 700; background: var(--ui-col-gray-bg); color: var(--ui-col-gray-fg); }
+.ui-col-blue { background: var(--ui-col-blue-bg); color: var(--ui-col-blue-fg); }
+.ui-col-teal { background: var(--ui-col-teal-bg); color: var(--ui-col-teal-fg); }
+.ui-col-green { background: var(--ui-col-green-bg); color: var(--ui-col-green-fg); }
+.ui-col-amber { background: var(--ui-col-amber-bg); color: var(--ui-col-amber-fg); }
+.ui-col-orange { background: var(--ui-col-orange-bg); color: var(--ui-col-orange-fg); }
+.ui-col-red { background: var(--ui-col-red-bg); color: var(--ui-col-red-fg); }
+.ui-col-purple { background: var(--ui-col-purple-bg); color: var(--ui-col-purple-fg); }
+.ui-col-gray { background: var(--ui-col-gray-bg); color: var(--ui-col-gray-fg); }
+
+/* Dark mode: code highlighting (highlight.js ships a light GitHub theme globally). */
+.hub-dark .hljs { color: #e6edf3; }
+.hub-dark .hljs-doctag, .hub-dark .hljs-keyword, .hub-dark .hljs-meta .hljs-keyword, .hub-dark .hljs-template-tag,
+.hub-dark .hljs-template-variable, .hub-dark .hljs-type, .hub-dark .hljs-variable.language_ { color: #ff7b72; }
+.hub-dark .hljs-title, .hub-dark .hljs-title.class_, .hub-dark .hljs-title.function_ { color: #d2a8ff; }
+.hub-dark .hljs-attr, .hub-dark .hljs-attribute, .hub-dark .hljs-literal, .hub-dark .hljs-meta, .hub-dark .hljs-number,
+.hub-dark .hljs-operator, .hub-dark .hljs-variable, .hub-dark .hljs-selector-attr, .hub-dark .hljs-selector-class,
+.hub-dark .hljs-selector-id { color: #79c0ff; }
+.hub-dark .hljs-regexp, .hub-dark .hljs-string, .hub-dark .hljs-meta .hljs-string { color: #a5d6ff; }
+.hub-dark .hljs-built_in, .hub-dark .hljs-symbol { color: #ffa657; }
+.hub-dark .hljs-comment, .hub-dark .hljs-code, .hub-dark .hljs-formula { color: #8b949e; }
+.hub-dark .hljs-name, .hub-dark .hljs-quote, .hub-dark .hljs-selector-tag, .hub-dark .hljs-selector-pseudo { color: #7ee787; }
+.hub-dark .hljs-subst { color: #e6edf3; }
+.hub-dark .hljs-section { color: #1f6feb; font-weight: 700; }
+.hub-dark .hljs-bullet { color: #f2cc60; }
+.hub-dark .hljs-addition { color: #aff5b4; background-color: #033a16; }
+.hub-dark .hljs-deletion { color: #ffdcd7; background-color: #67060c; }
+/* Mermaid output is a light SVG image; give it a light card in dark mode. */
+.hub-dark .markdown-body figure[data-diagram] img { background: #fff; border-radius: var(--ui-radius-md); padding: .5rem; }
+.hub-dark .markdown-body .katex { color: inherit; }
