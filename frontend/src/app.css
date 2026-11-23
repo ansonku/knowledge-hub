@@ -1,29 +1,28 @@
 body {
   margin: 0;
-  background: #f5f7fb;
-  color: #152b49;
+  background: var(--hub-canvas);
+  color: var(--hub-ink);
   font-family: system-ui, sans-serif;
-}
-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: space-between;
-  background: #102a51;
-  color: white;
-  font-weight: 700;
-  padding: 1rem max(1.5rem, calc((100% - 48rem) / 2));
 }
 nav {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
 }
-header a {
-  color: inherit;
-}
 main {
   max-width: 45rem;
   margin: 2rem auto;
   padding: 0 1.5rem;
+}
+
+.management-main {
+  box-sizing: border-box;
+  max-width: 66rem;
+  margin: 0 auto;
+  padding: 2rem var(--hub-gutter);
+}
+.management-main h1 {
+  margin-block: 0 .75rem;
+  font-size: var(--hub-heading-size);
+  overflow-wrap: anywhere;
 }

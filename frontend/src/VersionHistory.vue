@@ -180,11 +180,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header>
+  <a class="skip-link" href="#main-content">跳至內容</a>
+  <header class="site-header">
     <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
     <RouterLink to="/library/">知識總覽</RouterLink>
   </header>
-  <main class="history-page">
+  <main id="main-content" tabindex="-1" class="management-main history-page">
     <RouterLink :to="reader()">返回文件</RouterLink>
     <div class="history-toolbar">
       <div>
@@ -249,7 +250,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.history-page { max-width: 65rem; }
 .history-toolbar, .version-card, .history-actions, .version-title { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 .history-toolbar, .version-card { justify-content: space-between; }
 .history-toolbar { margin: 1rem 0 1.5rem; }

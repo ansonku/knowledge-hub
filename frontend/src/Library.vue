@@ -39,7 +39,7 @@ type UploadRow = {
 const rows = ref<DocumentRow[]>([])
 const categories = ref<Category[]>([])
 const tags = ref<Label[]>([])
-const formats = [{ id: '', name: '全部格式' }, { id: 'html', name: 'HTML' }, { id: 'md', name: 'Markdown' }]
+const formats: { id: Format | ''; name: string }[] = [{ id: '', name: '全部格式' }, { id: 'html', name: 'HTML' }, { id: 'md', name: 'Markdown' }]
 type PublicRow = { document_id: string; title: string }
 const publicRows = ref<PublicRow[]>([])
 const publicPages = ref(1)
@@ -56,8 +56,10 @@ watch(searchText, (text, _, onCleanup) => {
   onCleanup(() => clearTimeout(timer))
 })
 const category = ref(typeof route.query.category === 'string' ? route.query.category : '')
-const format = ref('')
+const format = ref<Format | ''>('')
 const tag = ref<string | null>(null)
+const filtersOpen = ref(false)
+const activeTag = computed(() => tags.value.find(item => item.id === tag.value))
 const page = ref(1)
 const count = ref(0)
 const pageSize = ref(25)
@@ -397,7 +399,8 @@ function sizeLabel(size: number) {
 
 <template>
   <div class="library">
-    <header class="library-header">
+    <a class="skip-link" href="#main-content">跳至內容</a>
+    <header class="site-header">
       <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
       <nav v-if="isMember" aria-label="帳號">
         <a href="/accounts/profile/">個人設定</a>
@@ -417,14 +420,13 @@ function sizeLabel(size: number) {
           <span class="current" aria-current="page">全部文件</span>
         </nav>
       </aside>
-      <main class="library-main">
+      <main id="main-content" tabindex="-1" class="library-main">
         <div class="library-heading">
-          <div>
-            <h1>知識總覽</h1>
-          </div>
+          <h1>知識總覽</h1>
           <div v-if="canUpload" class="document-actions">
-            <RouterLink to="/library/trash/">回收桶</RouterLink>
-            <Button label="管理分類與標籤" outlined @click="selectTaxonomy(null); taxonomyOpen = true" />
+            <Button as="a" href="/library/trash/" label="回收桶" text severity="secondary" />
+            <Button label="管理分類與標籤" outlined severity="secondary" @click="selectTaxonomy(null); taxonomyOpen = true" />
+            <Button label="＋ 上傳文件" @click="openUpload('single')" />
           </div>
         </div>
 
@@ -437,14 +439,23 @@ function sizeLabel(size: number) {
               <Button v-if="searchText" type="button" label="清除" text @click="searchText = ''; keywords = ''" />
               <Button type="submit" label="搜尋" outlined />
             </form>
-            <div v-if="isMember" class="library-filters" aria-label="文件格式">
+            <Button v-if="isMember" class="filter-toggle" label="篩選" outlined severity="secondary"
+              :aria-expanded="filtersOpen" aria-controls="library-filters" @click="filtersOpen = !filtersOpen" />
+            <div v-if="isMember" id="library-filters" class="library-filters" :class="{ 'filters-open': filtersOpen }"
+              aria-label="文件篩選">
               <Button v-for="item in formats" :key="item.id" :label="item.name" size="small"
                 :outlined="format !== item.id" :severity="format === item.id ? 'primary' : 'secondary'"
                 :aria-pressed="format === item.id" @click="format = item.id" />
               <Select v-model="tag" :options="tags" option-label="name" option-value="id" show-clear placeholder="所有標籤" aria-label="標籤篩選" />
             </div>
-            <Button v-if="canUpload" label="＋ 上傳文件" @click="openUpload('single')" />
+            <div v-if="isMember && (format || activeTag)" class="active-filters" aria-label="已套用篩選">
+              <Button v-if="format" :label="`${formatLabel(format)} ×`" :aria-label="`移除 ${formatLabel(format)} 篩選`"
+                size="small" rounded outlined @click="format = ''" />
+              <Button v-if="activeTag" :label="`${activeTag.name} ×`" :aria-label="`移除 ${activeTag.name} 標籤篩選`"
+                size="small" rounded outlined @click="tag = null" />
+            </div>
           </div>
+          <div class="library-results" role="region" aria-label="文件搜尋結果" :tabindex="isMember ? 0 : undefined">
           <DataTable :value="isMember ? rows : publicRows" :data-key="isMember ? 'id' : 'document_id'" :loading="loading"
             striped-rows :table-style="isMember ? 'min-width: 49rem' : undefined">
             <template #empty>{{ keywords ? "找不到符合條件的文件。" : (isMember ? "此分類與格式目前沒有文件。" : "目前沒有公開文章。") }}</template>
@@ -491,6 +502,7 @@ function sizeLabel(size: number) {
               </template>
             </Column>
           </DataTable>
+          </div>
           <footer v-if="isMember" class="library-count pagination">
             <span>共 {{ count }} 份文件</span>
             <Button v-if="page > 1" label="上一頁" size="small" text @click="page--" />
@@ -606,11 +618,10 @@ function sizeLabel(size: number) {
 </template>
 
 <style scoped>
-.library { min-height: 100vh; background: #f5f7fb; color: #152b49; }
-.library-header { padding: .95rem clamp(1rem, 3vw, 2.25rem); align-items: center; }
-.library-header a { text-decoration: none; }
+.library { min-height: 100vh; }
 .library-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); min-height: calc(100vh - 3.5rem); }
-.library-search { display: flex; flex: 1 1 100%; gap: .5rem; }
+.library-search { display: flex; flex: 1 1 24rem; gap: .5rem; min-width: 0; }
+.library-search .p-inputtext { min-height: 2.75rem; }
 .library-search input { flex: 1; min-width: 0; }
 .library-sidebar { padding: 1.8rem .85rem; border-right: 1px solid #e0e7f0; background: #fbfcfe; }
 .library-sidebar h2 { font-size: .875rem; margin: 0 .65rem .7rem; color: #475b77; }
@@ -622,20 +633,28 @@ function sizeLabel(size: number) {
 .library-sidebar button { cursor: pointer; }
 .library-sidebar .current { background: #e4edff; border-color: #2563eb; color: #1746a2; font-weight: 650; }
 .library-sidebar button:hover { background: #eff4fd; }
-.library-main { width: 100%; max-width: 89rem; box-sizing: border-box; margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2.5rem); }
+.library-main { width: 100%; min-width: 0; max-width: 89rem; box-sizing: border-box; margin: 0 auto; padding: 2rem clamp(1rem, 3vw, 2.5rem); }
 .library-heading, .library-toolbar, .upload-file { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
 .library-heading { margin-bottom: 1.4rem; }
-.library-heading h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); margin: 0 0 .35rem; }
+.library-heading h1 { font-size: var(--hub-heading-size); margin: 0; }
 .library-heading p, .library-count, .dropzone p, .dropzone small { color: #4c5e77; }
 .library-heading p { margin: 0; }
 .pagination, .library-filters, .document-title, .document-tags, .document-actions, .upload-options, .version-target, .override {
   display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
 }
 .pagination { justify-content: space-between; }
-.library-panel { margin-top: 1rem; border: 1px solid #dfe6f0; border-radius: .75rem; background: white; overflow: hidden; }
-.library-toolbar, .library-count { padding: 1rem 1.15rem; }
+.library-panel { margin-top: 1rem; border: 1px solid var(--hub-border); border-radius: var(--hub-radius); background: var(--hub-surface); }
+.library-toolbar, .library-count { padding: .9rem clamp(.7rem, 2vw, 1.15rem); }
+.library-toolbar { border-bottom: 1px solid var(--hub-border); gap: .75rem 1rem; }
+.library-results { overflow-x: auto; }
+.library-results:focus-visible { outline: 2px solid var(--hub-accent); outline-offset: -2px; }
+.library-results :deep(th) { background: #f0f4f9; color: var(--hub-ink); font-size: .85rem; }
+.library-results :deep(td) { color: var(--hub-muted); font-size: .9rem; }
+.library-results :deep(tr:hover td) { background: #f0f6ff; }
+.active-filters { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .45rem; }
+.filter-toggle { display: none; }
 .library-count { font-size: .875rem; border-top: 1px solid #e3eaf2; }
-.reader-link { overflow-wrap: anywhere; color: #1746a2; font-weight: 700; text-underline-offset: .18em; }
+.reader-link { overflow-wrap: anywhere; color: #1746a2; font-size: .97rem; font-weight: 650; text-underline-offset: .18em; }
 .document-actions { flex-wrap: nowrap; }
 .dropzone {
   margin: 1rem 0; border: 1px dashed #82a5e8; border-radius: .6rem;
@@ -649,11 +668,16 @@ function sizeLabel(size: number) {
 .upload-file strong { overflow-wrap: anywhere; }
 .title-field { display: grid; gap: .35rem; }
 @media (max-width: 720px) {
-  .library-layout { grid-template-columns: 1fr; }
+  .library-layout { grid-template-columns: minmax(0, 1fr); }
   .library-sidebar { border-right: 0; border-bottom: 1px solid #e0e7f0; padding: .65rem 1rem; }
   .library-sidebar h2 { display: none; }
   .library-sidebar nav { display: flex; overflow-x: auto; }
   .library-sidebar button, .library-sidebar nav > span { white-space: nowrap; }
   .library-main { padding-top: 1.2rem; }
+  .library-heading .document-actions { flex-wrap: wrap; }
+  .library-search { flex-basis: 100%; }
+  .filter-toggle { display: inline-flex; }
+  .library-filters { display: none; flex-basis: 100%; }
+  .library-filters.filters-open { display: flex; }
 }
 </style>

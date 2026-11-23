@@ -93,7 +93,8 @@ onMounted(load)
 </script>
 
 <template>
-  <header class="admin-header">
+  <a class="skip-link" href="#main-content">跳至內容</a>
+  <header class="site-header admin-header">
     <a href="/" class="site-brand">Knowledge Hub</a>
     <nav aria-label="帳號">
       <a href="/accounts/profile/">個人設定</a>
@@ -101,7 +102,7 @@ onMounted(load)
     </nav>
   </header>
 
-  <main class="admin-main">
+  <main id="main-content" tabindex="-1" class="management-main admin-main">
     <a v-if="userId" :href="base">返回帳號清單</a>
     <h1>{{ detail ? `管理 ${detail.account.username}` : '帳號管理' }}</h1>
     <ProgressSpinner v-if="loading" aria-label="正在載入帳號管理" />
@@ -116,17 +117,19 @@ onMounted(load)
       <Card>
         <template #title>使用者</template>
         <template #content>
-          <DataTable :value="listing.results" data-key="id" table-style="min-width: 30rem">
-            <template #empty>目前沒有使用者。</template>
-            <Column header="帳號">
-              <template #body="{ data }"><a :href="`${base}${data.id}/`">{{ data.username }}</a></template>
-            </Column>
-            <Column field="email" header="電子郵件" />
-            <Column field="role" header="角色" />
-            <Column header="狀態">
-              <template #body="{ data }"><Tag :value="status(data).label" :severity="status(data).severity" /></template>
-            </Column>
-          </DataTable>
+          <div class="account-table" role="region" aria-label="使用者清單" tabindex="0">
+            <DataTable :value="listing.results" data-key="id" table-style="min-width: 30rem">
+              <template #empty>目前沒有使用者。</template>
+              <Column header="帳號">
+                <template #body="{ data }"><a :href="`${base}${data.id}/`">{{ data.username }}</a></template>
+              </Column>
+              <Column field="email" header="電子郵件" />
+              <Column field="role" header="角色" />
+              <Column header="狀態">
+                <template #body="{ data }"><Tag :value="status(data).label" :severity="status(data).severity" /></template>
+              </Column>
+            </DataTable>
+          </div>
           <nav class="pagination" aria-label="使用者分頁">
             <Button v-if="listing.page > 1" as="a" :href="`?page=${listing.page - 1}`" label="上一頁" outlined />
             <span>第 {{ listing.page }} 頁，共 {{ listing.page_count }} 頁</span>
@@ -185,17 +188,19 @@ onMounted(load)
       <Card>
         <template #title>最近的帳號活動</template>
         <template #content>
-          <DataTable :value="detail.audit" data-key="id" table-style="min-width: 28rem">
-            <template #empty>目前沒有活動。</template>
-            <Column header="時間">
-              <template #body="{ data }">{{ formatter.format(new Date(data.created_at)) }}</template>
-            </Column>
-            <Column header="操作者">
-              <template #body="{ data }">{{ data.actor ?? '系統' }}</template>
-            </Column>
-            <Column field="action" header="操作" />
-            <Column field="reason" header="理由" />
-          </DataTable>
+          <div class="account-table" role="region" aria-label="帳號操作紀錄" tabindex="0">
+            <DataTable :value="detail.audit" data-key="id" table-style="min-width: 28rem">
+              <template #empty>目前沒有活動。</template>
+              <Column header="時間">
+                <template #body="{ data }">{{ formatter.format(new Date(data.created_at)) }}</template>
+              </Column>
+              <Column header="操作者">
+                <template #body="{ data }">{{ data.actor ?? '系統' }}</template>
+              </Column>
+              <Column field="action" header="操作" />
+              <Column field="reason" header="理由" />
+            </DataTable>
+          </div>
         </template>
       </Card>
     </template>
@@ -204,8 +209,9 @@ onMounted(load)
 
 <style scoped>
 .admin-header nav, .pagination, .verification { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
-.admin-main { max-width: 58rem; display: grid; gap: 1.25rem; }
-.admin-main h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.35rem); }
+.admin-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+.account-table { overflow-x: auto; }
+.account-table:focus-visible { outline: 2px solid var(--hub-accent); outline-offset: -2px; }
 .form-grid { display: grid; gap: .65rem; max-width: 34rem; }
 .form-grid > button { justify-self: start; margin-top: .4rem; }
 .pagination { margin-top: 1rem; }

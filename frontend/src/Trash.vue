@@ -103,11 +103,12 @@ async function act(document: Document, action: 'restore' | 'delete') {
 </script>
 
 <template>
-  <header>
+  <a class="skip-link" href="#main-content">跳至內容</a>
+  <header class="site-header">
     <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
     <RouterLink to="/library/">知識總覽</RouterLink>
   </header>
-  <main class="trash">
+  <main id="main-content" tabindex="-1" class="management-main trash">
     <h1>回收桶</h1>
     <p>還原會將文件及其所有版本移回知識總覽。</p>
     <Message v-if="notice" :severity="noticePending ? 'warn' : 'success'">{{ notice }}</Message>
@@ -147,7 +148,6 @@ async function act(document: Document, action: 'restore' | 'delete') {
 </template>
 
 <style scoped>
-.trash { max-width: 62rem; }
 .trash-list { list-style: none; padding: 0; display: grid; gap: .65rem; }
 .trash-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem; background: white; border: 1px solid #dfe6f0; border-radius: .65rem; }
 .trash-list strong { overflow-wrap: anywhere; margin-right: .65rem; }

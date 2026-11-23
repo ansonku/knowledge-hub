@@ -75,7 +75,8 @@ onMounted(loadProfile)
 
 <template>
   <div class="profile-page">
-    <header class="profile-header">
+    <a class="skip-link" href="#main-content">跳至內容</a>
+    <header class="site-header profile-header">
       <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
       <nav v-if="profile" aria-label="帳號">
         <a v-if="profile.role === 'admin'" href="/accounts/manage/">帳號管理</a>
@@ -83,7 +84,7 @@ onMounted(loadProfile)
       </nav>
     </header>
 
-    <main class="profile-content">
+    <main id="main-content" tabindex="-1" class="management-main profile-content">
       <h1>個人設定</h1>
       <ProgressSpinner v-if="loading" aria-label="正在載入個人設定" />
       <template v-else-if="profile">
@@ -124,18 +125,8 @@ onMounted(loadProfile)
 
 <style scoped>
 .profile-page { min-height: 100vh; background: #f5f7fb; }
-.profile-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: .75rem 1.5rem;
-}
 .profile-header nav, .security-links { display: flex; flex-wrap: wrap; gap: .75rem; }
-.profile-header a { text-decoration: none; }
-.profile-header a:hover { text-decoration: underline; }
 .profile-content { display: grid; gap: 1.25rem; }
-.profile-content h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.35rem); }
 .account-fields { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin: 0 0 1.5rem; }
 .account-fields dt { color: #42536a; font-size: .875rem; }
 .account-fields dd { margin: .25rem 0 0; overflow-wrap: anywhere; }

@@ -7,6 +7,7 @@ import Tag from 'primevue/tag'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import MarkdownBody from './MarkdownBody.vue'
+import ReaderContents from './ReaderContents.vue'
 import { renderMarkdown } from './markdown'
 import { jumpToHeading, layouts, useReaderLayout } from './reader-layout'
 
@@ -242,11 +243,12 @@ watch([() => route.params.id, () => route.query.version], loadDocument, { immedi
 
 <template>
   <div class="reader">
-    <header class="reader-header">
+    <a class="skip-link" href="#main-content">跳至內容</a>
+    <header class="site-header">
       <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
       <RouterLink to="/library/">知識總覽</RouterLink>
     </header>
-    <main class="reader-main" :class="{ 'reader-main-full': layout === 'full' }">
+    <main id="main-content" tabindex="-1" class="reader-main" :class="{ 'reader-main-full': layout === 'full' }">
       <nav class="breadcrumbs" aria-label="目前位置">
         <RouterLink to="/library/">知識總覽</RouterLink>
         <template v-if="file?.category_name">
@@ -295,18 +297,12 @@ watch([() => route.params.id, () => route.query.version], loadDocument, { immedi
               :to="{ path: '/library/', query: { category: category.id } }">{{ category.name }}</RouterLink>
             <RouterLink v-if="!categoryPath.length" :to="categoryRoute">{{ file.category_name ?? '未分類' }}</RouterLink>
           </aside>
+          <ReaderContents v-if="layout === 'standard' && rendered.headings.length" :headings="rendered.headings"
+            @jump="id => jumpToHeading(article, id)" />
           <section class="reading-paper" aria-label="文章內容">
             <p class="version-date">版本日期 · {{ dateFormatter.format(new Date(shownVersion.created_at)) }}</p>
             <div ref="article"><MarkdownBody :rendered="rendered" /></div>
           </section>
-          <aside v-if="layout === 'standard' && rendered.headings.length" class="reader-sidebar reader-toc">
-            <span>本頁目錄</span>
-            <nav aria-label="本頁目錄">
-              <a v-for="heading in rendered.headings" :key="heading.id" :href="`#${heading.id}`"
-                :style="{ paddingInlineStart: `${Math.max(0, heading.level - 1) * .5}rem` }"
-                @click.prevent="jumpToHeading(article, heading.id)">{{ heading.text }}</a>
-            </nav>
-          </aside>
         </div>
         <section v-else-if="canEdit" aria-label="Markdown 編輯">
           <form class="editor-toolbar" @submit.prevent="saveDraft">

@@ -7,6 +7,7 @@ import Tag from 'primevue/tag'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownBody from './MarkdownBody.vue'
+import ReaderContents from './ReaderContents.vue'
 import { renderMarkdown } from './markdown'
 import { jumpToHeading, layouts, useReaderLayout } from './reader-layout'
 
@@ -22,8 +23,8 @@ const markdown = computed(() => article.value?.format === 'md' ? renderMarkdown(
 const html = computed(() => `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{font:1rem/1.7 system-ui,sans-serif;color:#152b49;margin:1rem;overflow-wrap:anywhere}
-svg{display:block;max-width:100%;height:auto} svg[viewBox]{width:100%} pre{white-space:pre-wrap;background:#eef2f7;padding:1rem} table{border-collapse:collapse} th,td{padding:.5rem;border:1px solid #cbd5e1}</style>
+<style>body{font:1rem/1.7 system-ui,sans-serif;color:#152b49;margin:clamp(.75rem,3vw,1.5rem);overflow-wrap:anywhere}
+svg{display:block;max-width:100%;height:auto} svg[viewBox]{width:100%} pre{overflow-x:auto;background:#eef2f7;padding:1rem} table{display:block;overflow-x:auto;max-width:100%;border-collapse:collapse} th,td{padding:.5rem;border:1px solid #cbd5e1}</style>
 </head><body class="public-html-body">${article.value?.body ?? ''}</body></html>`)
 
 watch([() => route.params.id, retry], async ([id], _, onCleanup) => {
@@ -60,11 +61,12 @@ watch([() => route.params.id, retry], async ([id], _, onCleanup) => {
 
 <template>
   <div class="reader">
-    <header class="reader-header">
+    <a class="skip-link" href="#main-content">跳至內容</a>
+    <header class="site-header">
       <RouterLink to="/" class="site-brand">Knowledge Hub</RouterLink>
       <RouterLink to="/library/">知識總覽</RouterLink>
     </header>
-    <main class="reader-main" :class="{ 'reader-main-full': layout === 'full' }">
+    <main id="main-content" tabindex="-1" class="reader-main" :class="{ 'reader-main-full': layout === 'full' }">
       <nav class="breadcrumbs" aria-label="目前位置">
         <RouterLink to="/library/">知識總覽</RouterLink>
       </nav>
@@ -90,20 +92,14 @@ watch([() => route.params.id, retry], async ([id], _, onCleanup) => {
             <span>文件庫</span>
             <RouterLink to="/library/">全部文件</RouterLink>
           </aside>
+          <ReaderContents v-if="layout === 'standard' && markdown?.headings.length" :headings="markdown.headings"
+            @jump="id => jumpToHeading(content, id)" />
           <section v-if="markdown" class="reading-paper" aria-label="文章內容">
             <div ref="content"><MarkdownBody :rendered="markdown" /></div>
           </section>
           <section v-else class="html-preview" aria-label="文章內容">
             <iframe :srcdoc="html" sandbox="" referrerpolicy="no-referrer" title="HTML 文章正文" class="html-frame" />
           </section>
-          <aside v-if="layout === 'standard' && markdown?.headings.length" class="reader-sidebar reader-toc">
-            <span>本頁目錄</span>
-            <nav aria-label="本頁目錄">
-              <a v-for="heading in markdown.headings" :key="heading.id" :href="`#${heading.id}`"
-                :style="{ paddingInlineStart: `${Math.max(0, heading.level - 1) * .5}rem` }"
-                @click.prevent="jumpToHeading(content, heading.id)">{{ heading.text }}</a>
-            </nav>
-          </aside>
         </div>
       </template>
     </main>

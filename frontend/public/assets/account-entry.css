@@ -1,14 +1,4 @@
-  .entry-page {
-    min-height: 100svh;
-    color: #152b49;
-    background: radial-gradient(ellipse at 85% 90%, #174a8b, transparent 56%), linear-gradient(145deg, #09162d, #112f57 72%);
-  }
-  .login-header {
-    max-width: 76rem;
-    margin: auto;
-    padding: 1.5rem clamp(1.25rem, 5vw, 3.5rem);
-    background: transparent;
-  }
+  .entry-page { min-height: 100svh; background: var(--hub-canvas); }
   .entry-page > main {
     box-sizing: border-box;
     max-width: 32rem;
@@ -22,15 +12,15 @@
     background: #e8f0ff;
   }
   .login-card {
-    background: white;
-    border: 1px solid #dbe5f3;
-    border-radius: 1.1rem;
+    background: var(--hub-surface);
+    border: 1px solid var(--hub-border);
+    border-radius: var(--hub-radius);
     padding: clamp(1.5rem, 5vw, 2.65rem);
-    box-shadow: 0 1.5rem 4.5rem #030b2160;
+    box-shadow: 0 .5rem 2rem #102a5110;
   }
   .login-card h1 {
     margin: 0 0 1.65rem;
-    font-size: clamp(1.9rem, 7vw, 2.55rem);
+    font-size: var(--hub-heading-size);
     line-height: 1.15;
     letter-spacing: -.025em;
     color: #102747;
@@ -67,13 +57,13 @@
     min-height: 3rem;
     border-radius: .55rem;
     font-weight: 700;
-    background: #1254c5;
+    background: var(--hub-accent);
   }
-  .login-action:hover { background: #1047a7; }
+  .login-action:hover { background: var(--hub-accent-hover); }
   .google-action { border: 1px solid #a7b8cc; background: white; color: #173862; }
   .google-action:hover { background: #eff5ff; }
   .login-alternative { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #dfe8f3; }
-  .login-card a:focus-visible, .login-card button:focus-visible, .login-card input:focus-visible, .login-header a:focus-visible {
+  .login-card a:focus-visible, .login-card button:focus-visible, .login-card input:focus-visible {
     outline: 2px solid #2369e0;
     outline-offset: 3px;
   }
@@ -90,21 +80,3 @@
   .login-description { margin: -1rem 0 1.5rem; color: #495e78; }
   .login-return { margin: 1.25rem 0 0; text-align: center; }
   .login-return a { font-weight: 600; text-underline-offset: .18em; }
-
-.entry-page > .entry-home {
-  max-width: 76rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, .9fr);
-  align-items: center;
-  gap: clamp(2rem, 8vw, 7rem);
-  margin-top: clamp(2.75rem, 13vh, 9rem);
-  padding: 0 clamp(1.25rem, 5vw, 3.5rem) 3.5rem;
-}
-.entry-intro { color: white; }
-.entry-intro h1 { margin: 0; font-size: clamp(2.25rem, 5vw, 4.5rem); line-height: 1.12; letter-spacing: -.035em; }
-.entry-intro p { max-width: 30rem; margin: 1.15rem 0 0; color: #d6e5fb; font-size: clamp(1rem, 2vw, 1.22rem); line-height: 1.65; }
-.entry-home .login-card h2 { margin: 0 0 1.15rem; color: #102747; font-size: clamp(1.45rem, 4vw, 1.85rem); line-height: 1.25; }
-.entry-home .login-return a { color: #0649af; }
-@media (max-width: 700px) {
-  .entry-page > .entry-home { grid-template-columns: minmax(0, 1fr); gap: 2rem; margin-top: 2rem; }
-}
