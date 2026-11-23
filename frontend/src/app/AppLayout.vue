@@ -14,7 +14,8 @@ import AppSidebar from './AppSidebar.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import TaxonomyDialog from './components/TaxonomyDialog.vue'
 import UiIcon from './components/UiIcon.vue'
-import UploadDialog from './components/UploadDialog.vue'
+import UploadTray from './components/UploadTray.vue'
+import { useUploads } from '../stores/uploads'
 
 const session = useSession()
 const taxonomy = useTaxonomy()
@@ -28,7 +29,9 @@ const failed = ref(false)
 const drawerOpen = ref(false)
 const taxonomyOpen = ref(false)
 const paletteOpen = ref(false)
-const uploadOpen = ref(false)
+const uploads = useUploads()
+const chooser = ref<HTMLInputElement>()
+const dragDepth = ref(0)
 
 async function start() {
   failed.value = false
@@ -57,11 +60,37 @@ function openSearch() {
 
 /** Collection the user is looking at, used as the default for new uploads. */
 const uploadCategory = () => route.name === 'app-collection' && route.params.id !== 'uncategorized' ? String(route.params.id) : null
+const dropTarget = () => taxonomy.pathLabel(uploadCategory())
 
-function onUploaded() {
-  void workspace.refresh(true)
-  window.dispatchEvent(new CustomEvent('hub:documents-changed'))
+function chooseFiles() {
+  if (session.canEdit) chooser.value?.click()
 }
+function onChosen(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input.files) uploads.add(input.files, uploadCategory())
+  input.value = ''
+}
+
+// Drop files anywhere in the workspace to upload them as new documents.
+const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
+function onDragEnter(event: DragEvent) {
+  if (!session.canEdit || !hasFiles(event)) return
+  event.preventDefault()
+  dragDepth.value++
+}
+function onDragOver(event: DragEvent) {
+  if (session.canEdit && hasFiles(event)) event.preventDefault()
+}
+function onDragLeave(event: DragEvent) {
+  if (session.canEdit && hasFiles(event)) dragDepth.value = Math.max(0, dragDepth.value - 1)
+}
+function onDrop(event: DragEvent) {
+  if (!session.canEdit || !hasFiles(event)) return
+  event.preventDefault()
+  dragDepth.value = 0
+  if (event.dataTransfer?.files.length) uploads.add(event.dataTransfer.files, uploadCategory())
+}
+const onDocumentsChanged = () => { void workspace.refresh(true) }
 
 function onKeydown(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -80,16 +109,19 @@ watch(() => route.fullPath, () => {
 onMounted(() => {
   document.title = 'Knowledge Hub'
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('hub:documents-changed', onDocumentsChanged)
   void start()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('hub:documents-changed', onDocumentsChanged)
   detachTheme()
 })
 </script>
 
 <template>
-  <div class="hub-app shell" :class="{ 'drawer-open': drawerOpen }">
+  <div class="hub-app shell" :class="{ 'drawer-open': drawerOpen }" @dragenter="onDragEnter" @dragover="onDragOver"
+    @dragleave="onDragLeave" @drop="onDrop">
     <a class="skip" href="#app-main">跳至內容</a>
     <Toast position="bottom-right" />
     <ConfirmDialog :style="{ width: 'min(94vw, 28rem)' }" />
@@ -118,12 +150,19 @@ onBeforeUnmount(() => {
         <AppSidebar @search="openSearch" @manage-taxonomy="taxonomyOpen = true" @navigate="drawerOpen = false" />
       </aside>
       <main id="app-main" class="main" tabindex="-1">
-        <RouterView @upload="uploadOpen = true" />
+        <RouterView @upload="chooseFiles" />
       </main>
       <TaxonomyDialog v-model:visible="taxonomyOpen" @changed="workspace.refresh(true)" />
-      <CommandPalette v-model:open="paletteOpen" @upload="uploadOpen = true" @manage-taxonomy="taxonomyOpen = true" />
-      <UploadDialog v-model:visible="uploadOpen" :default-category="uploadCategory()" :max-bytes="session.limits.bytes"
-        :max-batch="session.limits.batch" @uploaded="onUploaded" />
+      <CommandPalette v-model:open="paletteOpen" @upload="chooseFiles" @manage-taxonomy="taxonomyOpen = true" />
+      <input ref="chooser" type="file" accept=".md,.html" multiple hidden @change="onChosen">
+      <UploadTray />
+      <div v-if="dragDepth > 0" class="drop" aria-hidden="true">
+        <div class="drop-card">
+          <UiIcon name="upload" :size="28" />
+          <strong>放開即可上傳</strong>
+          <span>每個檔案會建立一份新文件，放入「{{ dropTarget() }}」</span>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -150,6 +189,12 @@ onBeforeUnmount(() => {
 }
 .main { grid-column: 2; grid-row: 1 / -1; min-width: 0; background: var(--ui-bg-surface); outline: none; }
 .scrim { display: none; }
+.drop {
+  position: fixed; inset: 0; z-index: 1050; display: grid; place-items: center; padding: var(--ui-space-5);
+  background: rgb(29 78 216 / .12); border: 3px dashed var(--ui-accent); pointer-events: none;
+}
+.drop-card { display: grid; justify-items: center; gap: var(--ui-space-2); padding: var(--ui-space-6) var(--ui-space-7); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); color: var(--ui-text-secondary); box-shadow: var(--ui-shadow-lg); text-align: center; }
+.drop-card strong { color: var(--ui-text); font-size: var(--ui-text-lg); }
 
 @media (max-width: 900px) {
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }

@@ -13,10 +13,12 @@ import { api, getCsrfToken } from '../api'
 import PublicationDialog from '../PublicationDialog.vue'
 import { useSession } from '../stores/session'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
+import BulkDialog, { type BulkAction } from './components/BulkDialog.vue'
+import CollectionDialog from './components/CollectionDialog.vue'
 import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
-import { formatLabel, longDateTime, shortDate, visibilityOf, type DocumentPage, type DocumentRow, type Format } from './types'
+import { formatLabel, longDateTime, shortDate, visibilityOf, type Category, type DocumentPage, type DocumentRow, type Format, type Visibility } from './types'
 
 const emit = defineEmits<{ upload: [] }>()
 const route = useRoute()
@@ -34,7 +36,17 @@ const format = computed(() => queryText('format') as Format | '')
 const tag = computed(() => queryText('tag'))
 /** Fixed views reached from the sidebar: favourites and published articles. */
 const preset = computed(() => route.meta.preset as 'favorites' | 'published' | undefined)
-const visibility = computed(() => preset.value === 'published' ? (queryText('visibility') === 'lagging' ? 'lagging' : 'public') : '')
+const visibility = computed<Visibility | ''>(() => {
+  const value = queryText('visibility')
+  if (preset.value === 'published') return value === 'lagging' ? 'lagging' : 'public'
+  return value === 'public' || value === 'private' || value === 'lagging' ? value : ''
+})
+const ordering = computed(() => queryText('ordering') || '-updated_at')
+const sortOptions = [
+  { id: '-updated_at', name: '最近更新' }, { id: 'updated_at', name: '最早更新' },
+  { id: 'title', name: '標題 A → Z' }, { id: '-title', name: '標題 Z → A' },
+]
+const visibilityOptions = [{ id: 'public', name: '公開' }, { id: 'lagging', name: '公開 · 落後' }, { id: 'private', name: '私人' }]
 const page = computed(() => Math.max(1, Number.parseInt(queryText('page') || '1', 10) || 1))
 
 function setQuery(patch: Record<string, string | number | undefined>, resetPage = true) {
@@ -51,7 +63,11 @@ watch(searchText, (text, _, onCleanup) => {
 })
 
 const formatOptions = [{ id: 'md', name: 'Markdown' }, { id: 'html', name: 'HTML' }]
-const hasFilters = computed(() => Boolean(keywords.value || format.value || tag.value))
+const hasFilters = computed(() => Boolean(keywords.value || format.value || tag.value || (!preset.value && visibility.value)))
+function clearFilters() {
+  searchText.value = ''
+  setQuery({ q: '', format: '', tag: '', ...(preset.value ? {} : { visibility: '' }) })
+}
 
 // ---- Data ----------------------------------------------------------------
 const rows = ref<DocumentRow[]>([])
@@ -73,10 +89,12 @@ async function load() {
   if (tag.value) params.set('tag', tag.value)
   if (preset.value === 'favorites') params.set('favorite', '1')
   if (visibility.value) params.set('visibility', visibility.value)
+  if (ordering.value !== '-updated_at') params.set('ordering', ordering.value)
   try {
     const data = await api<DocumentPage>(`/api/documents/?${params}`)
     if (current !== request) return
     rows.value = data.results
+    selected.value = selected.value.filter(id => data.results.some(row => row.id === id))
     count.value = data.count
     pageSize.value = data.page_size
     limits.value = data.limits
@@ -89,7 +107,9 @@ async function load() {
   }
 }
 
-watch([category, keywords, format, tag, page, preset, visibility], load, { immediate: true })
+const selected = ref<string[]>([])
+watch([category, keywords, format, tag, preset, visibility, ordering], () => { selected.value = [] })
+watch([category, keywords, format, tag, page, preset, visibility, ordering], load, { immediate: true })
 // Uploads started from the layout (header button, command palette) refresh the list.
 const onChanged = () => { void load() }
 onMounted(() => window.addEventListener('hub:documents-changed', onChanged))
@@ -108,6 +128,9 @@ const heading = computed(() => {
   return taxonomy.byId(category.value)?.name ?? '集合'
 })
 const breadcrumb = computed(() => taxonomy.pathOf(category.value).slice(0, -1))
+const collection = computed(() => category.value && category.value !== UNCATEGORIZED ? taxonomy.byId(category.value) : undefined)
+const editingCollection = ref<Category>()
+const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 const pageCount = computed(() => Math.max(1, Math.ceil(count.value / pageSize.value)))
 const rangeLabel = computed(() => {
   if (!count.value) return '沒有文件'
@@ -178,6 +201,53 @@ const menuItems = computed<MenuItem[]>(() => {
   return items
 })
 
+// ---- Favourites (optimistic) ------------------------------------------------
+async function toggleFavorite(row: DocumentRow) {
+  const next = !row.is_favorite
+  row.is_favorite = next
+  try {
+    await api(`/api/documents/${row.id}/favorite/`, next ? 'PUT' : 'DELETE')
+    if (!next && preset.value === 'favorites') void load()
+  } catch (cause) {
+    row.is_favorite = !next
+    toast.add({ severity: 'error', summary: '無法更新收藏', detail: cause instanceof Error ? cause.message : '', life: 4000 })
+  }
+}
+
+// ---- Selection and bulk changes ------------------------------------------------
+const allSelected = computed(() => rows.value.length > 0 && rows.value.every(row => selected.value.includes(row.id)))
+function toggleRow(id: string) {
+  selected.value = selected.value.includes(id) ? selected.value.filter(item => item !== id) : [...selected.value, id]
+}
+function toggleAll() {
+  selected.value = allSelected.value ? [] : rows.value.map(row => row.id)
+}
+const bulkAction = ref<BulkAction>()
+function bulkDone() {
+  bulkAction.value = undefined
+  selected.value = []
+  void load()
+  window.dispatchEvent(new CustomEvent('hub:documents-changed'))
+}
+function bulkTrash() {
+  const ids = [...selected.value]
+  confirm.require({
+    header: '移入回收桶',
+    message: `${ids.length} 份文件與所有版本會移入回收桶，公開中的文章會一併下架。之後可以從回收桶還原。`,
+    acceptProps: { label: '移入回收桶', severity: 'danger' },
+    rejectProps: { label: '取消', severity: 'secondary', text: true },
+    accept: async () => {
+      try {
+        const result = await api<{ count: number }>('/api/documents/bulk/', 'POST', { ids, action: 'trash' })
+        toast.add({ severity: 'success', summary: `已將 ${result.count} 份文件移入回收桶`, life: 3000 })
+        bulkDone()
+      } catch (cause) {
+        toast.add({ severity: 'error', summary: '無法移入回收桶', detail: cause instanceof Error ? cause.message : '', life: 5000 })
+      }
+    },
+  })
+}
+
 function openRowMenu(event: Event, row: DocumentRow) {
   menuRow.value = row
   rowMenu.value?.toggle(event)
@@ -199,7 +269,15 @@ function onSaved() {
             <RouterLink :to="{ name: 'app-collection', params: { id: item.id } }">{{ item.name }}</RouterLink>
           </template>
         </nav>
-        <h1>{{ heading }}</h1>
+        <div class="title-row">
+          <span v-if="collection" class="ui-col-mark title-mark" :class="`ui-col-${collection.color || 'gray'}`" aria-hidden="true">{{ markOf(collection.name) }}</span>
+          <h1>{{ heading }}</h1>
+          <button v-if="collection && session.canEdit" type="button" class="edit-collection" aria-label="編輯集合"
+            @click="editingCollection = collection">
+            <UiIcon name="edit" :size="16" />
+          </button>
+        </div>
+        <p v-if="collection?.description" class="description">{{ collection.description }}</p>
         <p class="subtitle" aria-live="polite">{{ loading ? '正在載入…' : `${count} 份文件` }}</p>
         <div v-if="preset === 'published'" class="segments" role="group" aria-label="公開狀態">
           <button type="button" class="segment" :class="{ on: visibility === 'public' }" :aria-pressed="visibility === 'public'"
@@ -223,7 +301,21 @@ function onSaved() {
         placeholder="所有格式" aria-label="依格式篩選" class="facet" @update:model-value="value => setQuery({ format: value ?? '' })" />
       <Select :model-value="tag || null" :options="taxonomy.tags" option-label="name" option-value="id" show-clear filter
         placeholder="所有標籤" aria-label="依標籤篩選" class="facet" @update:model-value="value => setQuery({ tag: value ?? '' })" />
-      <Button v-if="hasFilters" label="清除篩選" text severity="secondary" @click="searchText = ''; setQuery({ q: '', format: '', tag: '' })" />
+      <Select v-if="!preset" :model-value="visibility || null" :options="visibilityOptions" option-label="name" option-value="id"
+        show-clear placeholder="所有可見性" aria-label="依可見性篩選" class="facet" @update:model-value="value => setQuery({ visibility: value ?? '' })" />
+      <Button v-if="hasFilters" label="清除篩選" text severity="secondary" @click="clearFilters" />
+      <span class="toolbar-spacer" />
+      <Select :model-value="ordering" :options="sortOptions" option-label="name" option-value="id" aria-label="排序方式"
+        class="facet sort" @update:model-value="value => setQuery({ ordering: value === '-updated_at' ? '' : value })" />
+    </div>
+
+    <div v-if="selected.length" class="bulk" role="toolbar" aria-label="批次操作">
+      <span class="bulk-count">已選 {{ selected.length }} 份</span>
+      <button type="button" class="bulk-button" @click="bulkAction = 'move'">移動到集合</button>
+      <button type="button" class="bulk-button" @click="bulkAction = 'add_tags'">加標籤</button>
+      <button type="button" class="bulk-button" @click="bulkAction = 'remove_tags'">移除標籤</button>
+      <button type="button" class="bulk-button danger" @click="bulkTrash">移入回收桶</button>
+      <button type="button" class="bulk-button ghost" @click="selected = []">取消選取</button>
     </div>
 
     <Message v-if="error" severity="error" class="error">
@@ -235,6 +327,9 @@ function onSaved() {
       <table class="table" :aria-busy="loading">
         <thead>
           <tr>
+            <th v-if="session.canEdit" scope="col" class="col-select">
+              <input type="checkbox" class="check" :checked="allSelected" :disabled="!rows.length" aria-label="選取本頁所有文件" @change="toggleAll">
+            </th>
             <th scope="col">文件</th>
             <th scope="col" class="col-tags">標籤</th>
             <th scope="col" class="col-status">可見性</th>
@@ -245,6 +340,7 @@ function onSaved() {
         </thead>
         <tbody v-if="loading && !rows.length">
           <tr v-for="index in 6" :key="index">
+            <td v-if="session.canEdit" />
             <td><div class="doc"><Skeleton width="2rem" height="2rem" /><Skeleton width="14rem" /></div></td>
             <td><Skeleton width="5rem" /></td>
             <td><Skeleton width="3.5rem" /></td>
@@ -254,7 +350,11 @@ function onSaved() {
           </tr>
         </tbody>
         <tbody v-else-if="rows.length" :class="{ stale: loading }">
-          <tr v-for="row in rows" :key="row.id">
+          <tr v-for="row in rows" :key="row.id" :class="{ selected: selected.includes(row.id) }">
+            <td v-if="session.canEdit" class="cell-select">
+              <input type="checkbox" class="check" :checked="selected.includes(row.id)" :aria-label="`選取 ${row.title}`"
+                @change="toggleRow(row.id)">
+            </td>
             <td class="cell-doc">
               <div class="doc">
                 <span class="format" :class="row.format" :title="formatLabel(row.format)">{{ row.format === 'html' ? 'HTML' : 'MD' }}</span>
@@ -278,6 +378,10 @@ function onSaved() {
             <td class="num">v{{ row.current_version.number }}</td>
             <td class="date"><time :datetime="row.updated_at" :title="longDateTime(row.updated_at)">{{ shortDate(row.updated_at) }}</time></td>
             <td class="actions">
+              <button type="button" class="row-menu star" :class="{ on: row.is_favorite }" :aria-pressed="Boolean(row.is_favorite)"
+                :aria-label="row.is_favorite ? `取消收藏 ${row.title}` : `收藏 ${row.title}`" @click="toggleFavorite(row)">
+                <UiIcon name="star" :size="16" :filled="row.is_favorite" />
+              </button>
               <button type="button" class="row-menu" :aria-label="`${row.title} 的更多操作`" aria-haspopup="menu"
                 aria-controls="row-menu" @click="openRowMenu($event, row)">
                 <UiIcon name="more" :size="18" />
@@ -290,7 +394,7 @@ function onSaved() {
         <UiIcon name="folder" :size="28" />
         <p class="empty-title">{{ hasFilters ? '找不到符合條件的文件' : preset === 'favorites' ? '還沒有收藏的文件' : preset === 'published' ? (visibility === 'lagging' ? '所有公開文章都是最新版本' : '還沒有公開文章') : '這裡還沒有文件' }}</p>
         <p class="empty-text">{{ hasFilters ? '換個關鍵字，或清除篩選條件再試一次。' : preset === 'favorites' ? '在文件頁按下星號，就能把常用文件收進這裡。' : preset === 'published' ? 'Admin 可在文件頁的「公開」分頁發布文章。' : (session.canEdit ? '上傳 Markdown 或 HTML 檔案開始建立知識庫。' : '有文件加入後會顯示在這裡。') }}</p>
-        <Button v-if="hasFilters" label="清除篩選" outlined size="small" @click="searchText = ''; setQuery({ q: '', format: '', tag: '' })" />
+        <Button v-if="hasFilters" label="清除篩選" outlined size="small" @click="clearFilters" />
         <Button v-else-if="session.canEdit && !preset" label="上傳文件" size="small" @click="emit('upload')" />
       </div>
     </div>
@@ -315,6 +419,8 @@ function onSaved() {
     <Menu id="row-menu" ref="rowMenu" :model="menuItems" popup />
     <UploadDialog v-model:visible="uploadOpen" :target="versionTarget" :default-category="category"
       :max-bytes="limits.bytes" :max-batch="limits.batch" @uploaded="load" />
+    <BulkDialog :action="bulkAction" :ids="selected" @close="bulkAction = undefined" @done="bulkDone" />
+    <CollectionDialog :collection="editingCollection" @close="editingCollection = undefined" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onSaved" />
     <PublicationDialog v-if="publishing" :id="publishing.id" :format="publishing.format" :csrf="getCsrfToken()"
       @close="publishing = undefined" @changed="load" />
@@ -378,7 +484,31 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .segment { min-height: 1.875rem; padding: 0 .875rem; border: 0; border-radius: .375rem; background: transparent; color: var(--ui-text-muted); font: inherit; font-size: var(--ui-text-sm); cursor: pointer; }
 .segment.on { background: var(--ui-bg-surface); color: var(--ui-text); font-weight: 600; box-shadow: var(--ui-shadow-sm); }
 .num, .date { white-space: nowrap; }
-.actions { text-align: right; }
+.actions { text-align: right; white-space: nowrap; }
+.star { color: var(--ui-text-muted); }
+.star.on { color: #d99a00; }
+.col-select, .cell-select { width: 2.5rem; }
+.check { width: 1rem; height: 1rem; margin: 0; accent-color: var(--ui-accent); cursor: pointer; }
+.table tbody tr.selected td { background: var(--ui-accent-soft); }
+.title-row { display: flex; align-items: center; gap: var(--ui-space-3); }
+.title-mark { width: 2.25rem; height: 2.25rem; font-size: 1rem; border-radius: var(--ui-radius-md); }
+.edit-collection { display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-muted); cursor: pointer; }
+.edit-collection:hover { background: var(--ui-bg-muted); color: var(--ui-text); }
+.description { max-width: 48rem; margin: var(--ui-space-2) 0 0; color: var(--ui-text-secondary); line-height: 1.6; white-space: pre-line; }
+.toolbar-spacer { flex: 1 1 0; }
+.sort { min-width: 8.5rem; }
+.bulk {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-1); margin-bottom: var(--ui-space-3);
+  padding: var(--ui-space-2) var(--ui-space-2) var(--ui-space-2) var(--ui-space-4); border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg-inverse); color: var(--ui-text-inverse);
+}
+.bulk-count { margin-right: var(--ui-space-2); font-weight: 600; font-size: var(--ui-text-sm); }
+.bulk-button { min-height: 2rem; padding: 0 var(--ui-space-3); border: 0; border-radius: var(--ui-radius-md); background: rgb(255 255 255 / .12); color: inherit; font: inherit; font-size: var(--ui-text-sm); cursor: pointer; }
+.hub-dark .bulk-button { background: rgb(16 24 40 / .1); }
+.bulk-button:hover { background: rgb(255 255 255 / .2); }
+.bulk-button.danger { color: #fecdca; }
+.hub-dark .bulk-button.danger { color: #b42318; }
+.bulk-button.ghost { margin-left: auto; background: transparent; opacity: .85; }
 /* Fixed side columns keep the table compact on wide screens; the document column takes the rest. */
 .col-tags { width: 14rem; }
 .col-status { width: 8rem; }
@@ -416,6 +546,13 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
     column-gap: var(--ui-space-3); padding: var(--ui-space-3) var(--ui-space-2) var(--ui-space-3) var(--ui-space-4);
     border-bottom: 1px solid var(--ui-border-subtle);
   }
+  .table tbody tr:has(.cell-select) {
+    grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "select doc doc doc actions" "select status version date actions" "select tags tags tags tags";
+  }
+  .table tbody tr.selected { background: var(--ui-accent-soft); }
+  .table tbody tr.selected td { background: transparent; }
+  .cell-select { grid-area: select; align-self: start; padding-top: .5rem !important; width: auto; }
   .table tbody tr:last-child { border-bottom: 0; }
   .table td, .table td:first-child { padding: 0; border: 0; }
   .table tbody tr:hover td { background: transparent; }
@@ -429,6 +566,8 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 }
 @media (max-width: 640px) {
   .facet { flex: 1 1 8rem; min-width: 0; }
+  .toolbar-spacer { display: none; }
+  .bulk-button.ghost { margin-left: 0; }
   .upload-button { width: 100%; justify-content: center; }
 }
 </style>
