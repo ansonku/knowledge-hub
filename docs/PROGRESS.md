@@ -35,8 +35,8 @@ HTML 可能引用外部 HTTPS 資源，因此決定保留「開啟 HTML 預覽�
 
 39 項 Django 測試通過。Firefox 已在 500、768、1280 px 驗證文章清單、篩選、目錄、鍵盤導覽與角色權限，並確認 OBMF 公開文章的 MMIO SVG 和 GPIO 50 欄圖在窄螢幕可讀。 [介面改版提交](https://github.com/ansonku/knowledge-hub/commit/a239409)
 
-## 介面改版規劃（進行中）
+## 介面改版（進行中）
 
-工作區、公開知識站與管理主控台分開設計，在 `ui-redesign` 分支以 `/app/` 路由與現有介面並存開發。討論結論、mockup 對照與分期見 [UI 改版規劃](docs/UI_REDESIGN.md)。
+工作區、公開知識站與管理主控台分開設計，在 `ui-redesign` 分支以 `/app/` 路由與現有介面並存開發。P1 已完成：設計 token 與自帶字型、三欄工作區框架、文件清單、文件頁與 Inspector（資訊、版本時間軸與還原、Admin 公開狀態與落後版本），以及可分享的版本比較頁。舊介面與後端未變更。P2（首頁、指令面板、上傳匣、批次操作、活動紀錄）待規劃；合併回 `main` 前需完成多寬度與四種角色的驗證。討論結論、實作紀錄與分期見 [UI 改版規劃](docs/UI_REDESIGN.md)。
 
 NAS 部署與安全強化順延為 M7。 [M7 實作計畫](docs/IMPLEMENTATION_PLAN.md#m7--nas-deployment-and-hardening)

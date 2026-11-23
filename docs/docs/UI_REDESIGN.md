@@ -1,6 +1,6 @@
 # Knowledge Hub 介面改版規劃
 
-狀態：規劃中（2026-11-23）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
+狀態：P1 完成，P2 待規劃（2026-11-23）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
 
 本文件記錄介面改版的討論結論、mockup 內容與實作分期。改版只涉及前端呈現與資訊架構；後端 RBAC、HTML 沙箱與公開發布語意維持 `FINAL_MVP_SPEC_v2.1.md` 的規定，不因本規劃放寬。
 
@@ -35,7 +35,7 @@
 | 全部文件 | `/app/library/` | 可排序、批次選取、每列「⋯」選單；篩選條件反映在網址 |
 | 集合 | `/app/collections/:id/` | 集合說明加文件清單（取代「分類」的命名） |
 | 文件 | `/app/docs/:id/` | 閱讀／編輯／分割預覽，右側 Inspector |
-| 版本比較 | `/app/docs/:id/compare?from=&to=` | 獨立整頁，可分享連結 |
+| 版本比較 | `/app/docs/:id/compare/?from=&to=` | 獨立整頁，可分享連結 |
 | 已公開文章 | `/app/published/` | 公開版本與內部最新版本並列，標示落後 |
 | 回收桶 | `/app/trash/` | 表格形式，支援批次還原 |
 | 管理主控台 | `/app/admin/members/`、`/app/admin/taxonomy/`、`/app/admin/audit/`、`/app/admin/system/` | 見第 6 節 |
@@ -187,3 +187,34 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
 1. 收藏、最近閱讀等需要新資料表的功能是否納入 P2。
 2. 「分類」是否正式更名為「集合」（影響 API 欄位命名與既有文件）。
 3. 改版與 M7 的先後或並行排程。
+
+## 13. 實作紀錄
+
+### P1（2026-11-23 完成）
+
+| 子階段 | 提交 | 內容 |
+|---|---|---|
+| P1a 基礎建設 | `7ffc54e` | `--ui-*` 設計 token（含深色值）、自行打包 Inter／Noto Sans TC／JetBrains Mono、`api.ts`、Pinia `session` store、Toast 與 ConfirmDialog 服務 |
+| P1b App Shell 與文件清單 | `7b00c2b` | `AppLayout`、`AppSidebar`（集合樹、角色導覽、頭像選單、手機版抽屜）、`/app/library/` 與 `/app/collections/:id/`、上傳／文件資料／集合與標籤對話框 |
+| P1c 文件頁與 Inspector | `962e3af` | `/app/docs/:id/`（閱讀／編輯／分割預覽、舊版檢視、HTML 沙箱預覽）、Inspector（資訊、版本、公開）、`/app/docs/:id/compare/` |
+
+主要檔案位於 `frontend/src/app/`；共用狀態在 `frontend/src/stores/`，token 在 `frontend/src/styles/tokens.css`。舊介面檔案未修改，Nginx 與後端未變更。
+
+**與規劃不同或暫時的做法**
+
+- `/app/` 巢狀路由由 P1a 移到 P1b，與 `AppLayout` 一起加入。
+- 版本比較路由為 `/app/docs/:id/compare/?from=&to=`（結尾斜線與既有路由一致）。
+- 舊版閱讀頁的「標準／寬版／全頁」選單不再提供，改由 Inspector 開關調整正文寬度；寬度 1100px 以下 Inspector 改為右側覆蓋面板。
+- ⌘K／Ctrl K 在 P1 只聚焦文件清單的搜尋框，指令面板留待 P2。
+- 側欄的回收桶與帳號管理仍連到舊版頁面（分別於 P2、P4 改版）；頭像選單提供「切換到舊版介面」。
+- Inspector 的「活動」分頁缺少 API，留待 P2；「公開」分頁與公開狀態標籤僅 Admin 可見，因為文件詳細 API 不含公開狀態。
+- 側欄集合不顯示文件數（需後端支援，P2）。
+- 文件頁「上傳新版本」暫以 50 MB 作為前端提示上限，實際限制由後端檢查。
+- 深色 token 已備妥，切換開關排在 P2。
+- `app.css` 的全域 `main`、`nav` 規則會影響新版面，已在 `.hub-app` 範圍內重設。
+
+**驗證**
+
+- 每個子階段皆在 `node:24-alpine` 容器執行 `npm run build`（含 `vue-tsc`）通過，並以分支重建 Nginx 確認新舊路由回應 200；P1a 另執行 `scripts/smoke.sh` 通過。
+- 使用者已在瀏覽器檢查 P1b 與 P1c 介面。尚未進行第 10 節要求的 500／768／1280 px 與四種角色的系統性驗證，於 P1 合併回 `main` 前補做。
+
