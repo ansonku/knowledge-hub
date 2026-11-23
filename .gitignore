@@ -1,0 +1,11 @@
+.env
+!.env.example
+/.aws/
+/.codex/
+/.agents/
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+dist/
+.ruff_cache/
