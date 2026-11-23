@@ -152,7 +152,7 @@ const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     { label: '開啟', command: () => router.push({ name: 'app-document', params: { id: row.id } }) },
     { label: '下載原始檔', url: `/api/documents/${row.id}/download/` },
-    { label: '版本歷史', url: `/library/${row.id}/versions/` },
+    { label: '版本歷史', command: () => router.push({ name: 'app-document', params: { id: row.id }, query: { panel: 'versions' } }) },
   ]
   if (session.canEdit) {
     items.push(

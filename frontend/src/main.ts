@@ -29,8 +29,8 @@ const router = createRouter({
         { path: '', redirect: { name: 'app-library' } },
         { path: 'library/', name: 'app-library', component: () => import('./app/LibraryPage.vue') },
         { path: 'collections/:id/', name: 'app-collection', component: () => import('./app/LibraryPage.vue') },
-        // Until the new document page lands in P1c, documents open in the legacy reader.
-        { path: 'docs/:id/', name: 'app-document', redirect: to => `/library/${String(to.params.id)}/` },
+        { path: 'docs/:id/', name: 'app-document', component: () => import('./app/DocumentPage.vue') },
+        { path: 'docs/:id/compare/', name: 'app-compare', component: () => import('./app/ComparePage.vue') },
         { path: ':pathMatch(.*)*', redirect: { name: 'app-library' } },
       ],
     },
