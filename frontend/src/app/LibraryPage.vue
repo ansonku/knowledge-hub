@@ -237,7 +237,7 @@ function onSaved() {
         </tbody>
         <tbody v-else-if="rows.length" :class="{ stale: loading }">
           <tr v-for="row in rows" :key="row.id">
-            <td>
+            <td class="cell-doc">
               <div class="doc">
                 <span class="format" :class="row.format" :title="formatLabel(row.format)">{{ row.format === 'html' ? 'HTML' : 'MD' }}</span>
                 <div class="doc-text">
@@ -246,13 +246,13 @@ function onSaved() {
                 </div>
               </div>
             </td>
-            <td>
+            <td class="cell-tags" :class="{ 'no-tags': !row.tags.length }">
               <div class="tags">
                 <span v-for="item in row.tags" :key="item.id" class="tag">{{ item.name }}</span>
                 <span v-if="!row.tags.length" class="none">—</span>
               </div>
             </td>
-            <td>
+            <td class="cell-status">
               <span class="status" :class="row.is_public ? 'public' : 'private'">
                 <span class="dot" aria-hidden="true" />{{ row.is_public ? '公開' : '私人' }}
               </span>
@@ -325,7 +325,8 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .facet { min-width: 9.5rem; min-height: 2.5rem; align-items: center; }
 .error { margin-bottom: var(--ui-space-4); }
 
-.table-wrap { overflow-x: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }
+/* position: relative keeps visually hidden header text inside the scroller. */
+.table-wrap { position: relative; overflow-x: auto; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }
 .table { width: 100%; min-width: 50rem; border-collapse: collapse; }
 .table th {
   padding: .625rem var(--ui-space-3); background: var(--ui-bg-subtle); border-bottom: 1px solid var(--ui-border);
@@ -381,6 +382,28 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .page-button.current { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); font-weight: 600; }
 .gap { padding: 0 var(--ui-space-1); }
 
+/* Below tablet width each row becomes a card: no horizontal scrolling, menu stays reachable. */
+@media (max-width: 860px) {
+  .table { min-width: 0; }
+  .table, .table tbody { display: block; }
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .table tbody tr {
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center;
+    grid-template-areas: "doc doc doc actions" "status version date actions" "tags tags tags tags";
+    column-gap: var(--ui-space-3); padding: var(--ui-space-3) var(--ui-space-2) var(--ui-space-3) var(--ui-space-4);
+    border-bottom: 1px solid var(--ui-border-subtle);
+  }
+  .table tbody tr:last-child { border-bottom: 0; }
+  .table td, .table td:first-child { padding: 0; border: 0; }
+  .table tbody tr:hover td { background: transparent; }
+  .cell-doc { grid-area: doc; }
+  .cell-status { grid-area: status; padding-top: var(--ui-space-2) !important; padding-left: 2.75rem !important; }
+  .num { grid-area: version; padding-top: var(--ui-space-2) !important; font-size: var(--ui-text-sm); }
+  .date { grid-area: date; padding-top: var(--ui-space-2) !important; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+  .actions { grid-area: actions; align-self: start; width: auto; }
+  .cell-tags { grid-area: tags; padding: var(--ui-space-2) 0 0 2.75rem !important; }
+  .cell-tags.no-tags { display: none; }
+}
 @media (max-width: 640px) {
   .facet { flex: 1 1 8rem; min-width: 0; }
   .upload-button { width: 100%; justify-content: center; }

@@ -1,6 +1,6 @@
 # Knowledge Hub 介面改版規劃
 
-狀態：P1 完成，P2 待規劃（2026-11-23）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
+狀態：P1 完成並通過驗證，P2 待規劃（2026-11-24）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
 
 本文件記錄介面改版的討論結論、mockup 內容與實作分期。改版只涉及前端呈現與資訊架構；後端 RBAC、HTML 沙箱與公開發布語意維持 `FINAL_MVP_SPEC_v2.1.md` 的規定，不因本規劃放寬。
 
@@ -216,5 +216,34 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
 **驗證**
 
 - 每個子階段皆在 `node:24-alpine` 容器執行 `npm run build`（含 `vue-tsc`）通過，並以分支重建 Nginx 確認新舊路由回應 200；P1a 另執行 `scripts/smoke.sh` 通過。
-- 使用者已在瀏覽器檢查 P1b 與 P1c 介面。尚未進行第 10 節要求的 500／768／1280 px 與四種角色的系統性驗證，於 P1 合併回 `main` 前補做。
+- 使用者已在瀏覽器檢查 P1b 與 P1c 介面，依截圖回饋調整版面（`9ffa0bc`）。
+- 2026-11-24 完成第 10 節的系統性驗證，結果見下方「P1 驗證」。
+
+### P1 驗證（2026-11-24）
+
+**方法**：在開發資料庫建立 `uitest-admin`、`uitest-editor`、`uitest-viewer` 三個測試帳號（Email 為 `@example.invalid`，密碼只保存在本機，不進 repo），並以 Editor 建立「UI 測試」集合與含標題、清單、程式碼、表格、引言、Mermaid 的「UI 測試文件」（v1、v2）。以 `mcr.microsoft.com/playwright/python:v1.49.0-noble` 無頭 Chromium，對三種角色在 500、768、1280 px 截取文件清單、側欄抽屜、Markdown 閱讀與分割預覽、Inspector 各分頁、HTML 預覽、版本比較與列選單，共 76 張；另檢查訪客導向、console 錯誤與頁面水平溢出。腳本放在本機 scratchpad，未納入 repo。
+
+**角色檢查**
+
+| 角色 | 上傳 | 編輯 | 公開設定 | 還原版本 | Inspector 可編輯 | 列選單 |
+|---|---|---|---|---|---|---|
+| Admin | 有 | 有 | 有 | 有 | 有 | 開啟、下載、版本歷史、編輯資料、新增版本、公開設定、移入回收桶 |
+| Editor | 有 | 有 | 無 | 有 | 有 | 同上，不含公開設定 |
+| Viewer | 無 | 無 | 無 | 無 | 無 | 開啟、下載、版本歷史 |
+| Visitor | `/app/` 導向 `/accounts/login/?next=` | | | | | |
+
+所有頁面沒有 console 錯誤或未處理例外。
+
+**發現並修正的問題**
+
+| 問題 | 修正 |
+|---|---|
+| 清單頁在 500／768 px 寬度溢出到 770px | 表格捲動容器加上 `position: relative`，避免絕對定位的隱藏表頭文字跑出容器 |
+| 窄螢幕表格需橫向捲動，捲動時標題消失、列選單無法開啟 | 860px 以下改為卡片排列 |
+| Markdown 開頭 H1 與文件標題重複，目錄也重複 | 開頭 H1 與標題相同時隱藏，目錄移除該項並以最淺層級為縮排基準 |
+| 分割預覽在 Inspector 開啟時兩欄各約 300px | 進入編輯／分割預覽時暫時收起 Inspector，回到閱讀恢復偏好 |
+| 版本比較將相同內容全部展開 | `VersionDiff.vue` 新增 `compact` 選項（折疊未變更區段、自動換行），僅新比較頁啟用，舊版對話框不變 |
+| 沒有標籤的列在桌面版錯位 | 儲存格 class 與空白狀態的 `.empty` 撞名，改名為 `no-tags` |
+
+**測試資料**：測試帳號與「UI 測試」集合、文件仍保留在開發資料庫，供後續階段重跑截圖；改版結束前停用帳號並將文件移入回收桶。
 

@@ -2,7 +2,7 @@
 import MultiSelect from 'primevue/multiselect'
 import Select from 'primevue/select'
 import { useToast } from 'primevue/usetoast'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api } from '../../api'
 import { useTaxonomy } from '../../stores/taxonomy'
 import type { DocumentDetails } from '../composables/useDocument'
@@ -15,6 +15,8 @@ const emit = defineEmits<{ jump: [id: string]; updated: [document: Partial<Docum
 
 const taxonomy = useTaxonomy()
 const toast = useToast()
+// Indent relative to the shallowest heading so a hidden leading H1 does not shift the whole list.
+const topLevel = computed(() => Math.min(...props.headings.map(heading => heading.level), 6))
 const category = ref<string | null>(null)
 const tags = ref<string[]>([])
 const saving = ref(false)
@@ -86,7 +88,7 @@ function sizeLabel(size?: number) {
     <nav v-if="headings.length" class="toc" aria-label="本頁目錄">
       <span class="toc-title">本頁目錄</span>
       <a v-for="heading in headings" :key="heading.id" :href="`#${heading.id}`" class="toc-link"
-        :style="{ paddingInlineStart: `${.75 + Math.max(0, heading.level - 1) * .75}rem` }"
+        :style="{ paddingInlineStart: `${.75 + Math.max(0, heading.level - topLevel) * .75}rem` }"
         @click.prevent="emit('jump', heading.id)">{{ heading.text }}</a>
     </nav>
   </div>

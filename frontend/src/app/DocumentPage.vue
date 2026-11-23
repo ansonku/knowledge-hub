@@ -54,6 +54,12 @@ const modes: { value: Mode; label: string }[] = [
   { value: 'read', label: '閱讀' }, { value: 'edit', label: '編輯' }, { value: 'split', label: '分割預覽' },
 ]
 const rendered = computed(() => renderMarkdown(doc.source.value))
+/** Many Markdown files open with an H1 equal to the document title; the page header already shows it. */
+const leadingTitle = computed(() => {
+  const first = rendered.value.headings[0]
+  return Boolean(first && first.level === 1 && first.id === 'section-1' && first.text.trim() === file.value?.title.trim())
+})
+const tocHeadings = computed(() => leadingTitle.value ? rendered.value.headings.slice(1) : rendered.value.headings)
 const previewSource = ref('')
 const preview = computed(() => renderMarkdown(previewSource.value))
 watch(draft, (value, _, onCleanup) => {
@@ -78,6 +84,11 @@ watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
 function setMode(next: Mode) {
   mode.value = next
 }
+// Editing needs the width: hide the inspector while editing, restore the saved preference afterwards.
+watch(mode, (next, previous) => {
+  if (next !== 'read' && previous === 'read') inspectorOpen.value = false
+  else if (next === 'read' && previous !== 'read') inspectorOpen.value = !narrow.matches && storedInspector()
+})
 
 async function save() {
   const number = await doc.save(note.value)
@@ -338,7 +349,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Markdown: read -->
-          <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading">
+          <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading" :class="{ 'skip-title': leadingTitle }">
             <MarkdownBody :rendered="rendered" />
           </div>
 
@@ -397,7 +408,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div :id="`panel-${tab}`" role="tabpanel" :aria-labelledby="`tab-${tab}`" class="panel">
-          <InfoTab v-if="tab === 'info'" :document="file" :headings="file.format === 'md' ? rendered.headings : []"
+          <InfoTab v-if="tab === 'info'" :document="file" :headings="file.format === 'md' ? tocHeadings : []"
             :editable="session.canEdit" @jump="jump" @updated="doc.applyMetadata" />
           <VersionsTab v-else-if="tab === 'versions'" :document="file" :shown-id="historical?.id" :can-restore="session.canEdit"
             :published-number="publishedNumber" @restored="onRestored" />
@@ -466,6 +477,8 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 /* Reading typography */
 .reading, .preview { color: var(--ui-text-reading-color); font-size: var(--ui-text-reading); line-height: var(--ui-leading-reading); overflow-wrap: anywhere; }
 .reading :deep(.markdown-body > div > *:first-child) { margin-top: 0; }
+.reading.skip-title :deep(.markdown-body > div > h1:first-child) { display: none; }
+.reading.skip-title :deep(.markdown-body > div > h1:first-child + *) { margin-top: 0; }
 .reading :deep(h1), .reading :deep(h2), .reading :deep(h3), .reading :deep(h4),
 .preview :deep(h1), .preview :deep(h2), .preview :deep(h3), .preview :deep(h4) {
   color: var(--ui-text); line-height: 1.35; scroll-margin-top: calc(var(--ui-topbar-height) + 1rem);

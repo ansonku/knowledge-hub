@@ -117,7 +117,7 @@ onBeforeUnmount(() => controller?.abort())
       <div v-else-if="loading" class="loading" role="status"><ProgressSpinner style="width: 2rem; height: 2rem" aria-label="正在讀取版本內容" /></div>
       <div v-else-if="texts && file" class="diff">
         <div class="legend"><span>v{{ older?.number }}</span><span>v{{ newer?.number }}</span></div>
-        <DiffEditor :key="`${fromId}-${toId}`" :original="texts.original" :modified="texts.modified" :format="file.format" />
+        <DiffEditor :key="`${fromId}-${toId}`" :original="texts.original" :modified="texts.modified" :format="file.format" compact />
       </div>
     </div>
   </div>

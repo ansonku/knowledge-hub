@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { editor } from './monaco'
 
-const props = defineProps<{ original: string; modified: string; format: 'md' | 'html' }>()
+const props = defineProps<{ original: string; modified: string; format: 'md' | 'html'; compact?: boolean }>()
 const target = ref<HTMLElement>()
 let instance: ReturnType<typeof editor.createDiffEditor> | undefined
 let original: ReturnType<typeof editor.createModel> | undefined
@@ -20,6 +20,8 @@ onMounted(() => {
     renderSideBySide: true,
     scrollBeyondLastLine: false,
     minimap: { enabled: false },
+    // Opt-in for the redesigned compare page; the legacy dialog keeps its full view.
+    ...(props.compact ? { hideUnchangedRegions: { enabled: true, contextLineCount: 3 }, diffWordWrap: 'on' as const } : {}),
     originalAriaLabel: '原版本內容',
     modifiedAriaLabel: '比較版本內容',
   })
