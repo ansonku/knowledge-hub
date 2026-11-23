@@ -1,6 +1,6 @@
 # Knowledge Hub 介面改版規劃
 
-狀態：P1 完成並通過驗證，P2 待規劃（2026-11-24）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
+狀態：P1 完成並通過驗證，P2 進行中（2026-11-24）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
 
 本文件記錄介面改版的討論結論、mockup 內容與實作分期。改版只涉及前端呈現與資訊架構；後端 RBAC、HTML 沙箱與公開發布語意維持 `FINAL_MVP_SPEC_v2.1.md` 的規定，不因本規劃放寬。
 
@@ -164,9 +164,20 @@ Django 範本頁面（登入、密碼重設、MFA、Google 綁定）維持由後
 | 階段 | 內容 | 後端 |
 |---|---|---|
 | P1 | 設計 token 與字型、`AppLayout`／`PublicLayout`、`/app/` 巢狀路由、Toast 與 ConfirmDialog、文件頁與 Inspector | 無 |
-| P2 | 工作區首頁、⌘K、上傳匣、清單排序與批次操作、集合頁 | 小幅至新 API |
+| P2 | 工作區首頁、⌘K、上傳匣、清單排序與批次操作、集合頁、收藏與最近閱讀、活動紀錄、回收桶、深色模式（細項見 10.1） | 新 model 與 API |
 | P3 | 公開知識站首頁與文章頁、SEO meta | 小幅 |
 | P4 | 管理主控台各頁、切換預設路由並移除舊頁面 | 新 API |
+
+### 10.1 P2 細項
+
+| 子階段 | 內容 |
+|---|---|
+| P2a 後端基礎 | 新 model：`Favorite`（使用者 × 文件唯一）、`DocumentView`（使用者 × 文件唯一，只更新時間，每人保留 50 筆）、`DocumentActivity`（上傳、編輯、還原、資料變更、回收桶、發布與下架；以資料遷移從 `Version`、`DocumentTrashAudit`、`ArticlePublicationAudit` 回填，資料變更只從上線後記錄）；`Category` 新增 `description`、`color`。API：`PUT/DELETE /api/documents/:id/favorite/`、`POST /api/documents/:id/view/`、`GET /api/me/recent/`、`GET /api/documents/:id/activity/`、`GET /api/activity/?scope=all|mine|publish`；文件清單新增 `ordering`、`visibility=public|private|lagging`、`favorite=1` 參數與 `is_favorite`、`published_version` 欄位；集合清單新增 `document_count`；`POST /api/documents/bulk/`（移動集合、加／移除標籤、移入回收桶；Editor 以上、上限 100 份、單一交易、逐份走服務層）；`/api/auth/me` 回傳上傳 `limits`。每個端點附四種角色的權限測試 |
+| P2b 首頁與導覽 | `/app/` 工作區首頁（繼續閱讀、團隊最近更新、需要注意、集合概覽）；側欄新增首頁、最近閱讀、收藏、集合色標與文件數、已公開文章（清單篩選）；⌘K 指令面板（文件搜尋、最近閱讀、導覽與動作）；深色模式切換（跟隨系統／淺色／深色）與深色程式碼高亮 |
+| P2c 清單、集合頁、上傳匣 | 清單排序、可見性篩選、收藏星號、批次操作列；集合頁說明與色標（Editor 以上可編輯）；全視窗拖放的上傳匣（非模態、逐檔進度、重複檔處理）；新增版本仍須從指定文件發起 |
+| P2d 文件頁與回收桶 | Inspector「活動」分頁、標題旁收藏星號、開啟時記錄最近閱讀；`/app/trash/` 回收桶（批次還原；永久刪除限 Admin 並輸入完整標題） |
+
+不納入 P2：批次下載 ZIP（與 M7 的部署限制一併評估）、集合拖拉排序（P4 集合管理）。
 
 每個階段開始前提出檔案異動計畫；完成後列出異動檔案、測試結果與殘餘風險，並在 Firefox 以 500、768、1280 px 驗證 Visitor、Viewer、Editor 與 Admin。
 
@@ -182,11 +193,21 @@ Django 範本頁面（登入、密碼重設、MFA、Google 綁定）維持由後
 
 Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]` 待定。尚未涵蓋：管理主控台、公開文章頁、版本比較整頁、深色模式與手機版細節。
 
-## 12. 待決定事項
+## 12. 決定事項（2026-11-24）
 
-1. 收藏、最近閱讀等需要新資料表的功能是否納入 P2。
-2. 「分類」是否正式更名為「集合」（影響 API 欄位命名與既有文件）。
-3. 改版與 M7 的先後或並行排程。
+1. 收藏與最近閱讀納入 P2。
+2. 「分類」在介面上一律改稱「集合」；後端 model 與 API 欄位維持 `category`，避免遷移與舊頁面中斷。
+3. M7 NAS 部署延後，先完成介面改版。
+
+**名詞對照**
+
+| 介面用語 | 後端名稱 |
+|---|---|
+| 集合 | `Category`、`category`、`/api/categories/` |
+| 標籤 | `Tag`、`tags`、`/api/tags/` |
+| 公開／下架 | `ArticlePublication`、`/publication/` |
+| 最近閱讀 | `DocumentView`、`/api/me/recent/` |
+| 收藏 | `Favorite`、`/favorite/` |
 
 ## 13. 實作紀錄
 
