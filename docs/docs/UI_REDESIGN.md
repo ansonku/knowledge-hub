@@ -1,6 +1,6 @@
 # Knowledge Hub 介面改版規劃
 
-狀態：P1 完成並通過驗證，P2 進行中（2026-11-24）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
+狀態：P1、P2 完成並通過驗證，P2 待使用者審閱後 push（2026-11-24）· 分支：`ui-redesign` · Mockup：[Knowledge Hub 改版 Mockup](https://claude.ai/artifact/31WMjnFJBKW53DTCnq1vjr)（私人連結，需由擁有者分享）
 
 本文件記錄介面改版的討論結論、mockup 內容與實作分期。改版只涉及前端呈現與資訊架構；後端 RBAC、HTML 沙箱與公開發布語意維持 `FINAL_MVP_SPEC_v2.1.md` 的規定，不因本規劃放寬。
 
@@ -267,4 +267,31 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
 | 沒有標籤的列在桌面版錯位 | 儲存格 class 與空白狀態的 `.empty` 撞名，改名為 `no-tags` |
 
 **測試資料**：測試帳號與「UI 測試」集合、文件仍保留在開發資料庫，供後續階段重跑截圖；改版結束前停用帳號並將文件移入回收桶。
+
+### P2（2026-11-24 完成）
+
+使用者授權在其休息期間自行實作與驗證；各子階段於本機 commit，尚未 push，待使用者審閱。
+
+| 子階段 | 提交 | 內容 |
+|---|---|---|
+| P2a 後端基礎 | `c63edc5` | `Favorite`、`DocumentView`、`DocumentActivity`（遷移 0007）與活動回填（遷移 0008）；集合 `description`、`color`、`document_count`；清單 `ordering`、`visibility`、`favorite` 與 `is_favorite`、`published_version`；收藏、最近閱讀、活動、批次 API；`/api/auth/me` 上傳限制；8 項新測試 |
+| P2b 首頁與導覽 | `01f6823` | `/app/` 首頁、`/app/recent/`、`/app/favorites/`、`/app/published/`；側欄色標、文件數與落後徽章；Ctrl／⌘K 指令面板；跟隨系統／淺色／深色外觀（含 Monaco 與程式碼高亮） |
+| P2c 清單、集合頁、上傳匣 | `05a4da4` | 全視窗拖放與非模態上傳匣；清單排序、可見性篩選、收藏星號、勾選與批次移動／標籤／回收桶；集合頁色標與說明編輯 |
+| P2d 文件頁與回收桶 | `2eae434` | Inspector「活動」分頁、文件頁收藏星號、開啟時記錄最近閱讀、所有成員可見公開狀態；`/app/trash/` 批次還原與 Admin 輸入標題永久刪除 |
+
+**實作說明**
+
+- 活動紀錄只顯示未在回收桶的文件；永久刪除時隨文件一併刪除。標題、集合、標籤的變更從 P2 上線後開始記錄。
+- 上傳匣一律建立新文件；新增版本仍從文件頁或清單列選單對指定文件上傳，不以檔名配對。
+- 上傳匣不在上傳時指定標籤，預設放入目前檢視的集合；上傳後可用批次操作加標籤。
+- 批次還原在前端逐份呼叫既有的還原 API（後端未新增批次還原端點）。
+- 深色模式只在新介面生效；離開 `/app/` 時移除 `.hub-dark`，舊頁面維持淺色。
+- Viewer 開啟 `/app/trash/` 時直接顯示權限說明，不送出必定失敗的請求。
+
+**驗證**
+
+- 後端：47 項測試通過（原 39 項 + 8 項 P2），`ruff` 與 `makemigrations --check` 通過；遷移已套用至開發資料庫，回填 16 筆歷史活動。
+- 前端：每個子階段 `npm run build`（含 `vue-tsc`）通過並重建 Nginx。
+- Playwright：P2b 首頁、指令面板、最近閱讀、收藏、已公開文章與深色模式（Admin／Editor／Viewer，500／768／1280 px）；P2c 上傳匣（新增、重複、格式錯誤）、拖放遮罩、集合編輯、排序、可見性篩選、收藏、批次加標籤、手機卡片與 Viewer 權限；P2d 活動分頁、收藏星號、最近閱讀紀錄、回收桶還原與永久刪除、Viewer 權限；最後重跑 P1 的 76 張截圖與溢出檢查，結果與 P1 一致，無 console 錯誤。`scripts/smoke.sh` 通過，舊介面路由正常。
+- 寫入動作只針對「UI 測試」集合內的測試文件；驗證中建立的上傳匣測試文件一份已還原、一份已永久刪除。使用者原有的回收桶文件未被變更。
 
