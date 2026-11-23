@@ -41,6 +41,12 @@ const formats = [{ id: '', name: '全部格式' }, { id: 'html', name: 'HTML' },
 const role = ref('')
 const csrf = ref('')
 const route = useRoute()
+const searchText = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const keywords = ref(searchText.value.trim())
+watch(searchText, (text, _, onCleanup) => {
+  const timer = setTimeout(() => { keywords.value = text.trim() }, 250)
+  onCleanup(() => clearTimeout(timer))
+})
 const category = ref(typeof route.query.category === 'string' ? route.query.category : '')
 const format = ref('')
 const tag = ref<string | null>(null)
@@ -132,6 +138,7 @@ async function loadDocuments() {
     if (category.value) params.set('category', category.value)
     if (format.value) params.set('file_format', format.value)
     if (tag.value) params.set('tag', tag.value)
+    if (keywords.value) params.set('q', keywords.value)
     const data = await api(`/api/documents/?${params}`)
     if (request !== listRequest) return
     rows.value = data.results
@@ -171,7 +178,7 @@ onMounted(async () => {
   }
 })
 
-watch([category, format, tag], () => {
+watch([category, format, tag, keywords], () => {
   if (page.value !== 1) page.value = 1
   else if (role.value) void loadDocuments()
 })
@@ -380,13 +387,21 @@ function sizeLabel(size: number) {
           <div>
             <h1>知識總覽</h1>
           </div>
-          <Button v-if="canUpload" label="管理分類與標籤" outlined @click="selectTaxonomy(null); taxonomyOpen = true" />
+          <div v-if="canUpload" class="document-actions">
+            <RouterLink to="/library/trash/">回收桶</RouterLink>
+            <Button label="管理分類與標籤" outlined @click="selectTaxonomy(null); taxonomyOpen = true" />
+          </div>
         </div>
 
         <Message v-if="libraryError" severity="error" size="small">{{ libraryError }}</Message>
         <Message v-if="notice" severity="success" size="small">{{ notice }}</Message>
         <section class="library-panel" aria-label="文件清單">
           <div class="library-toolbar">
+            <form class="library-search" role="search" @submit.prevent="keywords = searchText.trim()">
+              <InputText v-model="searchText" maxlength="240" placeholder="搜尋標題、分類、標籤或全文" aria-label="搜尋文件" />
+              <Button v-if="searchText" type="button" label="清除" text @click="searchText = ''; keywords = ''" />
+              <Button type="submit" label="搜尋" outlined />
+            </form>
             <div class="library-filters" aria-label="文件格式">
               <Button v-for="item in formats" :key="item.id" :label="item.name" size="small"
                 :outlined="format !== item.id" :severity="format === item.id ? 'primary' : 'secondary'"
@@ -397,7 +412,7 @@ function sizeLabel(size: number) {
           </div>
           <DataTable :value="rows" data-key="id" :loading="loading"
             striped-rows table-style="min-width: 49rem">
-            <template #empty>此分類與格式目前沒有文件。</template>
+            <template #empty>{{ keywords ? "找不到符合條件的文件。" : "此分類與格式目前沒有文件。" }}</template>
             <Column field="title" header="文件標題">
               <template #body="{ data }">
                 <div class="document-title">
@@ -543,6 +558,8 @@ function sizeLabel(size: number) {
 .library-header a { text-decoration: none; }
 .library-header a:first-child { font-size: 1.12rem; }
 .library-layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); min-height: calc(100vh - 3.5rem); }
+.library-search { display: flex; flex: 1 1 100%; gap: .5rem; }
+.library-search input { flex: 1; min-width: 0; }
 .library-sidebar { padding: 1.8rem .85rem; border-right: 1px solid #e0e7f0; background: #fbfcfe; }
 .library-sidebar h2 { font-size: .875rem; margin: 0 .65rem .7rem; color: #475b77; }
 .library-sidebar nav { display: grid; gap: .25rem; }

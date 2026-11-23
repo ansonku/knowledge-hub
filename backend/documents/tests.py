@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from users.models import User
 
-from .models import Document, PreviewTicket, Version, VersionRestoreAudit
+from .models import Document, DocumentTrashAudit, PendingDocumentDeletion, PreviewTicket, Version, VersionRestoreAudit
 from .services import VersionConflict, add_upload, restore_version
 
 
@@ -289,6 +289,97 @@ class DocumentTests(TransactionTestCase):
         with ThreadPoolExecutor(max_workers=2) as executor:
             self.assertEqual(set(executor.map(restore_simultaneously, range(2), timeout=10)), {3, "conflict"})
         self.assertEqual(VersionRestoreAudit.objects.filter(document_id=document_id).count(), 1)
+
+    def test_search_chinese_body_metadata_and_current_version_only(self):
+        markdown = self.post_file("專案正在進行開機驗證，全程留存紀錄。".encode(), title="Firmware guide").json()
+        html = self.post_file(
+            "<script>只在脚本出現</script><style>.樣式暗碼{color:red}</style><p>雙語<strong>部署指南</strong></p>".encode(),
+            "example.html", title="Deployment notes",
+        ).json()
+        category = self.client.post("/api/categories/", {"name": "韌體工程"}, content_type="application/json").json()["id"]
+        tag = self.client.post("/api/tags/", {"name": "啟動流程"}, content_type="application/json").json()["id"]
+        self.client.patch(f"/api/documents/{markdown['id']}/", {"category": category, "tags": [tag]}, content_type="application/json")
+        viewer = Client()
+        viewer.force_login(self.viewer)
+
+        def result_ids(q):
+            response = viewer.get("/api/documents/", {"q": q})
+            self.assertEqual(response.status_code, 200, response.content)
+            return [item["id"] for item in response.json()["results"]]
+
+        self.assertEqual(result_ids("開機驗證"), [markdown["id"]])
+        self.assertEqual(result_ids("雙語部署"), [html["id"]])
+        self.assertEqual(result_ids("Deployment"), [html["id"]])
+        self.assertEqual(result_ids("韌體工程 啟動流程"), [markdown["id"]])
+        self.assertEqual(result_ids("只在脚本出現"), [])
+        self.assertEqual(result_ids("樣式暗碼"), [])
+        self.assertEqual(Client().get("/api/documents/", {"q": "開機驗證"}).status_code, 403)
+
+        version_path = f"/api/documents/{markdown['id']}/versions/"
+        self.assertEqual(self.post_file("改用新的回歸測試流程。".encode(), url=version_path).status_code, 201)
+        self.assertEqual(result_ids("開機驗證"), [])
+        self.assertEqual(result_ids("回歸測試"), [markdown["id"]])
+        self.client.delete(f"/api/documents/{markdown['id']}/")
+        self.assertEqual(result_ids("回歸測試"), [])
+
+    def test_existing_version_search_backfill_uses_original_file(self):
+        item = self.post_file("校正舊資料全文索引".encode()).json()
+        current = Version.objects.get(pk=item["current_version"]["id"])
+        Version.objects.filter(pk=current.pk).update(search_text=None)
+        self.assertEqual(self.client.get("/api/documents/", {"q": "全文索引"}).json()["count"], 0)
+        call_command("index_document_search")
+        self.assertEqual(self.client.get("/api/documents/", {"q": "全文索引"}).json()["count"], 1)
+        self.assertEqual((self.storage / current.path).read_bytes(), "校正舊資料全文索引".encode())
+
+    def test_trash_restore_and_admin_permanent_delete(self):
+        original = self.post_file(b"# Start", title="Document to remove").json()
+        document_id = original["id"]
+        url = f"/api/documents/{document_id}/"
+        trash_url = f"/api/trash/{document_id}/"
+        v2 = self.post_file(b"# Next", url=url + "versions/").json()["current_version"]
+        v1 = original["current_version"]
+        self.client.post(url + f"versions/{v1['id']}/restore/", {"base_version": v2["id"]}, content_type="application/json")
+        stored = list(Version.objects.filter(document_id=document_id).values_list("path", flat=True))
+        self.assertEqual(len(stored), 3)
+        admin = User.objects.create_user("admin", "admin@example.test", role=User.Role.ADMIN)
+
+        self.assertEqual(self.client.delete(url).status_code, 204)
+        self.assertEqual(self.client.get("/api/trash/").json()["results"][0]["version_count"], 3)
+        self.assertEqual(self.client.get(url + "download/").status_code, 404)
+        self.assertEqual(self.client.post(trash_url + "restore/").status_code, 200)
+        self.assertTrue(all((self.storage / path).exists() for path in stored))
+        self.assertEqual(self.client.get(url + "versions/").json()["count"], 3)
+        self.assertEqual(self.client.delete(url).status_code, 204)
+        request = {"title": original["title"], "confirm": True}
+        self.assertEqual(self.client.post(trash_url + "delete/", request, content_type="application/json").status_code, 403)
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get("/api/trash/").status_code, 403)
+        self.assertEqual(self.client.post(trash_url + "restore/").status_code, 403)
+        self.client.force_login(admin)
+        for changes in ({"confirm": False}, {"title": "wrong"}):
+            self.assertEqual(self.client.post(trash_url + "delete/", request | changes, content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post(trash_url + "delete/", request, content_type="application/json").status_code, 204)
+        self.assertFalse(Document.objects.filter(pk=document_id).exists())
+        self.assertFalse(Version.objects.filter(document_id=document_id).exists())
+        self.assertTrue(all(not (self.storage / path).exists() for path in stored))
+        self.assertFalse(PendingDocumentDeletion.objects.exists())
+        audit = DocumentTrashAudit.objects.get(document_id=document_id, action="permanent")
+        self.assertEqual((audit.actor_id, audit.version_count), (admin.pk, 3))
+
+    def test_permanent_file_cleanup_can_be_retried(self):
+        item = self.post_file(b"# Retry cleanup").json()
+        document_id = item["id"]
+        self.client.delete(f"/api/documents/{document_id}/")
+        self.client.force_login(User.objects.create_user("admin", "admin@example.test", role=User.Role.ADMIN))
+        request = {"title": item["title"], "confirm": True}
+        with patch("documents.trash.shutil.rmtree", side_effect=OSError("storage temporarily offline")):
+            response = self.client.post(f"/api/trash/{document_id}/delete/", request, content_type="application/json")
+        self.assertEqual(response.status_code, 202)
+        self.assertFalse(Document.objects.filter(pk=document_id).exists())
+        self.assertTrue(PendingDocumentDeletion.objects.filter(pk=document_id).exists())
+        call_command("finish_document_deletions")
+        self.assertFalse(PendingDocumentDeletion.objects.filter(pk=document_id).exists())
+        self.assertFalse((self.storage / "versions" / document_id).exists())
 
     def test_filter_by_html_and_markdown(self):
         html = self.post_file(b"<p>HTML document</p>", "example.html")

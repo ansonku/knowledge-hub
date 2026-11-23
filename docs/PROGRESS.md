@@ -1,6 +1,6 @@
 # Knowledge Hub 開發進度與交接
 
-截至 2026-11-23，M0 至 M3 已推送到 GitHub 的 `main`。目前基準是 `7ec53a5`，M3 的 GitHub Actions 已通過。M4 已完成本機驗收。 [M3 提交](https://github.com/ansonku/knowledge-hub/commit/7ec53a5c0c1730f4763a6fade7618e20baa0775b) · [M3 驗收](https://github.com/ansonku/knowledge-hub/actions/runs/45149036020)
+截至 2026-11-23，M0 至 M4 已推送到 GitHub 的 `main`。目前基準是 `eba067a`，M4 的 GitHub Actions 已通過。M5 已完成本機驗收。 [M3 提交](https://github.com/ansonku/knowledge-hub/commit/7ec53a5c0c1730f4763a6fade7618e20baa0775b) · [M3 驗收](https://github.com/ansonku/knowledge-hub/actions/runs/45149036020)
 
 ## 已完成
 
@@ -18,3 +18,8 @@ HTML 可能引用外部 HTTPS 資源，因此決定保留「開啟 HTML 預覽�
 ## M4 版本歷史與還原
 
 文件頁已有版本清單、舊版閱讀與原始檔下載、Monaco 雙版比較，以及 Admin 和 Editor 的還原功能。還原會建立新版本，記錄操作者、還原來源、原先的目前版本和新版本。相同基準的併發還原只接受一筆。33 項後端測試通過，儲存檢查已核對本機版本檔案。 [里程碑計畫](docs/IMPLEMENTATION_PLAN.md#m4--version-history)
+
+
+## M5 搜尋與回收桶
+
+知識總覽可依標題、分類、標籤及目前版本正文搜尋。中文支援連續字串搜尋，HTML 索引會略過腳本與樣式。回收桶可還原文件與全部版本。永久刪除僅限 Admin，需輸入完整標題，並保留稽核及可重試的清理工作。37 項後端測試通過。 [M4 驗收](https://github.com/ansonku/knowledge-hub/actions/runs/45165226728)

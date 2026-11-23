@@ -4,13 +4,14 @@ from pathlib import Path
 from django.core.files import File
 from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from users.models import User
 from users.permissions import has_role
 
-from . import storage
-from .models import Document, Version, VersionRestoreAudit
+from . import search, storage
+from .models import Document, DocumentTrashAudit, Version, VersionRestoreAudit
 
 
 STORAGE_LOCK_KEY = "knowledge-hub:document-files"
@@ -61,7 +62,7 @@ def add_upload(actor, data, document_id=None):
             document = get_object_or_404(active_documents().select_for_update(), pk=document_id)
             if document.format != suffix:
                 raise ValidationError({"file": "新版本必須維持原始文件格式。"})
-            current = document.current_version
+            current = Version.objects.defer("search_text").get(pk=document.current_version_id)
             if base_version is not None:
                 if document.format != Document.Format.MARKDOWN:
                     raise ValidationError({"file": "只支援編輯 Markdown 文件。"})
@@ -85,7 +86,9 @@ def change_document(actor, document_id, data=None):
     document = get_object_or_404(active_documents().select_for_update(), pk=document_id)
     if data is None:
         document.is_trashed = True
-        document.save(update_fields=["is_trashed", "updated_at"])
+        document.trashed_at = timezone.now()
+        document.save(update_fields=["is_trashed", "trashed_at", "updated_at"])
+        record_trash_action(document, actor, "trashed")
     else:
         fields = [field for field in ("title", "category") if field in data]
         for field in fields:
@@ -104,12 +107,14 @@ def lock_storage(sha256):
 
 
 def publish_version(document, actor, temporary, sha256, size, number, filename, note, source, restored_from=None):
+    with temporary.open("rb") as stream:
+        search_text = search.extract(stream, document.format)
     version_id = uuid.uuid4()
     path = storage.publish(temporary, document.id, version_id)
     version = Version.objects.create(
         id=version_id, document=document, number=number, path=path, filename=filename,
         sha256=sha256, size=size, note=note, created_by=actor, source=source,
-        restored_from=restored_from,
+        restored_from=restored_from, search_text=search_text,
     )
     document.current_version = version
     document.save(update_fields=["current_version", "updated_at"])
@@ -118,7 +123,7 @@ def publish_version(document, actor, temporary, sha256, size, number, filename, 
 
 def restore_version(actor, document_id, version_id, *, base_version, note=""):
     require_editor(actor)
-    selected = get_object_or_404(Version, pk=version_id, document_id=document_id, document__is_trashed=False)
+    selected = get_object_or_404(Version.objects.defer("search_text"), pk=version_id, document_id=document_id, document__is_trashed=False)
     with storage.open_version(selected, document_id) as original, storage.stage(
         File(original), max_bytes=selected.size,
     ) as (temporary, sha256, size), transaction.atomic():
@@ -126,7 +131,7 @@ def restore_version(actor, document_id, version_id, *, base_version, note=""):
             raise ValidationError({"detail": "舊版檔案完整性檢查失敗。"})
         lock_storage(sha256)
         document = get_object_or_404(active_documents().select_for_update(), pk=document_id)
-        previous = document.current_version
+        previous = Version.objects.defer("search_text").get(pk=document.current_version_id)
         if previous.pk != base_version:
             raise VersionConflict()
         if previous.pk == selected.pk:
@@ -139,3 +144,10 @@ def restore_version(actor, document_id, version_id, *, base_version, note=""):
             document=document, actor=actor, restored_from=selected, previous_version=previous, new_version=version,
         )
     return document
+
+
+def record_trash_action(document, actor, action):
+    DocumentTrashAudit.objects.create(
+        document_id=document.pk, title=document.title, actor=actor,
+        action=action, version_count=document.versions.count(),
+    )

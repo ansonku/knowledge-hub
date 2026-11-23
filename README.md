@@ -96,3 +96,9 @@ Markdown 閱讀與分割預覽共用渲染器。支援表格、刪除線及唯�
 文件頁的「版本歷史」列出每個版本的作者、時間、更新說明和來源。可點選版本號閱讀舊版、下載原始檔，或勾選兩版使用 Monaco 比較。舊版 HTML 沿用本機手動開啟的沙箱預覽；公開站點可下載舊版附件。
 
 Admin 和 Editor 可從舊版選擇還原。系統會複製舊版內容，建立下一版並記錄來源及操作者。若確認期間已有其他人更新目前版本，系統會要求重新確認。
+
+## M5 搜尋與回收桶
+
+知識總覽可搜尋標題、分類、標籤及目前版本正文。HTML 索引只擷取文字，略過腳本與樣式。PostgreSQL 全文搜尋處理詞彙比對，中文可用連續字串查詢。啟動後會補建舊文件目前版本的索引；若需手動重試，可執行 `docker compose exec backend python manage.py index_document_search`。
+
+Admin 和 Editor 可在回收桶還原文件及所有版本。只有 Admin 可以永久刪除，必須打開確認視窗並輸入完整文件標題。移入回收桶、還原及永久刪除都會留下稽核紀錄。若檔案清理暫時失敗，系統保留清理工作，可在重新啟動環境時重試，或執行 `docker compose exec backend python manage.py finish_document_deletions`。

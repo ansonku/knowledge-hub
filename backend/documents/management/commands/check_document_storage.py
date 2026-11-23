@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
-from documents.models import Version
+from documents.models import PendingDocumentDeletion, Version
 from documents.services import STORAGE_LOCK_KEY
 from documents.storage import root, sync_directory
 
@@ -18,7 +18,11 @@ class Command(BaseCommand):
             cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
         base = root()
         expected = set(Version.objects.values_list("path", flat=True))
-        present = {str(path.relative_to(base)) for path in (base / "versions").glob("*/*") if path.is_file()}
+        pending = {str(item) for item in PendingDocumentDeletion.objects.values_list("pk", flat=True)}
+        present = {
+            str(path.relative_to(base)) for path in (base / "versions").glob("*/*")
+            if path.is_file() and path.parent.name not in pending
+        }
         for path in sorted(present - expected):
             self.stdout.write(f"Unreferenced: {path}")
             if options["quarantine"]:

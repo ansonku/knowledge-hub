@@ -9,6 +9,9 @@ router.register("tags", views.TagViewSet)
 
 urlpatterns = [
     path("documents/", views.documents),
+    path("trash/", views.trash_list),
+    path("trash/<uuid:document_id>/restore/", views.restore_trashed_document),
+    path("trash/<uuid:document_id>/delete/", views.delete_trashed_document),
     path("documents/<uuid:document_id>/", views.document_detail),
     path("documents/<uuid:document_id>/versions/", views.new_version),
     path("documents/<uuid:document_id>/versions/<uuid:version_id>/", views.version_detail),

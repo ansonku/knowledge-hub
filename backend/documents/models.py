@@ -1,8 +1,9 @@
 import uuid
 
 from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
-from django.db.models.functions import Lower
+from django.db.models.functions import Lower, Upper
 
 
 class Category(models.Model):
@@ -39,6 +40,7 @@ class Document(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     current_version = models.ForeignKey("Version", null=True, on_delete=models.PROTECT, related_name="+")
     is_trashed = models.BooleanField(default=False)
+    trashed_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -50,6 +52,7 @@ class Version(models.Model):
     path = models.CharField(max_length=128, unique=True)
     filename = models.CharField(max_length=255)
     sha256 = models.CharField(max_length=64, db_index=True)
+    search_text = models.TextField(null=True, editable=False)
     size = models.PositiveBigIntegerField()
     note = models.CharField(max_length=500, blank=True)
     source = models.CharField(max_length=16, default="upload", editable=False)
@@ -59,6 +62,7 @@ class Version(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["document", "number"], name="unique_document_version")]
+        indexes = [GinIndex(OpClass(Upper("search_text"), name="gin_trgm_ops"), name="version_search_trgm")]
 
 
 class PreviewTicket(models.Model):
@@ -77,4 +81,18 @@ class VersionRestoreAudit(models.Model):
     restored_from = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="+")
     previous_version = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="+")
     new_version = models.OneToOneField(Version, on_delete=models.CASCADE, related_name="restore_audit")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class DocumentTrashAudit(models.Model):
+    document_id = models.UUIDField(db_index=True)
+    title = models.CharField(max_length=240)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=16)
+    version_count = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PendingDocumentDeletion(models.Model):
+    document_id = models.UUIDField(primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)

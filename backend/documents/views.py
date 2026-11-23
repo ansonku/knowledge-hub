@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import IntegrityError, connection, transaction
+from django.db.models import Count
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -8,9 +9,9 @@ from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from users.permissions import CanReadLibrary
+from users.permissions import CanReadLibrary, IsAdmin
 
-from . import services, storage
+from . import search, services, storage, trash
 from .models import Category, Document, Tag, Version
 from .preview import local_preview_enabled
 from .serializers import (
@@ -27,7 +28,12 @@ from .serializers import (
 
 
 def document_list():
-    return services.active_documents().select_related("category", "current_version__created_by", "current_version__restored_from").prefetch_related("tags")
+    return (
+        services.active_documents()
+        .select_related("category", "current_version__created_by", "current_version__restored_from")
+        .defer("current_version__search_text", "current_version__restored_from__search_text")
+        .prefetch_related("tags")
+    )
 
 
 def ids_in_subtree(parent):
@@ -56,6 +62,9 @@ def documents(request):
         return Response(DocumentSerializer(document).data, status=201)
     query = document_list().order_by("-updated_at", "id")
     filters = request.query_params
+    if keywords := filters.get("q"):
+        keywords = serializers.CharField(max_length=240, allow_blank=True).run_validation(keywords)
+        query = search.filter_documents(query, keywords)
     if category := filters.get("category"):
         if category == "uncategorized":
             query = query.filter(category__isnull=True)
@@ -116,7 +125,7 @@ def new_version(request, document_id, edit=False):
 def document_versions(document_id):
     return Version.objects.filter(document_id=document_id, document__is_trashed=False).select_related(
         "created_by", "restored_from",
-    )
+    ).defer("search_text", "restored_from__search_text")
 
 
 def version_history(request, document_id):
@@ -175,6 +184,53 @@ def restore_version(request, document_id, version_id):
     form.is_valid(raise_exception=True)
     document = services.restore_version(request.user, document_id, version_id, **form.validated_data)
     return Response(DocumentSerializer(document).data, status=201)
+
+
+class PermanentDeletion(serializers.Serializer):
+    title = serializers.CharField(max_length=240, trim_whitespace=False)
+    confirm = serializers.BooleanField()
+
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([CanReadLibrary])
+def trash_list(request):
+    services.require_editor(request.user)
+    page = serializers.IntegerField(min_value=1, max_value=1_000_000).run_validation(request.query_params.get("page", 1))
+    size = 25
+    documents = Document.objects.filter(is_trashed=True).select_related("category").annotate(
+        version_count=Count("versions"),
+    ).order_by("-trashed_at", "-updated_at", "id")
+    return Response({
+        "count": documents.count(), "page_size": size, "results": [
+            {
+                "id": doc.pk, "title": doc.title, "format": doc.format,
+                "category": doc.category.name if doc.category else None,
+                "trashed_at": doc.trashed_at or doc.updated_at, "version_count": doc.version_count,
+            }
+            for doc in documents[(page - 1) * size:page * size]
+        ],
+    })
+
+
+@never_cache
+@api_view(["POST"])
+@permission_classes([CanReadLibrary])
+def restore_trashed_document(request, document_id):
+    document = trash.restore_document(request.user, document_id)
+    return Response(DocumentSerializer(document).data)
+
+
+@never_cache
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def delete_trashed_document(request, document_id):
+    confirmation = PermanentDeletion(data=request.data)
+    confirmation.is_valid(raise_exception=True)
+    trash.queue_permanent_deletion(request.user, document_id, **confirmation.validated_data)
+    if not trash.finish_permanent_deletion(document_id):
+        return Response({"detail": "已永久移除文件紀錄，檔案清理等待重試。"}, status=202)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TaxonomyViewSet(viewsets.ModelViewSet):

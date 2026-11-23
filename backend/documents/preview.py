@@ -93,6 +93,7 @@ def html_preview(request, token):
     with transaction.atomic():
         ticket = (
             PreviewTicket.objects.select_related("version__document", "user")
+            .defer("version__search_text")
             .select_for_update(of=("self",))
             .filter(pk=ticket_digest(token), expires_at__gt=timezone.now())
             .first()

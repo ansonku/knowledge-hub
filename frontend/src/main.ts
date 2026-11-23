@@ -10,6 +10,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Home },
+    { path: '/library/trash/', component: () => import('./Trash.vue') },
     { path: '/library/', component: () => import('./Library.vue') },
     { path: '/library/:id/versions/', name: 'version-history', component: () => import('./VersionHistory.vue') },
     { path: '/library/:id/', name: 'document-reader', component: () => import('./DocumentReader.vue') },
