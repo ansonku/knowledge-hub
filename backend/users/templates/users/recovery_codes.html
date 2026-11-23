@@ -1,0 +1,8 @@
+{% extends "allauth/layouts/base.html" %}
+{% block head_title %}復原碼 · Knowledge Hub{% endblock %}
+{% block content %}
+<h1>儲存復原碼</h1>
+<p>每組復原碼可使用一次。請現在將它們存到安全的地方，離開後就無法再次查看。</p>
+<ul>{% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}</ul>
+<p><a href="{% url 'mfa_index' %}">回到雙因素驗證設定</a></p>
+{% endblock %}

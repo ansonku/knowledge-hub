@@ -1,0 +1,11 @@
+{% extends "allauth/layouts/base.html" %}
+{% block head_title %}雙因素驗證 · Knowledge Hub{% endblock %}
+{% block content %}
+<h1>雙因素驗證</h1>
+<p>輸入驗證器上的動態密碼，或輸入一組尚未使用的復原碼。</p>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">驗證並登入</button>
+</form>
+{% endblock %}

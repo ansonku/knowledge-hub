@@ -1,0 +1,20 @@
+{% extends "allauth/layouts/base.html" %}
+{% load socialaccount %}
+{% block head_title %}登入 · Knowledge Hub{% endblock %}
+{% block content %}
+<h1>登入</h1>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  {{ redirect_field }}
+  <button type="submit">登入</button>
+</form>
+<p><a href="{% url 'account_reset_password' %}">忘記密碼</a></p>
+{% get_providers as providers %}
+{% if providers %}
+  <form action="{% provider_login_url 'google' %}" method="post">
+    {% csrf_token %}
+    <button type="submit">使用 Google 登入</button>
+  </form>
+{% endif %}
+{% endblock %}

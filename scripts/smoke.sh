@@ -27,14 +27,18 @@ wait_for_health() {
 
 wait_for_health
 page=$(curl -fsS --max-time 5 "$origin/")
-[[ "$page" == *'<title>AI Knowledge Hub</title>'* ]]
+[[ "$page" == *'<title>Knowledge Hub</title>'* ]]
 asset=$(sed -nE 's/.*src="(\/assets\/[^"]+\.js)".*/\1/p' <<< "$page")
 [[ -n "$asset" ]]
 curl -fsS --max-time 5 "$origin$asset" >/dev/null
+login=$(curl -fsS --max-time 5 "$origin/accounts/login/")
+[[ "$login" == *'name="csrfmiddlewaretoken"'* ]]
+status=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 5 "$origin/api/auth/me")
+[[ "$status" == 403 ]]
 
 probe_sql <<< "CREATE TABLE m0_smoke_${probe_id} (marker integer NOT NULL);
 INSERT INTO m0_smoke_${probe_id} VALUES (1);"
 docker compose restart db
 wait_for_health
 [[ "$(probe_sql <<< "SELECT marker FROM m0_smoke_${probe_id};")" == 1 ]]
-echo "Frontend, API health and PostgreSQL persistence verified."
+echo "Frontend, login, API health and PostgreSQL persistence verified."

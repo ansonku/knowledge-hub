@@ -1,0 +1,14 @@
+{% extends "allauth/layouts/base.html" %}
+{% block head_title %}啟用帳號 · Knowledge Hub{% endblock %}
+{% block content %}
+<h1>啟用帳號</h1>
+{% if form %}
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">設定密碼並啟用</button>
+  </form>
+{% else %}
+  <p>啟用連結已過期或失效。請聯絡管理員重新寄送。</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "allauth/layouts/base.html" %}
+{% block head_title %}表單驗證失敗 · Knowledge Hub{% endblock %}
+{% block content %}
+<h1>表單驗證失敗</h1>
+<p>請重新開啟表單再送出，並確認瀏覽器允許此站台的 Cookie。</p>
+{% if request.path == '/accounts/login/' %}
+  <p><a href="{% url 'account_login' %}">重新開啟登入頁</a></p>
+{% else %}
+  <p><a href="/">回首頁</a></p>
+{% endif %}
+{% endblock %}

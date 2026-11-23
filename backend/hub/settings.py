@@ -39,3 +39,99 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
 }
+
+INSTALLED_APPS += [
+    "django.contrib.messages",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "allauth.mfa",
+]
+MIDDLEWARE += [
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
+]
+TEMPLATES = [{
+    "BACKEND": "django.template.backends.django.DjangoTemplates",
+    "DIRS": [],
+    "APP_DIRS": True,
+    "OPTIONS": {
+        "context_processors": [
+            "django.template.context_processors.request",
+            "django.contrib.auth.context_processors.auth",
+            "django.contrib.messages.context_processors.messages",
+        ],
+    },
+}]
+LANGUAGE_CODE = "zh-hant"
+AUTHENTICATION_BACKENDS = ["allauth.account.auth_backends.AuthenticationBackend"]
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": f"django.contrib.auth.password_validation.{validator}"}
+    for validator in (
+        "UserAttributeSimilarityValidator", "MinimumLengthValidator",
+        "CommonPasswordValidator", "NumericPasswordValidator",
+    )
+]
+LOGIN_URL = "account_login"
+LOGIN_REDIRECT_URL = "profile"
+LOGOUT_REDIRECT_URL = "/"
+ALLAUTH_TRUSTED_CLIENT_IP_HEADER = "X-Hub-Client-IP"
+ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_EMAIL_NOTIFICATIONS = True
+ACCOUNT_LOGIN_ON_PASSWORD_RESET = False
+ACCOUNT_REAUTHENTICATION_METHODS = ["password", "mfa"]
+ACCOUNT_PASSWORD_RESET_TOKEN_GENERATOR = "users.security.ResetTokenGenerator"
+PASSWORD_RESET_TIMEOUT = 3600
+SOCIALACCOUNT_ADAPTER = "users.adapters.SocialAccountAdapter"
+SOCIALACCOUNT_AUTO_SIGNUP = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
+SOCIALACCOUNT_STORE_TOKENS = False
+SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_REAUTHENTICATION_REQUIRED = True
+GOOGLE_CONFIGURED = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "OAUTH_PKCE_ENABLED": True,
+        "APPS": [{
+            "client_id": os.environ["GOOGLE_CLIENT_ID"],
+            "secret": os.environ["GOOGLE_CLIENT_SECRET"],
+        }] if GOOGLE_CONFIGURED else [],
+    }
+}
+MFA_ADAPTER = "users.adapters.MFAAdapter"
+MFA_SUPPORTED_TYPES = ["totp"]
+MFA_TOTP_ISSUER = "Knowledge Hub"
+MFA_FORMS = {
+    "authenticate": "users.mfa.AuthenticateForm",
+}
+CACHES = {"default": {
+    "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+    "LOCATION": "hub_security_cache",
+    "KEY_FUNCTION": "users.security.cache_key",
+}}
+PUBLIC_ORIGIN = os.getenv("PUBLIC_ORIGIN", "http://localhost:18080").rstrip("/")
+if PUBLIC_ORIGIN.startswith("https://"):
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    CSRF_TRUSTED_ORIGINS = [PUBLIC_ORIGIN]
+SECURE_REFERRER_POLICY = "same-origin"
+CSRF_FAILURE_VIEW = "users.views.csrf_failure"
+EMAIL_HOST = os.getenv("SMTP_HOST", "")
+EMAIL_PORT = int(os.getenv("SMTP_PORT") or 587)
+EMAIL_HOST_USER = os.getenv("SMTP_USERNAME", "")
+EMAIL_HOST_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL") or "knowledge-hub@localhost"
+EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST else "django.core.mail.backends.filebased.EmailBackend"
+)
+EMAIL_FILE_PATH = "/tmp/hub-mail"
+MFA_ENCRYPTION_KEY = os.getenv("MFA_ENCRYPTION_KEY")

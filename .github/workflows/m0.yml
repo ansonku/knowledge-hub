@@ -1,4 +1,4 @@
-name: M0 checks
+name: Knowledge Hub checks
 on:
   push:
   pull_request:
