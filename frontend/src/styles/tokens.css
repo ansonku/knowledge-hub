@@ -1,0 +1,158 @@
+/*
+ * Design tokens for the redesigned workspace and public site (docs/docs/UI_REDESIGN.md §7).
+ * The `--ui-*` prefix keeps them separate from the legacy `--hub-*` variables in
+ * public/assets/site-brand.css, so legacy pages render exactly as before.
+ * Dark values are ready; the `.hub-dark` class is toggled from P2 onwards.
+ */
+:root {
+  /* Typography */
+  --ui-font-sans: 'Inter Variable', 'Noto Sans TC Variable', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  --ui-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --ui-text-xs: .75rem;      /* 12px */
+  --ui-text-sm: .8125rem;    /* 13px */
+  --ui-text-md: .875rem;     /* 14px: workspace UI */
+  --ui-text-lg: 1rem;
+  --ui-text-reading: 1.0625rem; /* 17px: article body */
+  --ui-text-title: clamp(1.625rem, 2.4vw, 2rem);
+  --ui-leading-tight: 1.3;
+  --ui-leading-ui: 1.5;
+  --ui-leading-reading: 1.8;
+  --ui-measure: 72ch;
+
+  /* Spacing (8pt grid) */
+  --ui-space-1: .25rem;
+  --ui-space-2: .5rem;
+  --ui-space-3: .75rem;
+  --ui-space-4: 1rem;
+  --ui-space-5: 1.5rem;
+  --ui-space-6: 2rem;
+  --ui-space-7: 3rem;
+  --ui-gutter: clamp(1rem, 3vw, 2.5rem);
+
+  /* Radius and elevation */
+  --ui-radius-sm: .375rem;
+  --ui-radius-md: .5rem;
+  --ui-radius-lg: .75rem;
+  --ui-radius-pill: 999px;
+  --ui-shadow-sm: 0 1px 2px rgb(16 24 40 / .08);
+  --ui-shadow-lg: 0 12px 32px rgb(16 24 40 / .16);
+
+  /* Layout */
+  --ui-sidebar-width: 15rem;
+  --ui-inspector-width: 20rem;
+  --ui-topbar-height: 3.5rem;
+  --ui-target: 2.75rem; /* minimum touch target */
+
+  /* Surfaces */
+  --ui-bg-shell: #f5f6f8;
+  --ui-bg-surface: #ffffff;
+  --ui-bg-subtle: #f9fafb;
+  --ui-bg-panel: #fcfcfd;
+  --ui-bg-muted: #f2f4f7;
+  --ui-bg-inverse: #101828;
+
+  /* Text */
+  --ui-text: #101828;
+  --ui-text-secondary: #344054;
+  --ui-text-muted: #5d6b82;
+  --ui-text-reading-color: #1f2a3d;
+  --ui-text-inverse: #ffffff;
+
+  /* Borders */
+  --ui-border: #e4e7ec;
+  --ui-border-subtle: #eef0f3;
+  --ui-border-strong: #d0d5dd;
+
+  /* Accent */
+  --ui-accent: #1d4ed8;
+  --ui-accent-hover: #1a3fb0;
+  --ui-accent-soft: #eef3ff;
+  --ui-accent-selected: #e6ecfb;
+  --ui-accent-on-soft: #1a3fb0;
+  --ui-focus-ring: 0 0 0 3px rgb(29 78 216 / .35);
+
+  /* Status */
+  --ui-public-text: #067647;
+  --ui-public-bg: #e7f6ee;
+  --ui-public-dot: #12b76a;
+  --ui-lagging-text: #8a4b00;
+  --ui-lagging-bg: #fff1d6;
+  --ui-lagging-dot: #d98a00;
+  --ui-lagging-border: #f7d9a0;
+  --ui-private-text: #344054;
+  --ui-private-bg: #f2f4f7;
+  --ui-private-dot: #98a2b3;
+  --ui-danger: #b42318;
+  --ui-danger-border: #f1b5ae;
+  --ui-danger-bg: #fef3f2;
+
+  /* Code */
+  --ui-code-bg: #0f172a;
+  --ui-code-text: #e2e8f0;
+  --ui-code-inline-bg: #f2f4f7;
+}
+
+.hub-dark {
+  --ui-bg-shell: #0c111b;
+  --ui-bg-surface: #111827;
+  --ui-bg-subtle: #161e2e;
+  --ui-bg-panel: #131b2b;
+  --ui-bg-muted: #1d2738;
+  --ui-bg-inverse: #f2f4f7;
+
+  --ui-text: #f2f4f7;
+  --ui-text-secondary: #d0d5dd;
+  --ui-text-muted: #98a2b3;
+  --ui-text-reading-color: #e4e7ec;
+  --ui-text-inverse: #101828;
+
+  --ui-border: #273244;
+  --ui-border-subtle: #1f2939;
+  --ui-border-strong: #344054;
+
+  --ui-accent: #6f96ff;
+  --ui-accent-hover: #8fadff;
+  --ui-accent-soft: #1a2747;
+  --ui-accent-selected: #1e2d52;
+  --ui-accent-on-soft: #b3c8ff;
+  --ui-focus-ring: 0 0 0 3px rgb(111 150 255 / .45);
+
+  --ui-public-text: #6ce9a6;
+  --ui-public-bg: #0f2e22;
+  --ui-lagging-text: #fdd88a;
+  --ui-lagging-bg: #33240a;
+  --ui-lagging-border: #5c430f;
+  --ui-private-text: #d0d5dd;
+  --ui-private-bg: #1d2738;
+  --ui-danger: #fda29b;
+  --ui-danger-border: #7a271a;
+  --ui-danger-bg: #2d1512;
+
+  --ui-code-bg: #0a0f1a;
+  --ui-code-inline-bg: #1d2738;
+}
+
+/* Root class for the new layouts (AppLayout, PublicLayout). */
+.hub-app {
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-md);
+  line-height: var(--ui-leading-ui);
+  color: var(--ui-text);
+  background: var(--ui-bg-shell);
+  -webkit-font-smoothing: antialiased;
+}
+.hub-app :focus-visible {
+  outline: none;
+  box-shadow: var(--ui-focus-ring);
+}
+.hub-app code, .hub-app pre, .hub-app kbd {
+  font-family: var(--ui-font-mono);
+}
+.ui-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
