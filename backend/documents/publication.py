@@ -16,7 +16,7 @@ from rest_framework.response import Response
 
 from users.permissions import IsAdmin
 
-from . import search, storage
+from . import activity, search, storage
 from .models import ArticlePublication, ArticlePublicationAudit, Document
 from .public_html import readable_html
 
@@ -30,6 +30,11 @@ def record_action(publication, actor, action):
     ArticlePublicationAudit.objects.create(
         document_id=publication.document_id, version_id=publication.version_id,
         version_number=publication.version.number, title=publication.title, actor=actor, action=action,
+    )
+    activity.record(
+        publication.document_id, actor,
+        activity.Action.WITHDRAWN if action == "withdrawn" else activity.Action.PUBLISHED,
+        version_number=publication.version.number, republished=action == "republished" or None,
     )
 
 

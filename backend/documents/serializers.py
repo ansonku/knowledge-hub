@@ -1,12 +1,18 @@
 from rest_framework import serializers
 
-from .models import Category, Document, Tag, Version
+from .models import Category, Document, DocumentActivity, Tag, Version
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    document_count = serializers.SerializerMethodField()
+
+    def get_document_count(self, category):
+        # Direct, non-trashed documents only; the client sums subtrees.
+        return getattr(category, "document_count", 0)
+
     class Meta:
         model = Category
-        fields = ["id", "name", "parent"]
+        fields = ["id", "name", "parent", "description", "color", "document_count"]
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -42,9 +48,41 @@ class DocumentSerializer(serializers.ModelSerializer):
 
 class DocumentListSerializer(DocumentSerializer):
     is_public = serializers.BooleanField(read_only=True)
+    is_favorite = serializers.BooleanField(read_only=True)
+    published_version = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta(DocumentSerializer.Meta):
-        fields = [*DocumentSerializer.Meta.fields, "is_public"]
+        fields = [*DocumentSerializer.Meta.fields, "is_public", "is_favorite", "published_version"]
+
+
+class ActivitySerializer(serializers.ModelSerializer):
+    actor = serializers.SerializerMethodField()
+    document = serializers.SerializerMethodField()
+
+    def get_actor(self, item):
+        user = item.actor
+        return user.display_name or user.username if user else None
+
+    def get_document(self, item):
+        return {"id": item.document_id, "title": item.document.title, "format": item.document.format}
+
+    class Meta:
+        model = DocumentActivity
+        fields = ["id", "action", "actor", "version_number", "detail", "created_at", "document"]
+
+
+class BulkChange(serializers.Serializer):
+    ids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=100)
+    action = serializers.ChoiceField(["move", "add_tags", "remove_tags", "trash"])
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), allow_null=True, required=False)
+    tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True, required=False)
+
+    def validate(self, data):
+        if data["action"] == "move" and "category" not in data:
+            raise serializers.ValidationError({"category": "請選擇要移動到的集合。"})
+        if data["action"] in ("add_tags", "remove_tags") and not data.get("tags"):
+            raise serializers.ValidationError({"tags": "請選擇標籤。"})
+        return data
 
 
 class DocumentMetadata(serializers.Serializer):

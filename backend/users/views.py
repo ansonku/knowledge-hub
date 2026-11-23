@@ -50,7 +50,10 @@ def me(request):
         if not form.is_valid():
             return Response({"errors": form.errors.get_json_data()}, status=400)
         save_profile(request.user)
-    return Response({**account_payload(request.user), "csrf_token": get_token(request)})
+    return Response({
+        **account_payload(request.user), "csrf_token": get_token(request),
+        "limits": {"bytes": settings.DOCUMENT_MAX_BYTES, "batch": settings.DOCUMENT_MAX_BATCH},
+    })
 
 
 @transaction.atomic

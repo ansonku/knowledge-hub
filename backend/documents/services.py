@@ -10,7 +10,7 @@ from rest_framework.exceptions import APIException, PermissionDenied, Validation
 from users.models import User
 from users.permissions import has_role
 
-from . import search, storage
+from . import activity, search, storage
 from .models import Document, DocumentTrashAudit, Version, VersionRestoreAudit
 from .publication import withdraw_publication
 
@@ -91,14 +91,45 @@ def change_document(actor, document_id, data=None):
         document.trashed_at = timezone.now()
         document.save(update_fields=["is_trashed", "trashed_at", "updated_at"])
         record_trash_action(document, actor, "trashed")
+        activity.record(document.pk, actor, activity.Action.TRASHED)
     else:
+        before = activity.metadata_snapshot(document)
         fields = [field for field in ("title", "category") if field in data]
         for field in fields:
             setattr(document, field, data[field])
         if "tags" in data:
             document.tags.set(data["tags"])
         document.save(update_fields=[*fields, "updated_at"])
+        activity.record_metadata(document, actor, before)
     return document
+
+
+BULK_LIMIT = 100
+
+
+@transaction.atomic
+def bulk_change(actor, document_ids, action, *, category=None, tags=()):
+    """Apply one change to several documents atomically, each through change_document."""
+    require_editor(actor)
+    ids = list(dict.fromkeys(document_ids))
+    if not ids or len(ids) > BULK_LIMIT:
+        raise ValidationError({"ids": f"請選擇 1 至 {BULK_LIMIT} 份文件。"})
+    # Lock in a stable order so concurrent bulk requests cannot deadlock.
+    found = set(active_documents().select_for_update().filter(pk__in=ids).order_by("pk").values_list("pk", flat=True))
+    if missing := [str(pk) for pk in ids if pk not in found]:
+        raise ValidationError({"ids": "部分文件已不存在或已移入回收桶，請重新整理後再試。", "missing": missing})
+    tag_ids = {tag.pk for tag in tags}
+    for document_id in ids:
+        if action == "trash":
+            change_document(actor, document_id)
+        elif action == "move":
+            change_document(actor, document_id, {"category": category})
+        else:
+            current = set(Document.objects.get(pk=document_id).tags.values_list("pk", flat=True))
+            updated = current | tag_ids if action == "add_tags" else current - tag_ids
+            if updated != current:
+                change_document(actor, document_id, {"tags": list(updated)})
+    return len(ids)
 
 
 def lock_storage(sha256):
@@ -120,6 +151,7 @@ def publish_version(document, actor, temporary, sha256, size, number, filename, 
     )
     document.current_version = version
     document.save(update_fields=["current_version", "updated_at"])
+    activity.record_version(version)
     return version
 
 

@@ -10,6 +10,10 @@ class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=120)
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="children")
+    description = models.TextField(max_length=1000, blank=True)
+    color = models.CharField(max_length=8, blank=True, choices=[
+        (name, name) for name in ("blue", "teal", "green", "amber", "orange", "red", "purple", "gray")
+    ])
 
     class Meta:
         ordering = ["name", "id"]
@@ -116,3 +120,51 @@ class ArticlePublicationAudit(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     action = models.CharField(max_length=16)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Favorite(models.Model):
+    """A member's bookmarked document; private to that member."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="favorites")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint("user", "document", name="unique_favorite")]
+        indexes = [models.Index(fields=["user", "-created_at"], name="favorite_user_recent")]
+
+
+class DocumentView(models.Model):
+    """The last time a member opened a document; private to that member."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="+")
+    viewed_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint("user", "document", name="unique_document_view")]
+        indexes = [models.Index(fields=["user", "-viewed_at"], name="document_view_user_recent")]
+
+
+class DocumentActivity(models.Model):
+    """Unified activity feed for a document. Rows go away with the document on permanent deletion."""
+
+    class Action(models.TextChoices):
+        CREATED = "created", "Created"
+        UPLOADED = "uploaded", "Uploaded version"
+        EDITED = "edited", "Edited Markdown"
+        RESTORED_VERSION = "restored_version", "Restored version"
+        METADATA = "metadata", "Changed details"
+        TRASHED = "trashed", "Moved to trash"
+        RESTORED = "restored", "Restored from trash"
+        PUBLISHED = "published", "Published"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="activities")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    action = models.CharField(max_length=20, choices=Action.choices)
+    version_number = models.PositiveIntegerField(null=True)
+    detail = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["document", "-created_at"], name="activity_document_recent")]
