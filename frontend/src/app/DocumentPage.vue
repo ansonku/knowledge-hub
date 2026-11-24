@@ -9,7 +9,7 @@ import Skeleton from 'primevue/skeleton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 import MarkdownBody from '../MarkdownBody.vue'
@@ -67,12 +67,43 @@ const leadingTitle = computed(() => {
 })
 const tocHeadings = computed(() => leadingTitle.value ? rendered.value.headings.slice(1) : rendered.value.headings)
 const previewSource = ref('')
-const preview = computed(() => renderMarkdown(previewSource.value))
+const preview = computed(() => renderMarkdown(previewSource.value, { sourceLines: true }))
 watch(draft, (value, _, onCleanup) => {
   const timer = setTimeout(() => { previewSource.value = value }, 170)
   onCleanup(() => clearTimeout(timer))
 }, { immediate: true })
 const article = ref<HTMLElement>()
+const previewPane = ref<HTMLElement>()
+
+/** Ctrl+S in the editor: go to the version note, where Enter saves. Saving is never a single keystroke. */
+function focusNote() {
+  const input = document.getElementById('version-note') as HTMLInputElement | null
+  input?.focus()
+  input?.select()
+}
+
+/** Keeps the split preview at the part of the document the editor is showing. */
+let editorLine = 1
+function syncPreview(line: number) {
+  editorLine = line
+  const pane = previewPane.value
+  if (!pane || mode.value !== 'split') return
+  if (line === Infinity) { pane.scrollTop = pane.scrollHeight; return }
+  const blocks = Array.from(pane.querySelectorAll<HTMLElement>('[data-source-line]'))
+  const paneTop = pane.getBoundingClientRect().top - pane.scrollTop
+  const top = (element: HTMLElement) => element.getBoundingClientRect().top - paneTop
+  let index = -1
+  for (const [position, block] of blocks.entries()) if (Number(block.dataset.sourceLine) <= line) index = position
+  if (index < 0 || line <= 1) { pane.scrollTop = 0; return }
+  const block = blocks[index], next = blocks[index + 1]
+  const from = Number(block.dataset.sourceLine)
+  const to = next ? Number(next.dataset.sourceLine) : from + 1
+  const end = next ? top(next) : top(block) + block.offsetHeight
+  pane.scrollTop = Math.max(0, top(block) + (end - top(block)) * Math.min(1, (line - from) / Math.max(1, to - from)) - 12)
+}
+// The preview re-renders a moment after typing; put it back where the editor is.
+watch(preview, () => syncPreview(editorLine), { flush: 'post' })
+watch(mode, next => { if (next !== 'split') editorLine = 1 })
 
 watch([documentId, versionId], () => {
   mode.value = 'read'
@@ -87,8 +118,12 @@ watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
   if (/^section-\d+$/.test(anchor)) requestAnimationFrame(() => jumpToHeading(article.value, anchor, false))
 })
 
+const editorBar = ref<HTMLElement>()
 function setMode(next: Mode) {
+  const entering = mode.value === 'read' && next !== 'read'
   mode.value = next
+  // The editor is as tall as the window: bring its save bar up under the top bar so all of it is in view.
+  if (entering) void nextTick(() => editorBar.value?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
 }
 // Monaco has one global theme; follow the workspace appearance whenever an editor is on screen.
 watch([() => theme.isDark, mode], ([dark, current]) => {
@@ -425,12 +460,12 @@ onBeforeUnmount(() => {
 
           <!-- Markdown: edit / split -->
           <div v-else-if="file.format === 'md'" class="editor">
-            <form class="editor-bar" @submit.prevent="save">
+            <form ref="editorBar" class="editor-bar" @submit.prevent="save">
               <span class="draft-state" :class="{ dirty }" role="status">
                 <span class="dot" aria-hidden="true" />{{ dirty ? '尚未儲存的變更' : '沒有變更' }}
               </span>
               <label for="version-note" class="ui-visually-hidden">更新說明</label>
-              <InputText id="version-note" v-model="note" maxlength="500" placeholder="更新說明（選填）" size="small"
+              <InputText id="version-note" v-model="note" maxlength="500" placeholder="更新說明（選填），按 Enter 儲存" size="small"
                 class="note" :disabled="saving" />
               <Button v-if="dirty" type="button" label="捨棄變更" text severity="secondary" size="small" :disabled="saving" @click="discard" />
               <Button type="submit" :label="`儲存為 v${file.current_version.number + 1}`" size="small" :loading="saving"
@@ -438,8 +473,8 @@ onBeforeUnmount(() => {
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" />
-              <div v-if="mode === 'split'" class="preview" aria-label="即時預覽">
+              <Monaco v-model="draft" :readonly="saving" @save="focusNote" @scroll-line="syncPreview" />
+              <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
                 <span class="preview-label">即時預覽</span>
                 <MarkdownBody :rendered="preview" />
               </div>
@@ -582,8 +617,10 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .reading :deep(hr) { border: 0; border-top: 1px solid var(--ui-border); margin: 2rem 0; }
 
 /* Editor */
-.editor { display: grid; gap: var(--ui-space-3); }
+/* Editor and preview fill the window below the top bar and the save bar (was 100vh - 23rem until 2026-11-24). */
+.editor { --editor-height: clamp(28rem, calc(100vh - var(--ui-topbar-height) - 6.5rem), 90rem); display: grid; gap: var(--ui-space-3); }
 .editor-bar {
+  scroll-margin-top: calc(var(--ui-topbar-height) + var(--ui-space-3));
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-3);
   border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-subtle);
 }
@@ -592,11 +629,10 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .draft-state.dirty { color: var(--ui-lagging-text); }
 .draft-state.dirty .dot { background: var(--ui-lagging-dot); }
 .note { flex: 1 1 14rem; max-width: 24rem; }
-.panes { display: grid; gap: var(--ui-space-3); }
+.panes { display: grid; gap: var(--ui-space-3); min-height: var(--editor-height); }
 .panes.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.panes :deep(.editor-host) { border: 1px solid var(--ui-border); }
 .preview {
-  max-height: clamp(28rem, calc(100vh - 23rem), 64rem); overflow: auto; padding: var(--ui-space-4) var(--ui-space-5);
+  max-height: var(--editor-height); overflow: auto; padding: var(--ui-space-4) var(--ui-space-5);
   border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); box-sizing: border-box; font-size: 1rem;
 }
 .preview-label { display: block; margin-bottom: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; }
@@ -633,5 +669,6 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 }
 @media (max-width: 900px) {
   .topbar { position: static; padding-inline: var(--ui-space-4); }
+  .editor-bar { scroll-margin-top: var(--ui-space-3); }
 }
 </style>
