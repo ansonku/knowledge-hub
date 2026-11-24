@@ -202,6 +202,44 @@ class AccountTests(TestCase):
         self.assertIn('href="/app/settings/"', page)
         self.assertNotIn('href="/app/admin/members/"', page)
 
+    def test_account_pages_use_site_name_and_new_styles(self):
+        from documents.models import SiteSettings
+        SiteSettings.objects.create(name="研發<知識>庫")
+        page = Client().get(reverse("account_login")).content.decode()
+        self.assertIn("<title>登入 · 研發&lt;知識&gt;庫</title>", page)
+        self.assertIn('href="/assets/account.css"', page)
+        self.assertIn('src="/assets/account-theme.js"', page)
+        self.assertNotIn("site-brand.css", page)
+        self.assertIn('class="account entry"', page)
+        self.login(self.viewer)  # a real allauth sign-in, which would queue its notice
+        manage = self.client.get(reverse("account_change_password")).content.decode()
+        # allauth's sign-in notice is not shown on the next account page.
+        self.assertNotIn('class="messages"', manage)
+        self.assertIn('class="back"', manage)
+        self.assertNotIn('class="account entry"', manage)
+
+    def test_account_pages_use_project_mfa_wording(self):
+        self.client.force_login(self.viewer)
+        page = self.client.get(reverse("mfa_index")).content.decode()
+        self.assertIn("雙因素驗證", page)
+        self.assertIn("尚未啟用驗證器。", page)
+        for old in ("二階", "恢復碼", "authenticator 驗證器"):
+            self.assertNotIn(old, page)
+
+    def test_compiled_translations_match_the_catalogue(self):
+        import importlib.util
+        import tempfile
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent / "locale"
+        spec = importlib.util.spec_from_file_location("compile_locale", root / "compile.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        po = root / "zh_Hant" / "LC_MESSAGES" / "django.po"
+        with tempfile.TemporaryDirectory() as folder:
+            fresh = Path(folder) / "django.mo"
+            module.write_mo(module.parse(po), fresh)
+            self.assertEqual(fresh.read_bytes(), po.with_suffix(".mo").read_bytes(), "run: python locale/compile.py")
+
     def test_vue_profile_update_requires_session_and_csrf(self):
         browser = Client(enforce_csrf_checks=True)
         url = reverse("auth_me")

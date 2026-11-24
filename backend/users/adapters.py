@@ -23,6 +23,15 @@ GOOGLE_LINK_OWNER = "hub_google_link_owner"
 
 
 class AccountAdapter(DefaultAccountAdapter):
+    # The workspace (Vue) never renders Django messages, so these would only surface later on an
+    # unrelated account page ("成功以…的身份登入" above the change-password form). Drop them.
+    SILENT_MESSAGES = {"account/messages/logged_in.txt", "account/messages/logged_out.txt"}
+
+    def add_message(self, request, level, message_template=None, message_context=None, extra_tags="", message=None):
+        if message_template in self.SILENT_MESSAGES:
+            return
+        super().add_message(request, level, message_template, message_context, extra_tags, message)
+
     def is_open_for_signup(self, request):
         return False
 

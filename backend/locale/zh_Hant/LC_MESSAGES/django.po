@@ -1,0 +1,45 @@
+# Project overrides for django-allauth's Traditional Chinese wording, so the account pages use the
+# same terms as the workspace: 雙因素驗證, 驗證器, 復原碼. LOCALE_PATHS takes precedence over app
+# catalogues. Rebuild the .mo after editing: python locale/compile.py
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_Hant\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Two-Factor Authentication"
+msgstr "雙因素驗證"
+
+msgid "Your account is protected by two-factor authentication. Please enter an authenticator code:"
+msgstr "你的帳號已啟用雙因素驗證，請輸入驗證器上的驗證碼："
+
+msgid "A new set of Two-Factor Authentication recovery codes has been generated."
+msgstr "已產生一組新的雙因素驗證復原碼。"
+
+msgid "An authenticator app is not active."
+msgstr "尚未啟用驗證器。"
+
+msgid "There is %(unused_count)s out of %(total_count)s recovery codes available."
+msgid_plural "There are %(unused_count)s out of %(total_count)s recovery codes available."
+msgstr[0] "共有 %(total_count)s 組復原碼，其中 %(unused_count)s 組仍可使用。"
+
+msgid "No recovery codes set up."
+msgstr "尚未設定復原碼。"
+
+msgid "A new set of recovery codes has been generated."
+msgstr "已產生一組新的復原碼。"
+
+msgid "You are about to generate a new set of recovery codes for your account."
+msgstr "即將為你的帳號產生一組新的復原碼。"
+
+msgid "This action will invalidate your existing codes."
+msgstr "產生後，目前的復原碼會全部失效。"
+
+msgid "Authenticator secret"
+msgstr "驗證器密鑰"
+
+msgid "You can store this secret and use it to reinstall your authenticator app at a later time."
+msgstr "你可以保存這組密鑰，之後重新安裝驗證器時使用。"
+
+msgid "You are about to deactivate authenticator app based authentication. Are you sure?"
+msgstr "即將停用驗證器。確定要繼續嗎？"

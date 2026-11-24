@@ -826,3 +826,36 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 字中的底線被當成強調符號刪掉，例如 `INVALID_CHANNEL` 變成 `INVALIDCHANNEL`。現在只會去掉用在字詞前後的強調底線。
   - 後端摘要測試新增 2 項斷言，涵蓋這兩種情況。
 - `portal.py` 的「下一篇」檢查改成從導覽 API 算出預期值，所以資料變動不會讓測試失效。
+
+### P5c 登入相關頁面（2026-11-24）
+
+- 所有 Django 帳號頁面共用新的外層版型 `allauth/layouts/base.html`：
+  - 頂列和公開站同一種樣式：品牌、站名。
+  - 已登入時，頂列連結是工作區／個人設定／成員管理（Admin）／登出；未登入時是公開文章／登入。
+  - 內容放在置中的卡片裡，頁尾顯示站名。
+  - 涵蓋我們覆寫的 16 個範本，以及 allauth 內建、沒有覆寫的頁面（改密碼、重新驗證身分、雙因素驗證管理、Google 綁定、登出確認）。
+- 入口類頁面（登入、忘記密碼、雙因素驗證、帳號啟用等）沿用 `credentials.html`：卡片較窄，沒有返回連結。管理類頁面的卡片較寬，上方有「‹ 回到個人設定」。
+- 新增 `frontend/public/assets/account.css`：
+  - 使用和 `tokens.css` 相同的色彩 token，包含深色模式。
+  - 一般元素（表單、輸入框、按鈕、錯誤清單、表格、訊息）都有樣式，所以 allauth 內建的頁面也一致。舊的 `login-*` class 仍然支援。
+  - 字型用系統 UI 字型。因為內建的網頁字型是 Vite 產生的檔名，每次建置都會變，Django 範本無法引用。
+- 新增 `frontend/public/assets/account-theme.js`：讀取工作區「外觀」設定（`knowledge-hub.app.theme`），沒有設定時跟隨系統。用外部檔案而不是 inline script。
+- 移除 `site-brand.css`、`account-entry.css`。
+- 新增 context processor `hub.context_processors.site`，所有分頁標題的「· Knowledge Hub」改成 `{{ site_name }}`，跟著站台設定變。
+- 新增有樣式的 `404.html`。原本不存在的 Django 網址會顯示 Django 預設的英文頁面。
+- `AccountAdapter.add_message` 不再產生 allauth 的登入和登出提示。新介面不會顯示 Django 訊息，這些提示會一直留到下一個 Django 頁面才出現，例如改密碼頁上方出現「成功以…的身份登入」。
+- 安全流程沒有改：表單、CSRF、重新驗證身分、雙因素驗證的流程都和原本相同，只換外觀。
+- 測試：
+  - 後端新增 1 項：帳號頁會用站名（並且 escape）、載入新的樣式表和主題腳本；入口頁和管理頁使用不同版型；真正透過 allauth 登入之後，下一個帳號頁不會出現登入提示。後端共 71 項通過。
+  - Playwright 新增 `accounts.py`，共 104 項：
+    - 未登入的頁面：登入、忘記密碼、已寄出重設信、不開放註冊、無效的啟用連結、404，在 1280／500 px 下分別測淺色和深色。
+    - 已登入的頁面：改密碼、雙因素驗證、Google 綁定、重新驗證身分、登出確認，在 1280／500 px 下測試。
+    - 每頁都檢查卡片樣式、深色模式跟隨系統、頂列連結、沒有溢出；在工作區選了深色後，帳號頁也會跟著變深色。
+    - 沒有 console 錯誤。
+  - 回歸測試：導向檢查 13 項、成員管理 52 項、個人設定 49 項都通過。
+  - `smoke.sh` 通過。
+- 用語統一：
+  - 新增專案層級的翻譯覆寫檔 `backend/locale/zh_Hant/LC_MESSAGES/django.po`（`LOCALE_PATHS`），覆寫 allauth 的 12 個字串。
+  - 統一成「雙因素驗證」「驗證器」「復原碼」：原本是「二階段認證」「二階驗證」，「恢復碼」和「復原碼」混用，還有「authenticator 驗證器應用程式」這種中英夾雜。
+  - 容器裡沒有 GNU gettext，所以 `.mo` 由 `backend/locale/compile.py` 產生（只用 Python 標準函式庫），`.po` 和 `.mo` 都納入版本控制。
+  - 後端新增 2 項測試：雙因素驗證頁使用新用語；重新編譯 `.po` 的結果和 repo 裡的 `.mo` 完全一致，避免只改了 `.po` 卻忘了重新編譯。後端共 73 項通過。

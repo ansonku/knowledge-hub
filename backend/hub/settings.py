@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = False
@@ -64,10 +65,13 @@ TEMPLATES = [{
             "django.template.context_processors.request",
             "django.contrib.auth.context_processors.auth",
             "django.contrib.messages.context_processors.messages",
+            "hub.context_processors.site",
         ],
     },
 }]
 LANGUAGE_CODE = "zh-hant"
+# Project wording overrides for third-party catalogues (allauth), see locale/zh_Hant/LC_MESSAGES/django.po.
+LOCALE_PATHS = [Path(__file__).resolve().parent.parent / "locale"]
 AUTHENTICATION_BACKENDS = ["allauth.account.auth_backends.AuthenticationBackend"]
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": f"django.contrib.auth.password_validation.{validator}"}
