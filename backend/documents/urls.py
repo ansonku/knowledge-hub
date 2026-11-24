@@ -9,6 +9,7 @@ router.register("tags", views.TagViewSet)
 
 urlpatterns = [
     path("public/articles/", publication.public_articles),
+    path("site/", views.site_settings),
     path("public/collections/", publication.public_collections),
     path("public/articles/<uuid:document_id>/", publication.public_article),
     path("documents/<uuid:document_id>/publication/", publication.manage_publication),

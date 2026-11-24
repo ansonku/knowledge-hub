@@ -27,7 +27,9 @@ import ActivityTab from './inspector/ActivityTab.vue'
 import PublishTab from './inspector/PublishTab.vue'
 import VersionsTab from './inspector/VersionsTab.vue'
 import { formatLabel, longDateTime, shortDate, type DocumentRow } from './types'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 type Mode = 'read' | 'edit' | 'split'
 type Tab = 'info' | 'versions' | 'activity' | 'publish'
 
@@ -80,7 +82,7 @@ watch([documentId, versionId], () => {
 })
 watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
   if (busy) return
-  document.title = file.value ? `${file.value.title} · Knowledge Hub` : 'Knowledge Hub'
+  site.setTitle(file.value?.title)
   const anchor = window.location.hash.slice(1)
   if (/^section-\d+$/.test(anchor)) requestAnimationFrame(() => jumpToHeading(article.value, anchor, false))
 })

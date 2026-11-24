@@ -3,7 +3,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Skeleton from 'primevue/skeleton'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { api, ApiError } from '../../api'
 import { useSession } from '../../stores/session'
@@ -11,7 +11,9 @@ import { activityDetail, activityVerb, type ActivityItem } from '../activity'
 import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
 import { auditLabel, roleLabels, type MemberListing, type MemberRow } from './members'
+import { useSite } from '../../stores/site'
 
+const site = useSite()
 type Category = 'account' | 'signin' | 'document' | 'publish' | 'trash' | 'deletion'
 type Person = { id: string; name: string } | null
 type AuditRow = {
@@ -145,7 +147,7 @@ function detailLine(row: AuditRow) {
 const selfEvent = (row: AuditRow) => row.member && row.actor && row.member.id === row.actor.id
 
 onMounted(async () => {
-  void nextTick(() => { document.title = '稽核紀錄 · Knowledge Hub' })
+  site.setTitle('稽核紀錄')
   if (!session.isAdmin) {
     loading.value = false
     error.value = '只有 Admin 可以查看稽核紀錄。'

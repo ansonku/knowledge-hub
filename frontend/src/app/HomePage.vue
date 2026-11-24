@@ -10,7 +10,9 @@ import { useWorkspace } from '../stores/workspace'
 import { activityDetail, activityVerb, initialOf, type ActivityItem, type ActivityPage } from './activity'
 import UiIcon from './components/UiIcon.vue'
 import { longDateTime, shortDate, type DocumentRow } from './types'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const emit = defineEmits<{ upload: [] }>()
 const session = useSession()
 const taxonomy = useTaxonomy()
@@ -61,7 +63,7 @@ const roots = computed(() => taxonomy.tree.filter(node => node.depth === 0))
 const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 
 onMounted(async () => {
-  document.title = 'Knowledge Hub'
+  site.setTitle()
   void workspace.refresh()
   void loadActivity()
   try {

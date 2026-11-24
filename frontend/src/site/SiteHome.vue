@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { useSite } from '../stores/site'
 import Skeleton from 'primevue/skeleton'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
 import {
   colorClass, markOf, publicApi, publicDate, type PublicCardPage, type PublicCollectionCount,
 } from './public'
 
+const site = useSite()
 const route = useRoute()
 const router = useRouter()
 
@@ -88,7 +90,7 @@ const resultLine = computed(() => {
 
 onMounted(() => {
   void loadCollections()
-  void nextTick(() => { document.title = '公開文章 · Knowledge Hub' })
+  site.setTitle()
 })
 </script>
 
@@ -96,8 +98,8 @@ onMounted(() => {
   <div class="home">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-inner">
-        <h1 id="hero-title">團隊公開的知識與文章</h1>
-        <p class="lead">由團隊成員撰寫並審核後發布的技術規範、操作指南與參考文件。</p>
+        <h1 id="hero-title">{{ site.name }}</h1>
+        <p v-if="site.tagline" class="lead">{{ site.tagline }}</p>
         <form class="search" role="search" @submit.prevent="search">
           <UiIcon name="search" :size="20" />
           <label for="public-q" class="ui-visually-hidden">搜尋公開文章</label>

@@ -3,12 +3,14 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import { useSession, type Account } from '../stores/session'
 import { useTheme, type ThemeMode } from '../stores/theme'
 import UiIcon from './components/UiIcon.vue'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const session = useSession()
 const theme = useTheme()
 const toast = useToast()
@@ -55,7 +57,7 @@ const security = [
   { title: 'Google 帳號', text: '綁定 Google 帳號後，可以用 Google 登入。需要再次驗證身分。', href: '/accounts/3rdparty/', action: '管理綁定' },
 ]
 
-onMounted(() => { void nextTick(() => { document.title = '個人設定 · Knowledge Hub' }) })
+onMounted(() => site.setTitle('個人設定'))
 </script>
 
 <template>
@@ -128,7 +130,7 @@ onMounted(() => { void nextTick(() => { document.title = '個人設定 · Knowle
         <h2 id="session-title">登入狀態</h2>
       </div>
       <div class="card-body session-row">
-        <span>在這個瀏覽器登出 Knowledge Hub。</span>
+        <span>在這個瀏覽器登出 {{ site.name }}。</span>
         <a href="/accounts/logout/" class="row-action"><UiIcon name="logout" :size="16" />登出</a>
       </div>
     </section>

@@ -5,7 +5,9 @@ import UiIcon from '../app/components/UiIcon.vue'
 import { useSession } from '../stores/session'
 import { useTheme } from '../stores/theme'
 import { colorClass, markOf, publicApi, type PublicCollectionCount } from './public'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const route = useRoute()
 const session = useSession()
 const theme = useTheme()
@@ -35,7 +37,7 @@ const activeCollection = computed(() => typeof route.query.collection === 'strin
           <span class="brand-mark" aria-hidden="true">
             <svg width="28" height="28" viewBox="0 0 28 28"><rect width="28" height="28" rx="7" fill="currentColor" /><path d="M8 9h7a5 5 0 0 1 0 10H8zM8 14h6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </span>
-          <span class="brand-name">Knowledge Hub</span>
+          <span class="brand-name">{{ site.name }}</span>
         </RouterLink>
         <nav v-if="collections.length" class="collections-nav" aria-label="公開集合">
           <RouterLink v-for="item in collections.slice(0, NAV_LIMIT)" :key="item.id"
@@ -59,7 +61,7 @@ const activeCollection = computed(() => typeof route.query.collection === 'strin
 
     <footer class="site-foot">
       <div class="foot-inner">
-        <span>© {{ new Date().getFullYear() }} Knowledge Hub · 內容由成員發布</span>
+        <span>© {{ new Date().getFullYear() }} {{ site.name }} · 內容由成員發布</span>
         <span>本站只收錄經審核公開的文章</span>
       </div>
     </footer>

@@ -10,7 +10,9 @@ import { useTheme } from '../stores/theme'
 import UiIcon from './components/UiIcon.vue'
 import { versionSource, type DocumentDetails, type VersionInfo } from './composables/useDocument'
 import { longDateTime } from './types'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 type History = { current: string; count: number; page_size: number; results: VersionInfo[] }
 
 const DiffEditor = defineAsyncComponent({
@@ -53,7 +55,7 @@ async function loadMeta() {
     if (id && !known.has(id)) known.set(id, await api<VersionInfo>(`${base.value}versions/${encodeURIComponent(id)}/`))
   }
   versions.value = [...known.values()].sort((a, b) => b.number - a.number)
-  document.title = `比較版本 · ${details.title} · Knowledge Hub`
+  site.setTitle(`比較版本 · ${details.title}`)
 }
 
 async function load() {

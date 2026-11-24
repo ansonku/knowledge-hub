@@ -14,7 +14,9 @@ import { useTaxonomy } from '../stores/taxonomy'
 import { useWorkspace } from '../stores/workspace'
 import UiIcon from './components/UiIcon.vue'
 import { longDateTime, shortDate, type Format } from './types'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 type TrashRow = {
   id: string; title: string; format: Format; category: string | null; category_id: string | null
   trashed_at: string; trashed_by: string | null; version_count: number
@@ -130,7 +132,7 @@ async function permanentDelete() {
 }
 
 onMounted(() => {
-  document.title = '回收桶 · Knowledge Hub'
+  site.setTitle('回收桶')
   // The trash API is limited to editors; skip the request instead of letting it fail.
   if (!session.canEdit) {
     loading.value = false

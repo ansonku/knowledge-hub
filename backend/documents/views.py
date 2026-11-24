@@ -8,13 +8,18 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.cache import never_cache
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from users.models import User
 from users.permissions import CanReadLibrary, IsAdmin
 
 from . import search, services, storage, trash
-from .models import ArticlePublication, Category, Document, DocumentActivity, DocumentView, Favorite, Tag, Version
+from .models import (
+    AUTO_COLLECTION_COLORS, ArticlePublication, Category, Document, DocumentActivity, DocumentView, Favorite, SiteSettings, Tag,
+    Version,
+)
 from .preview import local_preview_enabled
 from .serializers import (
     ActivitySerializer,
@@ -404,6 +409,12 @@ class TaxonomyViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError({"detail": "尚有文件或子分類使用此分類。"}) from None
 
 
+def next_collection_color():
+    """The least used automatic colour, so new collections are easy to tell apart."""
+    used = dict(Category.objects.filter(color__in=AUTO_COLLECTION_COLORS).values_list("color").annotate(n=Count("pk")))
+    return min(AUTO_COLLECTION_COLORS, key=lambda color: (used.get(color, 0), AUTO_COLLECTION_COLORS.index(color)))
+
+
 class CategoryViewSet(TaxonomyViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
@@ -415,6 +426,8 @@ class CategoryViewSet(TaxonomyViewSet):
     def save_object(self, serializer):
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", ["knowledge-hub:categories"])
+        if not serializer.instance and not serializer.validated_data.get("color"):
+            serializer.validated_data["color"] = next_collection_color()
         if serializer.instance:
             category = get_object_or_404(Category, pk=serializer.instance.pk)
             parent = serializer.validated_data.get("parent", category.parent)
@@ -437,3 +450,35 @@ class TagViewSet(TaxonomyViewSet):
         payload.is_valid(raise_exception=True)
         result = services.merge_tags(request.user, payload.validated_data["sources"], payload.validated_data["target"])
         return Response(result)
+
+
+# ---- Site settings -------------------------------------------------------------------------------------------
+
+class SiteSettingsInput(serializers.Serializer):
+    name = serializers.CharField(max_length=60)
+    tagline = serializers.CharField(max_length=160, allow_blank=True)
+
+
+def site_payload(site):
+    return {"name": site.name, "tagline": site.tagline}
+
+
+@never_cache
+@api_view(["GET", "PATCH"])
+@permission_classes([AllowAny])
+def site_settings(request):
+    """Anyone can read the site name and tagline (the public site shows them); only Admins change them."""
+    if request.method == "PATCH":
+        if not IsAdmin().has_permission(request, None):
+            raise PermissionDenied
+        payload = SiteSettingsInput(data=request.data)
+        payload.is_valid(raise_exception=True)
+        with transaction.atomic():
+            site, _ = SiteSettings.objects.select_for_update().get_or_create(pk=1)
+            site.name = payload.validated_data["name"].strip() or SiteSettings.DEFAULT_NAME
+            site.tagline = payload.validated_data["tagline"].strip()
+            site.updated_by = request.user
+            site.save()
+        return Response(site_payload(site))
+    return Response(site_payload(SiteSettings.current()))
+

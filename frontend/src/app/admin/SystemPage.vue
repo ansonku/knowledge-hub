@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Skeleton from 'primevue/skeleton'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, ApiError } from '../../api'
 import { useSession } from '../../stores/session'
+import { useToast } from 'primevue/usetoast'
 import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
+import { useSite } from '../../stores/site'
 
+const site = useSite()
 type Report = {
   generated_at: string
   content: { documents: number; trashed: number; versions: number; published: number; collections: number; tags: number }
@@ -24,6 +28,31 @@ type Report = {
 
 const session = useSession()
 const report = ref<Report>()
+const toast = useToast()
+
+// ---- Site settings (name and tagline) -----------------------------------------------------------
+const siteForm = ref({ name: site.name, tagline: site.tagline })
+const siteSaving = ref(false)
+// Follow the loaded settings until the admin starts editing.
+const siteTouched = ref(false)
+watch(() => [site.name, site.tagline] as const, ([name, tagline]) => { if (!siteTouched.value) siteForm.value = { name, tagline } })
+const siteError = ref('')
+const siteDirty = computed(() => siteForm.value.name.trim() !== site.name || siteForm.value.tagline.trim() !== site.tagline)
+async function saveSite() {
+  if (!siteDirty.value || siteSaving.value || !siteForm.value.name.trim()) return
+  siteSaving.value = true
+  siteError.value = ''
+  try {
+    await site.save({ name: siteForm.value.name.trim(), tagline: siteForm.value.tagline.trim() })
+    siteForm.value = { name: site.name, tagline: site.tagline }
+    siteTouched.value = false
+    toast.add({ severity: 'success', summary: '已更新站台設定', life: 2500 })
+  } catch (cause) {
+    siteError.value = cause instanceof Error && cause.message ? cause.message : '無法儲存站台設定。'
+  } finally {
+    siteSaving.value = false
+  }
+}
 const loading = ref(true)
 const error = ref('')
 
@@ -81,7 +110,7 @@ const contentStats = computed<Stat[]>(() => {
 })
 
 onMounted(() => {
-  void nextTick(() => { document.title = '系統狀態 · Knowledge Hub' })
+  site.setTitle('系統狀態')
   if (!session.isAdmin) {
     loading.value = false
     error.value = '只有 Admin 可以查看系統狀態。'
@@ -129,6 +158,23 @@ onMounted(() => {
               </component>
             </li>
           </ul>
+        </section>
+
+        <section class="card" aria-labelledby="site-title">
+          <h2 id="site-title">站台設定</h2>
+          <form class="site-form" @submit.prevent="saveSite" @input="siteTouched = true">
+            <div class="field">
+              <label for="site-name">站名</label>
+              <InputText id="site-name" v-model="siteForm.name" maxlength="60" required />
+            </div>
+            <div class="field">
+              <label for="site-tagline">介紹 <span class="optional">選填</span></label>
+              <InputText id="site-tagline" v-model="siteForm.tagline" maxlength="160" placeholder="一句話說明這個知識庫收錄什麼" />
+            </div>
+            <p class="note">顯示在公開站首頁、頁首與頁尾、工作區側欄、瀏覽器分頁標題，以及分享連結的預覽。</p>
+            <Message v-if="siteError" severity="error" size="small">{{ siteError }}</Message>
+            <Button type="submit" label="儲存" size="small" class="save" :loading="siteSaving" :disabled="!siteDirty || !siteForm.name.trim()" />
+          </form>
         </section>
 
         <section class="card" aria-labelledby="storage-title">
@@ -239,4 +285,9 @@ h2 { margin: 0; font-size: 1rem; }
 .flag.on .dot { background: var(--ui-public-dot); }
 .flag-text { display: grid; gap: 1px; }
 .flag-text span { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.site-form { display: grid; gap: var(--ui-space-3); }
+.field { display: grid; gap: var(--ui-space-1); }
+.field label { font-weight: 600; font-size: var(--ui-text-sm); }
+.optional { color: var(--ui-text-muted); font-weight: 400; }
+.save { justify-self: start; }
 </style>

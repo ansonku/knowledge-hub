@@ -7,7 +7,9 @@ import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import { jumpToHeading } from '../headings'
 import { colorClass, markOf, publicApi, publicDate, type PublicArticle } from './public'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 const article = ref<PublicArticle>()
@@ -26,7 +28,7 @@ async function load() {
     const result = await publicApi<PublicArticle>(`/api/public/articles/${encodeURIComponent(id.value)}/`, request.signal)
     if (request.signal.aborted) return
     article.value = result
-    document.title = `${result.title} · Knowledge Hub`
+    site.setTitle(result.title)
     await nextTick()
     const anchor = window.location.hash.slice(1)
     if (/^section-\d+$/.test(anchor)) requestAnimationFrame(() => jumpToHeading(content.value, anchor, false))
@@ -35,7 +37,7 @@ async function load() {
     if (request.signal.aborted) return
     article.value = undefined
     error.value = (cause as { status?: number }).status === 404 ? '找不到這篇公開文章，可能已經下架。' : '暫時無法載入文章，請稍後再試。'
-    document.title = '公開文章 · Knowledge Hub'
+    site.setTitle()
   } finally {
     if (!request.signal.aborted) loading.value = false
   }

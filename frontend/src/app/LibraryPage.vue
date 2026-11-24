@@ -7,7 +7,7 @@ import Select from 'primevue/select'
 import Skeleton from 'primevue/skeleton'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { api, getCsrfToken } from '../api'
 import PublicationDialog from '../PublicationDialog.vue'
@@ -19,7 +19,9 @@ import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
 import { formatLabel, longDateTime, shortDate, visibilityOf, type Category, type DocumentPage, type DocumentRow, type Format, type Visibility } from './types'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const emit = defineEmits<{ upload: [] }>()
 const route = useRoute()
 const router = useRouter()
@@ -149,9 +151,7 @@ const heading = computed(() => {
   if (category.value === UNCATEGORIZED) return '未分類'
   return taxonomy.byId(category.value)?.name ?? '集合'
 })
-watch(heading, value => { document.title = `${value} · Knowledge Hub` })
-// The layout sets a generic title when it mounts (after this page), so apply ours on the next tick.
-onMounted(() => { void nextTick(() => { document.title = `${heading.value} · Knowledge Hub` }) })
+watch(heading, value => site.setTitle(value), { immediate: true })
 const breadcrumb = computed(() => taxonomy.pathOf(category.value).slice(0, -1))
 const collection = computed(() => category.value && category.value !== UNCATEGORIZED ? taxonomy.byId(category.value) : undefined)
 const editingCollection = ref<Category>()

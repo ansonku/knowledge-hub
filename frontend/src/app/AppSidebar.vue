@@ -8,7 +8,9 @@ import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import { useTheme, type ThemeMode } from '../stores/theme'
 import { useWorkspace } from '../stores/workspace'
 import UiIcon, { type IconName } from './components/UiIcon.vue'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const emit = defineEmits<{ search: []; navigate: [] }>()
 
 const session = useSession()
@@ -84,7 +86,7 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
         <rect width="28" height="28" rx="7" fill="var(--ui-accent)" />
         <path d="M8 9h7a5 5 0 0 1 0 10H8zM8 14h6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
-      <span>Knowledge Hub</span>
+      <span>{{ site.name }}</span>
     </RouterLink>
 
     <button type="button" class="search" aria-haspopup="dialog" @click="emit('search')">

@@ -16,7 +16,9 @@ import { useTaxonomy, type CategoryNode } from '../../stores/taxonomy'
 import { useWorkspace } from '../../stores/workspace'
 import UiIcon from '../components/UiIcon.vue'
 import type { CollectionColor, TagItem } from '../types'
+import { useSite } from '../../stores/site'
 
+const site = useSite()
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
@@ -194,7 +196,7 @@ async function merge() {
 }
 
 onMounted(() => {
-  void nextTick(() => { document.title = '集合與標籤 · Knowledge Hub' })
+  site.setTitle('集合與標籤')
   if (route.query.new === 'collection' && session.canEdit) {
     openCollection()
     void router.replace({ query: {} })

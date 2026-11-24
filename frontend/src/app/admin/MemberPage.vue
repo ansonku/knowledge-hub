@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSite } from '../../stores/site'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import Skeleton from 'primevue/skeleton'
@@ -15,6 +16,7 @@ import {
   type MemberDetail, type Notice,
 } from './members'
 
+const site = useSite()
 type Tab = 'profile' | 'security' | 'activity'
 const route = useRoute()
 const session = useSession()
@@ -43,7 +45,7 @@ async function load() {
     detail.value = data
     notices.value = data.notices
     newRole.value = data.account.role
-    document.title = `${memberName(data.account)} · 成員 · Knowledge Hub`
+    site.setTitle(`${memberName(data.account)} · 成員`)
   } catch (cause) {
     detail.value = undefined
     error.value = cause instanceof ApiError && cause.status === 404 ? '找不到這位成員。'

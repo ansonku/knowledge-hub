@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { useSite } from '../../stores/site'
 import Button from 'primevue/button'
 import Drawer from 'primevue/drawer'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Skeleton from 'primevue/skeleton'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { api, ApiError } from '../../api'
 import { useSession, type Role } from '../../stores/session'
@@ -16,6 +17,7 @@ import {
   type MemberListing, type MemberStatus, type Notice,
 } from './members'
 
+const site = useSite()
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
@@ -93,7 +95,7 @@ function restoreDraft(reopen: boolean) {
 }
 
 onMounted(async () => {
-  void nextTick(() => { document.title = '成員管理 · Knowledge Hub' })
+  site.setTitle('成員管理')
   if (!session.isAdmin) {
     loading.value = false
     error.value = '只有 Admin 可以管理成員。'

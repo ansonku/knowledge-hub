@@ -15,7 +15,9 @@ import CommandPalette from './components/CommandPalette.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadTray from './components/UploadTray.vue'
 import { useUploads } from '../stores/uploads'
+import { useSite } from '../stores/site'
 
+const site = useSite()
 const session = useSession()
 const taxonomy = useTaxonomy()
 const workspace = useWorkspace()
@@ -105,7 +107,6 @@ watch(() => route.fullPath, () => {
 })
 
 onMounted(() => {
-  document.title = 'Knowledge Hub'
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('hub:documents-changed', onDocumentsChanged)
   void start()
@@ -138,7 +139,7 @@ onBeforeUnmount(() => {
           :aria-expanded="drawerOpen" @click="drawerOpen = true">
           <UiIcon name="menu" :size="20" />
         </button>
-        <span class="mobile-brand">Knowledge Hub</span>
+        <span class="mobile-brand">{{ site.name }}</span>
         <button type="button" class="mobile-toggle" aria-label="搜尋或執行指令" @click="openSearch">
           <UiIcon name="search" :size="20" />
         </button>

@@ -22,6 +22,10 @@ class Category(models.Model):
         ]
 
 
+# Order used when a collection is created without choosing a colour (gray stays a deliberate choice).
+AUTO_COLLECTION_COLORS = ("blue", "teal", "green", "amber", "orange", "red", "purple")
+
+
 class Tag(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=60)
@@ -168,3 +172,23 @@ class DocumentActivity(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         indexes = [models.Index(fields=["document", "-created_at"], name="activity_document_recent")]
+
+
+class SiteSettings(models.Model):
+    """Site-wide name and tagline (one row, pk=1). Shown on the public site, the workspace and in SEO."""
+    DEFAULT_NAME = "Knowledge Hub"
+    DEFAULT_TAGLINE = "團隊成員撰寫並審核後公開的技術規範、操作指南與參考文件。"
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    name = models.CharField(max_length=60, default=DEFAULT_NAME)
+    tagline = models.CharField(max_length=160, default=DEFAULT_TAGLINE, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]
+
+    @classmethod
+    def current(cls):
+        return cls.objects.filter(pk=1).first() or cls()
+

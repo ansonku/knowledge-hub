@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from users.permissions import IsAdmin
 
 from . import activity, search, storage
-from .models import ArticlePublication, ArticlePublicationAudit, Document
+from .models import ArticlePublication, ArticlePublicationAudit, Document, SiteSettings
 from .public_html import readable_html
 
 
@@ -222,8 +222,6 @@ SIBLING_LIMIT = 200
 # <title> for the X-Hub-Head header (sub_filter). The header must be ASCII, so every value is
 # HTML-escaped and non-ASCII characters become numeric character references.
 
-SITE_NAME = "Knowledge Hub"
-SITE_DESCRIPTION = "團隊成員撰寫並審核後公開的技術規範、操作指南與參考文件。"
 HEAD_TEXT_LIMIT = 120
 
 
@@ -234,13 +232,13 @@ def head_value(text):
     return html.escape(text, quote=True).encode("ascii", "xmlcharrefreplace").decode("ascii")
 
 
-def head_markup(title, description, path, kind):
+def head_markup(title, description, path, kind, site_name):
     title, description = head_value(title), head_value(description)
     url = head_value(settings.PUBLIC_ORIGIN.rstrip("/") + path)
     return "".join((
         f"<title>{title}</title>",
         f'<meta name="description" content="{description}">',
-        f'<meta property="og:site_name" content="{SITE_NAME}">',
+        f'<meta property="og:site_name" content="{head_value(site_name)}">',
         f'<meta property="og:type" content="{kind}">',
         f'<meta property="og:title" content="{title}">',
         f'<meta property="og:description" content="{description}">',
@@ -255,7 +253,8 @@ def spa_page(head):
 @never_cache
 @require_safe
 def public_site_page(request):
-    return spa_page(head_markup(f"公開文章 · {SITE_NAME}", SITE_DESCRIPTION, "/articles/", "website"))
+    site = SiteSettings.current()
+    return spa_page(head_markup(site.name, site.tagline or site.name, "/articles/", "website", site.name))
 
 
 @never_cache
@@ -264,5 +263,6 @@ def public_article_page(request, document_id):
     row = presented(published_articles()).filter(pk=document_id).first()
     if row is None:
         return HttpResponse(status=404)
-    description = summarise(row["sample"], row["title"], row["format"]) or SITE_DESCRIPTION
-    return spa_page(head_markup(f"{row['title']} · {SITE_NAME}", description, f"/articles/{document_id}/", "article"))
+    site = SiteSettings.current()
+    description = summarise(row["sample"], row["title"], row["format"]) or site.tagline or site.name
+    return spa_page(head_markup(f"{row['title']} · {site.name}", description, f"/articles/{document_id}/", "article", site.name))
