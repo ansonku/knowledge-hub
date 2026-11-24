@@ -10,6 +10,7 @@ from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from users.models import User
 from users.permissions import CanReadLibrary, IsAdmin
 
 from . import search, services, storage, trash
@@ -323,19 +324,30 @@ def trash_list(request):
     services.require_editor(request.user)
     page = serializers.IntegerField(min_value=1, max_value=1_000_000).run_validation(request.query_params.get("page", 1))
     size = 25
+    last_trash = DocumentActivity.objects.filter(
+        document_id=OuterRef("pk"), action=DocumentActivity.Action.TRASHED,
+    ).order_by("-created_at", "-id")
     documents = Document.objects.filter(is_trashed=True).select_related("category").annotate(
-        version_count=Count("versions"),
+        version_count=Count("versions"), trashed_by_id=Subquery(last_trash.values("actor_id")[:1]),
     ).order_by("-trashed_at", "-updated_at", "id")
+    rows = list(documents[(page - 1) * size:page * size])
+    actors = {user.pk: user for user in User.objects.filter(pk__in={doc.trashed_by_id for doc in rows} - {None})}
     return Response({
         "count": documents.count(), "page_size": size, "results": [
             {
                 "id": doc.pk, "title": doc.title, "format": doc.format,
-                "category": doc.category.name if doc.category else None,
+                # "category" stays the collection name for the legacy trash page; the new page uses category_id.
+                "category": doc.category.name if doc.category else None, "category_id": doc.category_id,
                 "trashed_at": doc.trashed_at or doc.updated_at, "version_count": doc.version_count,
+                "trashed_by": display_name(actors.get(doc.trashed_by_id)),
             }
-            for doc in documents[(page - 1) * size:page * size]
+            for doc in rows
         ],
     })
+
+
+def display_name(user):
+    return (user.display_name or user.username) if user else None
 
 
 @never_cache

@@ -218,3 +218,24 @@ class WorkspaceTests(TransactionTestCase):
         self.assertEqual(post(self.client, ids=[first, second], action="trash").json(), {"count": 2})
         self.assertEqual(Document.objects.filter(is_trashed=True).count(), 2)
         self.assertFalse(ArticlePublication.objects.filter(document_id=first).exists())
+
+    # ---- trash list ------------------------------------------------------------
+
+    def test_trash_list_reports_who_trashed_and_collection_id(self):
+        category_id = str(Category.objects.create(name="Ops").pk)
+        by_editor = self.upload(b"by editor", category=category_id)
+        by_admin = self.upload(b"by admin")
+        self.client.delete(f"/api/documents/{by_editor}/")
+        self.as_user(self.admin).delete(f"/api/documents/{by_admin}/")
+        rows = {row["id"]: row for row in self.client.get("/api/trash/").json()["results"]}
+        self.assertEqual(rows[by_editor]["trashed_by"], "editor")
+        self.assertEqual(rows[by_editor]["category_id"], category_id)
+        self.assertEqual(rows[by_editor]["category"], "Ops")
+        self.assertEqual(rows[by_admin]["trashed_by"], "admin")
+        self.assertIsNone(rows[by_admin]["category_id"])
+        # Restoring and trashing again reports the latest actor.
+        self.client.post(f"/api/trash/{by_admin}/restore/")
+        self.client.delete(f"/api/documents/{by_admin}/")
+        rows = {row["id"]: row for row in self.client.get("/api/trash/").json()["results"]}
+        self.assertEqual(rows[by_admin]["trashed_by"], "editor")
+        self.assertEqual(self.as_user(self.viewer).get("/api/trash/").status_code, 403)
