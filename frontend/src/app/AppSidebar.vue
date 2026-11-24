@@ -156,6 +156,10 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
         :aria-current="route.name === 'app-audit' ? 'page' : undefined" @click="emit('navigate')">
         <UiIcon name="history" :size="17" /><span class="label">稽核紀錄</span>
       </RouterLink>
+      <RouterLink v-if="session.isAdmin" :to="{ name: 'app-system' }" class="item" :class="{ active: route.name === 'app-system' }"
+        :aria-current="route.name === 'app-system' ? 'page' : undefined" @click="emit('navigate')">
+        <UiIcon name="alert" :size="17" /><span class="label">系統狀態</span>
+      </RouterLink>
     </div>
 
     <div class="spacer" />
