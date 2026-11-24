@@ -15,7 +15,8 @@ from django.views.decorators.cache import never_cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from documents.models import ArticlePublication, Category, Document, PendingDocumentDeletion, Tag, Version
+from documents.images import unused_images
+from documents.models import ArticlePublication, Category, Document, DocumentImage, PendingDocumentDeletion, Tag, Version
 from users.models import User
 from users.permissions import IsAdmin
 
@@ -72,6 +73,8 @@ def system_status(request):
         active=Count("pk", filter=Q(is_trashed=False)), trashed=Count("pk", filter=Q(is_trashed=True)),
     )
     versions = Version.objects.aggregate(count=Count("pk"), bytes=Sum("size"))
+    images = DocumentImage.objects.aggregate(count=Count("pk"), bytes=Sum("size"))
+    unused = unused_images().aggregate(count=Count("pk"), bytes=Sum("size"))
     pending = PendingDocumentDeletion.objects.aggregate(count=Count("pk"), oldest=Min("created_at"))
     people = User.objects.aggregate(
         total=Count("pk"),
@@ -88,9 +91,12 @@ def system_status(request):
         "content": {
             "documents": documents["active"], "trashed": documents["trashed"], "versions": versions["count"],
             "published": ArticlePublication.objects.filter(document__is_trashed=False).count(),
-            "collections": Category.objects.count(), "tags": Tag.objects.count(),
+            "collections": Category.objects.count(), "tags": Tag.objects.count(), "images": images["count"],
         },
-        "storage": {"versions_bytes": versions["bytes"] or 0, "database_bytes": database_size(), "disk": disk()},
+        "storage": {
+            "versions_bytes": versions["bytes"] or 0, "images_bytes": images["bytes"] or 0,
+            "database_bytes": database_size(), "disk": disk(),
+        },
         "members": {
             "total": people["total"], "active": people["active"], "pending": people["pending"], "disabled": people["disabled"],
             "by_role": {"admin": people["admins"], "editor": people["editors"], "viewer": people["viewers"]},
@@ -99,6 +105,8 @@ def system_status(request):
         },
         "jobs": {
             "pending_deletions": pending["count"], "oldest_pending_deletion": pending["oldest"],
+            # Normally near zero: the cleanup runs at start-up and at most hourly after uploads.
+            "unused_images": unused["count"], "unused_images_bytes": unused["bytes"] or 0,
             "unindexed_documents": Version.objects.filter(
                 search_text__isnull=True, pk=F("document__current_version_id"), document__is_trashed=False,
             ).count(),

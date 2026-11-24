@@ -1,13 +1,13 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
-from documents.models import PendingDocumentDeletion, Version
+from documents.models import DocumentImage, PendingDocumentDeletion, Version
 from documents.services import STORAGE_LOCK_KEY
 from documents.storage import root, sync_directory
 
 
 class Command(BaseCommand):
-    help = "Report missing and unreferenced version files, optionally moving unreferenced files to quarantine."
+    help = "Report missing and unreferenced version and image files, optionally moving unreferenced files to quarantine."
 
     def add_arguments(self, parser):
         parser.add_argument("--quarantine", action="store_true")
@@ -18,9 +18,10 @@ class Command(BaseCommand):
             cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
         base = root()
         expected = set(Version.objects.values_list("path", flat=True))
+        expected |= {image.path for image in DocumentImage.objects.only("pk", "document_id", "format")}
         pending = {str(item) for item in PendingDocumentDeletion.objects.values_list("pk", flat=True)}
         present = {
-            str(path.relative_to(base)) for path in (base / "versions").glob("*/*")
+            str(path.relative_to(base)) for folder in ("versions", "images") for path in (base / folder).glob("*/*")
             if path.is_file() and path.parent.name not in pending
         }
         for path in sorted(present - expected):
@@ -38,4 +39,4 @@ class Command(BaseCommand):
             self.stderr.write(f"Missing: {path}")
         if expected - present:
             raise CommandError("Restore missing files from backup.")
-        self.stdout.write(f"Checked {len(expected)} committed version files.")
+        self.stdout.write(f"Checked {len(expected)} committed version and image files.")

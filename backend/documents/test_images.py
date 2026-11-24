@@ -1,14 +1,19 @@
 import io
 import tempfile
+from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from django.core.cache import cache
+from django.core.management import CommandError, call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TransactionTestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 
 from users.models import User
 
+from . import images
 from .images import ImageUploadThrottle
 from .models import DocumentImage, VersionImage
 
@@ -37,8 +42,8 @@ def animated_gif():
     return buffer.getvalue()
 
 
-class ImageTests(TransactionTestCase):
-    """P7b images pasted into Markdown: upload checks, re-encoding, references and access."""
+class ImageFixture(TransactionTestCase):
+    """A Markdown document, three members and a private storage folder."""
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -91,6 +96,10 @@ class ImageTests(TransactionTestCase):
         response = admin.post(f"/api/documents/{document or self.doc}/publication/", {"version": version, "title": "doc"},
                               content_type="application/json")
         self.assertEqual(response.status_code, 200, response.content)
+
+
+class ImageTests(ImageFixture):
+    """P7b images pasted into Markdown: upload checks, re-encoding, references and access."""
 
     # ---- upload -----------------------------------------------------------------
 
@@ -261,3 +270,95 @@ class ImageTests(TransactionTestCase):
         self.assertFalse(DocumentImage.objects.exists())
         self.assertFalse(VersionImage.objects.exists())
         self.assertFalse((self.storage / "images" / str(self.doc)).exists())
+
+
+class UnusedImageTests(ImageFixture):
+    """P7c: images no version refers to are removed after 24 hours; referenced ones never are."""
+
+    def age(self, image_id, hours):
+        DocumentImage.objects.filter(pk=image_id).update(uploaded_at=timezone.now() - timedelta(hours=hours))
+
+    def file(self, image_id):
+        return self.storage / DocumentImage.objects.get(pk=image_id).path
+
+    def collect(self, *args):
+        output = io.StringIO()
+        call_command("collect_unused_images", *args, stdout=output)
+        return output.getvalue()
+
+    def test_unused_images_go_after_24_hours_only(self):
+        old, recent = (self.uploaded(picture(color=(n, 1, 1)))["id"] for n in (1, 2))
+        old_file = self.file(old)
+        self.age(old, 25)
+        self.age(recent, 23)
+        self.assertIn("Removed 1 unused images", self.collect())
+        self.assertFalse(DocumentImage.objects.filter(pk=old).exists())
+        self.assertFalse(old_file.exists())
+        self.assertTrue(DocumentImage.objects.filter(pk=recent).exists())
+
+    def test_images_any_version_refers_to_are_kept(self):
+        kept = self.uploaded()["id"]
+        self.edit(f"![x](/api/images/{kept}/)\n")
+        self.edit("圖片在新版本被刪掉了\n")
+        self.age(kept, 24 * 365)
+        self.collect()
+        self.assertTrue(DocumentImage.objects.filter(pk=kept).exists())
+        self.assertTrue(self.file(kept).exists())
+        self.assertEqual(self.client.get(f"/api/images/{kept}/").status_code, 200)
+
+    def test_dry_run_changes_nothing(self):
+        image = self.uploaded()["id"]
+        self.age(image, 48)
+        self.assertIn("Would remove 1 unused images", self.collect("--dry-run"))
+        self.assertTrue(self.file(image).exists())
+
+    def test_pasting_again_restarts_the_grace_period(self):
+        image = self.uploaded()["id"]
+        self.age(image, 30)
+        self.assertEqual(self.upload(picture()).status_code, 200)
+        self.collect()
+        self.assertTrue(DocumentImage.objects.filter(pk=image).exists())
+
+    def test_uploads_trigger_the_cleanup_at_most_hourly(self):
+        stale = self.uploaded(picture(color=(5, 5, 5)))["id"]
+        self.age(stale, 30)
+        cache.clear()
+        with patch.object(images, "collect_unused_images", wraps=images.collect_unused_images) as collect:
+            self.uploaded(picture(color=(6, 6, 6)))
+            self.uploaded(picture(color=(7, 7, 7)))
+        self.assertEqual(collect.call_count, 1)
+        self.assertFalse(DocumentImage.objects.filter(pk=stale).exists())
+
+    def test_cleanup_failure_never_fails_the_upload(self):
+        cache.clear()
+        with patch.object(images, "collect_unused_images", side_effect=RuntimeError("disk")), self.assertLogs("documents.images", "ERROR"):
+            self.assertEqual(self.upload(picture()).status_code, 201)
+
+    def test_the_last_image_takes_its_empty_folder_with_it(self):
+        image = self.uploaded()["id"]
+        folder = self.file(image).parent
+        self.age(image, 30)
+        self.collect()
+        self.assertFalse(folder.exists())
+
+    def test_storage_check_covers_image_files(self):
+        image = self.uploaded()["id"]
+        stray = self.file(image).parent / "00000000-0000-0000-0000-000000000000.png"
+        stray.write_bytes(b"x")
+        output = io.StringIO()
+        call_command("check_document_storage", "--quarantine", stdout=output)
+        self.assertIn(f"Unreferenced: images/{self.doc}/{stray.name}", output.getvalue())
+        self.assertFalse(stray.exists())
+        self.assertTrue((self.storage / "quarantine" / "images" / str(self.doc) / stray.name).exists())
+        self.file(image).unlink()
+        with self.assertRaises(CommandError):
+            call_command("check_document_storage", stdout=io.StringIO(), stderr=io.StringIO())
+
+    def test_system_status_reports_images(self):
+        used = self.uploaded(picture(color=(8, 8, 8)))
+        unused = self.uploaded(picture(color=(9, 9, 9)))
+        self.age(unused["id"], 30)
+        report = self.as_user(self.admin).get("/api/admin/system/").json()
+        self.assertEqual(report["content"]["images"], 2)
+        self.assertEqual(report["storage"]["images_bytes"], used["size"] + unused["size"])
+        self.assertEqual((report["jobs"]["unused_images"], report["jobs"]["unused_images_bytes"]), (1, unused["size"]))

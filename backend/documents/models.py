@@ -263,9 +263,12 @@ class DocumentImage(models.Model):
     size = models.PositiveBigIntegerField()
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
+    # Pasting the same picture again refreshes this; the 24-hour grace before an unused image is removed counts from it.
+    uploaded_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["document", "sha256"], name="unique_document_image")]
+        indexes = [models.Index(fields=["uploaded_at"], name="document_image_uploaded")]
 
     @property
     def path(self):

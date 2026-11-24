@@ -8,13 +8,18 @@ is not image data. SVG is never accepted because it can carry scripts.
 """
 import hashlib
 import io
+import logging
 import os
 import re
 import tempfile
+from datetime import timedelta
 
-from django.db import IntegrityError, transaction
+from django.core.cache import cache
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from PIL import Image, ImageOps, UnidentifiedImageError
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -29,7 +34,11 @@ from users.permissions import CanReadLibrary, has_role
 from . import services, storage
 from .models import ArticlePublication, Document, DocumentImage, VersionImage
 
+logger = logging.getLogger(__name__)
+
 MAX_BYTES = 10 * 1024 * 1024
+# An image no version refers to is kept this long after its last upload, then removed.
+GRACE = timedelta(hours=24)
 MAX_PIXELS = 40_000_000
 MAX_FRAMES = 500
 
@@ -142,21 +151,80 @@ def add_image(actor, document_id, upload):
         raise ValidationError({"file": "只有 Markdown 文件可以插入圖片。"})
     encoded, name, width, height = reencode(read_limited(upload))
     digest = hashlib.sha256(encoded).hexdigest()
-    existing = DocumentImage.objects.filter(document=document, sha256=digest).first()
-    if existing:
-        return existing, False
-    image = DocumentImage(
-        document=document, sha256=digest, format=name, width=width, height=height, size=len(encoded), created_by=actor,
-    )
-    # The file is in place before the row exists, so a row never points at a missing file.
-    write_file(image, encoded)
-    try:
-        with transaction.atomic():
-            image.save(force_insert=True)
-    except IntegrityError:
-        (storage.root() / image.path).unlink(missing_ok=True)
-        return DocumentImage.objects.get(document=document, sha256=digest), False
+    with transaction.atomic():
+        # Shared with version saves; the cleanup takes it exclusively, so it never removes an image being reused.
+        lock_storage(shared=True)
+        existing = DocumentImage.objects.filter(document=document, sha256=digest).first()
+        if existing:
+            # Pasting it again restarts the grace period.
+            DocumentImage.objects.filter(pk=existing.pk).update(uploaded_at=timezone.now())
+            return existing, False
+        image = DocumentImage(
+            document=document, sha256=digest, format=name, width=width, height=height, size=len(encoded), created_by=actor,
+        )
+        # The file is in place before the row exists, so a row never points at a missing file.
+        write_file(image, encoded)
+        try:
+            with transaction.atomic():
+                image.save(force_insert=True)
+        except IntegrityError:
+            (storage.root() / image.path).unlink(missing_ok=True)
+            return DocumentImage.objects.get(document=document, sha256=digest), False
     return image, True
+
+
+def lock_storage(*, shared):
+    with connection.cursor() as cursor:
+        function = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        cursor.execute(f"SELECT {function}(hashtext(%s), 0)", [services.STORAGE_LOCK_KEY])
+
+
+def unused_images(now=None):
+    """Images that no version refers to and that were last uploaded more than the grace period ago."""
+    referenced = VersionImage.objects.filter(image=OuterRef("pk"))
+    return DocumentImage.objects.filter(uploaded_at__lt=(now or timezone.now()) - GRACE).exclude(Exists(referenced))
+
+
+def collect_unused_images(*, dry_run=False):
+    """Remove unused images past the grace period. Returns (count, bytes)."""
+    with transaction.atomic():
+        lock_storage(shared=False)
+        victims = list(unused_images().values_list("pk", "document_id", "format", "size"))
+        if dry_run or not victims:
+            return len(victims), sum(row[3] for row in victims)
+        DocumentImage.objects.filter(pk__in=[row[0] for row in victims]).delete()
+        paths = [storage.root() / "images" / str(document) / f"{pk}.{fmt}" for pk, document, fmt, _ in victims]
+        transaction.on_commit(lambda: remove_files(paths))
+    total = sum(row[3] for row in victims)
+    logger.info("Removed %d unused images (%d bytes).", len(victims), total)
+    return len(victims), total
+
+
+def remove_files(paths):
+    folders = set()
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+            folders.add(path.parent)
+        except OSError:
+            # check_document_storage reports the leftover file; nothing refers to it any more.
+            logger.error("Could not remove an unused image file.")
+    for folder in folders:
+        try:
+            storage.sync_directory(folder)
+            folder.rmdir()
+        except OSError:
+            pass  # Not empty: other images of the document remain.
+
+
+def collect_occasionally():
+    """Run the cleanup at most once an hour, piggybacking on uploads (which are what leave unused images)."""
+    if not cache.add("documents:collect-unused-images", 1, 3600):
+        return
+    try:
+        collect_unused_images()
+    except Exception:
+        logger.exception("Unused image cleanup failed.")
 
 
 def record_references(version, text):
@@ -183,6 +251,7 @@ def upload_image(request, document_id):
     if upload is None:
         raise ValidationError({"file": "請選擇圖片。"})
     image, created = add_image(request.user, document_id, upload)
+    collect_occasionally()
     return Response(image_payload(image), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 

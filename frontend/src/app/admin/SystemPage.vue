@@ -16,13 +16,16 @@ import { useSite, type NoticeLevel, type NoticeSettings } from '../../stores/sit
 const site = useSite()
 type Report = {
   generated_at: string
-  content: { documents: number; trashed: number; versions: number; published: number; collections: number; tags: number }
-  storage: { versions_bytes: number; database_bytes: number | null; disk: { total_bytes: number; free_bytes: number } | null }
+  content: { documents: number; trashed: number; versions: number; published: number; collections: number; tags: number; images: number }
+  storage: { versions_bytes: number; images_bytes: number; database_bytes: number | null; disk: { total_bytes: number; free_bytes: number } | null }
   members: {
     total: number; active: number; pending: number; disabled: number
     by_role: { admin: number; editor: number; viewer: number }; active_admins: number; mfa_enabled: number
   }
-  jobs: { pending_deletions: number; oldest_pending_deletion: string | null; unindexed_documents: number }
+  jobs: {
+    pending_deletions: number; oldest_pending_deletion: string | null; unindexed_documents: number
+    unused_images: number; unused_images_bytes: number
+  }
   config: { https: boolean; google_login: boolean; smtp: boolean; mfa_key: boolean; html_preview: boolean; max_upload_bytes: number; max_batch: number }
   warnings: { level: 'info' | 'warning' | 'danger'; key: string; text: string }[]
 }
@@ -242,6 +245,7 @@ onMounted(() => {
           <h2 id="storage-title">儲存空間</h2>
           <dl class="facts">
             <div><dt>文件版本檔案</dt><dd>{{ bytes(report.storage.versions_bytes) }}</dd></div>
+            <div><dt>文件中的圖片（{{ report.content.images.toLocaleString() }} 張）</dt><dd>{{ bytes(report.storage.images_bytes) }}</dd></div>
             <div><dt>資料庫</dt><dd>{{ bytes(report.storage.database_bytes) }}</dd></div>
           </dl>
           <div v-if="report.storage.disk" class="disk">
@@ -284,7 +288,12 @@ onMounted(() => {
               <dt>尚未建立搜尋索引的文件</dt>
               <dd :class="{ alert: report.jobs.unindexed_documents }">{{ report.jobs.unindexed_documents }}</dd>
             </div>
+            <div>
+              <dt>待清理的未使用圖片</dt>
+              <dd>{{ report.jobs.unused_images }}<template v-if="report.jobs.unused_images">（{{ bytes(report.jobs.unused_images_bytes) }}）</template></dd>
+            </div>
           </dl>
+          <p class="note">沒有任何版本使用、且超過 24 小時的圖片會自動刪除：服務啟動時一次，之後有人上傳圖片時最多每小時一次。</p>
           <p class="note">檔案與資料庫的一致性檢查較耗時，請在需要時執行 <code>check_document_storage</code>。</p>
         </section>
 
