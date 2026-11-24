@@ -57,6 +57,9 @@ const auditLabels: Record<string, string> = {
   google_unlinked: '解除 Google 綁定',
   login: '登入',
   logout: '登出',
+  site_notice_enabled: '開啟公告橫幅',
+  site_notice_updated: '更新公告橫幅',
+  site_notice_disabled: '關閉公告橫幅',
 }
 export const auditLabel = (action: string) => auditLabels[action] ?? action
 export const memberName = (member: Pick<MemberRow, 'display_name' | 'username'>) => member.display_name || member.username

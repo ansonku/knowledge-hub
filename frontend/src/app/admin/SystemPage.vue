@@ -3,6 +3,7 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Skeleton from 'primevue/skeleton'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, ApiError } from '../../api'
@@ -10,7 +11,7 @@ import { useSession } from '../../stores/session'
 import { useToast } from 'primevue/usetoast'
 import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
-import { useSite } from '../../stores/site'
+import { useSite, type NoticeLevel, type NoticeSettings } from '../../stores/site'
 
 const site = useSite()
 type Report = {
@@ -53,6 +54,65 @@ async function saveSite() {
     siteSaving.value = false
   }
 }
+
+// ---- Announcement banner (P6c) -------------------------------------------------------------------
+const levels: { value: NoticeLevel; label: string }[] = [
+  { value: 'info', label: '資訊' }, { value: 'warning', label: '提醒' }, { value: 'urgent', label: '重要' },
+]
+type NoticeForm = Omit<NoticeSettings, 'starts_at' | 'ends_at'> & { starts_at: string; ends_at: string }
+const blankNotice: NoticeForm = { enabled: false, text: '', link: '', level: 'info', starts_at: '', ends_at: '' }
+/** ISO time ⇄ the value of <input type="datetime-local"> in this browser's time zone. */
+function toLocal(value: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  const pad = (number: number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+const fromLocal = (value: string) => (value ? new Date(value).toISOString() : null)
+const formFrom = (settings?: NoticeSettings): NoticeForm => settings
+  ? { ...settings, starts_at: toLocal(settings.starts_at), ends_at: toLocal(settings.ends_at) }
+  : { ...blankNotice }
+const noticeForm = ref<NoticeForm>(formFrom(site.noticeSettings))
+const noticeTouched = ref(false)
+watch(() => site.noticeSettings, settings => { if (!noticeTouched.value) noticeForm.value = formFrom(settings) })
+const noticeSaving = ref(false)
+const noticeError = ref('')
+const noticeDirty = computed(() => JSON.stringify(noticeForm.value) !== JSON.stringify(formFrom(site.noticeSettings)))
+/** What visitors see right now, from the saved settings. */
+const noticeState = computed(() => {
+  const saved = site.noticeSettings
+  if (!saved?.enabled || !saved.text) return { label: '未顯示', tone: '' }
+  const now = Date.now()
+  if (saved.starts_at && new Date(saved.starts_at).getTime() > now) return { label: '已排程', tone: 'scheduled' }
+  if (saved.ends_at && new Date(saved.ends_at).getTime() <= now) return { label: '已到期', tone: '' }
+  return { label: '顯示中', tone: 'on' }
+})
+async function saveNotice() {
+  if (noticeSaving.value) return
+  noticeSaving.value = true
+  noticeError.value = ''
+  try {
+    const form = noticeForm.value
+    await site.saveNotice({ ...form, text: form.text.trim(), link: form.link.trim(), starts_at: fromLocal(form.starts_at), ends_at: fromLocal(form.ends_at) })
+    noticeTouched.value = false
+    noticeForm.value = formFrom(site.noticeSettings)
+    toast.add({ severity: 'success', summary: '已更新公告', life: 2500 })
+  } catch (cause) {
+    noticeError.value = cause instanceof Error && cause.message ? cause.message : '無法儲存公告。'
+  } finally {
+    noticeSaving.value = false
+  }
+}
+function pickLevel(level: NoticeLevel) {
+  noticeForm.value.level = level
+  noticeTouched.value = true
+}
+function resetNotice() {
+  noticeTouched.value = false
+  noticeForm.value = formFrom(site.noticeSettings)
+  noticeError.value = ''
+}
+
 const loading = ref(true)
 const error = ref('')
 
@@ -116,6 +176,7 @@ onMounted(() => {
     error.value = '只有 Admin 可以查看系統狀態。'
     return
   }
+  void site.refresh()  // the stored announcement (Admins only) may predate this sign-in
   void load()
 })
 </script>
@@ -237,6 +298,54 @@ onMounted(() => {
           </ul>
           <p class="note">上傳上限：每檔 {{ bytes(report.config.max_upload_bytes) }}，每批 {{ report.config.max_batch }} 檔。</p>
         </section>
+
+        <section class="card" aria-labelledby="notice-title">
+          <div class="card-title-row">
+            <h2 id="notice-title">公告橫幅</h2>
+            <span class="notice-state" :class="noticeState.tone">{{ noticeState.label }}</span>
+          </div>
+          <form class="site-form" @submit.prevent="saveNotice" @input="noticeTouched = true">
+            <label class="switch-row">
+              <ToggleSwitch v-model="noticeForm.enabled" input-id="notice-enabled" />
+              <span>開啟公告</span>
+            </label>
+            <div class="field">
+              <label for="notice-text">內容 <span class="optional">{{ noticeForm.text.length }} / 120</span></label>
+              <InputText id="notice-text" v-model="noticeForm.text" maxlength="120" placeholder="例如：11/30（日）20:00–22:00 系統維護" />
+            </div>
+            <div class="field">
+              <label for="notice-link">連結 <span class="optional">選填</span></label>
+              <InputText id="notice-link" v-model="noticeForm.link" maxlength="300" placeholder="https://… 或 /articles/…" />
+            </div>
+            <fieldset class="field levels">
+              <legend>類型</legend>
+              <div class="level-buttons">
+                <button v-for="level in levels" :key="level.value" type="button" class="level" :class="[level.value, { on: noticeForm.level === level.value }]"
+                  :aria-pressed="noticeForm.level === level.value" @click="pickLevel(level.value)">{{ level.label }}</button>
+              </div>
+            </fieldset>
+            <div class="when">
+              <div class="field">
+                <label for="notice-start">開始 <span class="optional">選填</span></label>
+                <input id="notice-start" v-model="noticeForm.starts_at" type="datetime-local" class="time-input">
+              </div>
+              <div class="field">
+                <label for="notice-end">結束 <span class="optional">選填</span></label>
+                <input id="notice-end" v-model="noticeForm.ends_at" type="datetime-local" class="time-input">
+              </div>
+            </div>
+            <p class="note">顯示在公開站、閱讀入口、工作區與登入等頁面。只支援純文字；結束時間到了會自動隱藏，訪客也可以自行關閉。修改內容後，已關閉的人會再看到一次。</p>
+            <div v-if="noticeForm.text.trim()" class="preview" :class="noticeForm.level" aria-hidden="true">
+              <UiIcon :name="noticeForm.level === 'info' ? 'info' : 'alert'" :size="16" />
+              <span>{{ noticeForm.text.trim() }}<span v-if="noticeForm.link.trim()" class="preview-link"> 查看詳情</span></span>
+            </div>
+            <Message v-if="noticeError" severity="error" size="small">{{ noticeError }}</Message>
+            <div class="form-actions">
+              <Button type="submit" label="儲存" size="small" :loading="noticeSaving" :disabled="!noticeDirty || (noticeForm.enabled && !noticeForm.text.trim())" />
+              <Button type="button" label="還原" size="small" text severity="secondary" :disabled="!noticeDirty || noticeSaving" @click="resetNotice" />
+            </div>
+          </form>
+        </section>
       </div>
     </template>
   </div>
@@ -290,4 +399,25 @@ h2 { margin: 0; font-size: 1rem; }
 .field label { font-weight: 600; font-size: var(--ui-text-sm); }
 .optional { color: var(--ui-text-muted); font-weight: 400; }
 .save { justify-self: start; }
+.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); }
+.notice-state { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-pill); background: var(--ui-private-bg); color: var(--ui-private-text); font-size: var(--ui-text-xs); font-weight: 600; }
+.notice-state.on { background: var(--ui-public-bg); color: var(--ui-public-text); }
+.notice-state.scheduled { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
+.switch-row { display: flex; align-items: center; gap: var(--ui-space-3); font-weight: 600; font-size: var(--ui-text-sm); cursor: pointer; }
+.levels { margin: 0; padding: 0; border: 0; }
+.levels legend { padding: 0 0 var(--ui-space-1); font-weight: 600; font-size: var(--ui-text-sm); }
+.level-buttons { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
+.level { height: 2rem; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg-surface); color: var(--ui-text-secondary); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }
+.level.on.info { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-accent-on-soft); }
+.level.on.warning { background: var(--ui-lagging-bg); border-color: var(--ui-lagging-border); color: var(--ui-lagging-text); }
+.level.on.urgent { background: var(--ui-danger-bg); border-color: var(--ui-danger-border); color: var(--ui-danger); }
+.when { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--ui-space-3); }
+.time-input { box-sizing: border-box; width: 100%; height: 2.5rem; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-md); background: var(--ui-bg-surface); color: var(--ui-text); font: inherit; font-size: var(--ui-text-sm); color-scheme: inherit; }
+.time-input:focus-visible { outline: none; border-color: var(--ui-accent); box-shadow: var(--ui-focus-ring); }
+.preview { display: flex; align-items: center; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-3); border-radius: var(--ui-radius-md); font-size: var(--ui-text-sm); overflow-wrap: anywhere; }
+.preview.info { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
+.preview.warning { background: var(--ui-lagging-bg); color: var(--ui-lagging-text); }
+.preview.urgent { background: var(--ui-danger-bg); color: var(--ui-danger); }
+.preview-link { font-weight: 600; text-decoration: underline; }
+.form-actions { display: flex; gap: var(--ui-space-2); }
 </style>

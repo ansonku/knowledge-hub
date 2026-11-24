@@ -33,6 +33,7 @@ const paths = {
   arrowRight: 'M5 12h14M13 6l6 6-6 6',
   book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M8 7h7',
   chart: 'M4 20h16M7 16v-5M12 16V6M17 16v-8',
+  info: 'M12 8h.01M11 12h1v5h1M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
   enter: 'M9 10l-5 5 5 5M20 4v7a4 4 0 0 1-4 4H4',
 } as const
 

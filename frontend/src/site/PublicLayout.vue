@@ -6,6 +6,7 @@ import { useSession } from '../stores/session'
 import { useSite } from '../stores/site'
 import { useTheme } from '../stores/theme'
 import PortalNav from './PortalNav.vue'
+import SiteNotice from './SiteNotice.vue'
 import { portalMode, portals } from './public'
 
 const route = useRoute()
@@ -60,6 +61,7 @@ watch(() => route.fullPath, () => { drawerOpen.value = false })
 <template>
   <div class="hub-app portal" :class="{ 'drawer-open': drawerOpen }">
     <a class="skip" href="#portal-main">跳至內容</a>
+    <SiteNotice />
     <header class="topbar">
       <button type="button" class="icon-button menu" aria-label="開啟導覽" aria-controls="portal-nav" :aria-expanded="drawerOpen" @click="drawerOpen = true">
         <UiIcon name="menu" :size="20" />

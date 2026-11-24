@@ -1016,3 +1016,49 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
     - 點精選卡片會開啟文章；成員入口沒有精選；Viewer 修改會回 403。
     - 測試結束時，把精選清單還原成原本的內容（目前是空的）。
   - `overview.py` 更新為 59 項。回歸：公開站 81 項、文章頁 86 項、成員入口 54 項都通過，`smoke.sh` 通過。
+
+### P6c 公告橫幅（2026-11-24）
+
+- 後端：
+  - `SiteSettings` 新增公告欄位：`notice_enabled`、`notice_text`（最多 120 字）、`notice_link`、`notice_level`（info／warning／urgent）、`notice_starts_at`、`notice_ends_at`、`notice_updated_at`。遷移是 `0013_site_notice`。
+  - `SiteSettings.active_notice()`：公告開啟、有內容，而且在顯示期間內時，回傳 `{id, text, link, level}`；否則回傳 `None`。`id` 取自最後修改時間，每次修改都會改變。
+  - `GET /api/site/` 對所有人多回傳 `notice`。只有 Admin 會另外拿到 `notice_settings`（儲存的完整設定，包含已關閉或不在期間內的公告）。
+  - `PUT /api/site/notice/`：限 Admin，`never_cache`。
+    - 內容會去掉換行並合併空白；開啟公告時內容不可空白。
+    - 連結只接受 `http://`、`https://`，或以 `/` 開頭的站內路徑；`javascript:`、`data:`、`//` 開頭、反斜線一律回 400。
+    - 結束時間必須晚於開始時間。
+    - 修改時鎖定 `SiteSettings` 那一列。
+    - 每次修改都寫入稽核紀錄，依情況記為 `site_notice_enabled`、`site_notice_updated` 或 `site_notice_disabled`。
+  - Django 頁面：context processor 提供 `site_notice`，`allauth/layouts/base.html` 在頂列上方顯示同樣的橫幅。內容由 Django 自動跳脫，只當純文字。
+- 前端：
+  - `stores/site.ts` 新增 `notice`、`noticeSettings`、`saveNotice()`、`refresh()`。
+  - 新元件 `site/SiteNotice.vue`：
+    - 公開站和閱讀入口放在頂列上方；工作區放在主內容區最上方，不蓋住側欄。
+    - 三種類型用不同顏色：資訊（藍）、提醒（黃）、重要（紅）。有連結時顯示「查看詳情」，外部連結另開分頁並加 `noopener noreferrer`。
+    - 關閉後把公告 id 記在 `localStorage`（`knowledge-hub.notice-dismissed`）。這個 key 和 Django 頁面的 `public/assets/account-notice.js` 共用，在任一邊關閉，兩邊都不再顯示；公告修改後會再次出現。
+  - 系統狀態頁新增「公告橫幅」卡片：
+    - 狀態標籤：顯示中、已排程、已到期、未顯示。
+    - 開關、內容（含字數）、連結、類型按鈕、開始和結束時間（使用瀏覽器的 `datetime-local`，以本機時區顯示，送出時轉成 ISO）、即時預覽、儲存和還原。
+    - 卡片放在格線最後。原本想放在「站台設定」旁邊，但放在那裡時，vue-tsc 會失去 `report` 的型別判斷；放在最後就沒有這個問題。
+  - 稽核紀錄新增三種動作的文字：開啟、更新、關閉公告橫幅。新增 `info` 圖示。
+- 修正：一開始關閉公告時，畫面先隱藏了橫幅，之後才寫入 `localStorage`，結果讀到空值而沒有存成功；改成先寫入再隱藏。
+- 測試：
+  - 後端新增 `documents/test_notice.py`，共 5 項，後端共 91 項通過：
+    - 只有 Admin 能修改；`notice_settings` 只回傳給 Admin。
+    - 開啟、還沒開始、已經結束、關閉四種狀態下，API 和 Django 登入頁是否顯示都正確。
+    - 修改內容會換新的 id。
+    - 驗證：空白內容、超過 120 字、不合法的類型、五種危險連結、結束早於開始，都會回 400；HTML 標籤只當文字顯示，換行會合併。
+    - 稽核紀錄的三種動作。
+  - `test_site.py` 更新：`/api/site/` 多了 `notice` 欄位。
+  - Playwright 新增 `notice.py`，共 45 項：
+    - 系統狀態頁的編輯和預覽；危險連結被拒絕。
+    - 公開站和 Django 登入頁在 1920／1280／500 px（1920 和 500 另測深色）都會顯示，沒有溢出。
+    - 關閉後重新整理仍然隱藏，而且 Vue 和 Django 頁面兩邊共用；修改公告後再次出現。
+    - 閱讀入口和工作區都會顯示；Viewer 修改會回 403。
+    - 已排程和已到期的公告都不顯示。
+    - 稽核紀錄的文字正確。
+    - 測試結束時，把公告還原成原本的設定。
+  - 回歸：
+    - `system.py` 的卡片數改為 7；`sitesettings.py` 只比對站名和介紹。
+    - 系統狀態 25 項、站台設定 15 項、帳號頁 104 項、公開站 81 項、文章頁 86 項、成員入口 54 項、總覽 57 項、精選 32 項都通過；`smoke.sh` 通過。
+    - 總覽的「落後」連結這次沒有測到，因為示範文章「BMC 韌體更新步驟」的 v2 已經被使用者重新發布，目前沒有落後的文章。

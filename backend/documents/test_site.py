@@ -23,13 +23,13 @@ class SiteSettingsTests(TestCase):
 
     def test_anyone_reads_only_admins_change(self):
         self.assertEqual(Client().get("/api/site/").json(),
-                         {"name": SiteSettings.DEFAULT_NAME, "tagline": SiteSettings.DEFAULT_TAGLINE})
+                         {"name": SiteSettings.DEFAULT_NAME, "tagline": SiteSettings.DEFAULT_TAGLINE, "notice": None})
         payload = {"name": "  研發知識庫 ", "tagline": "<b>規格</b>與指南"}
         for user in (None, self.editor):
             self.assertEqual(self.as_user(user).patch("/api/site/", payload, content_type="application/json").status_code, 403)
         response = self.as_user(self.admin).patch("/api/site/", payload, content_type="application/json")
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json(), {"name": "研發知識庫", "tagline": "<b>規格</b>與指南"})
+        self.assertEqual({k: response.json()[k] for k in ("name", "tagline")}, {"name": "研發知識庫", "tagline": "<b>規格</b>與指南"})
         self.assertEqual(SiteSettings.objects.get().updated_by, self.admin)
         self.assertEqual(Client().get("/api/site/").json()["name"], "研發知識庫")
         too_long = {"name": "x" * 61, "tagline": ""}
