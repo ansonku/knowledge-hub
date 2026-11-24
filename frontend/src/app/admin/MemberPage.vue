@@ -182,7 +182,10 @@ function confirmSubmit(event: Event, header: string, message: string, label: str
             </li>
           </ol>
           <p v-else class="muted">還沒有帳號活動。</p>
-          <p class="muted small">顯示最近 25 筆。完整紀錄會在稽核頁提供。</p>
+          <p class="muted small">
+            顯示最近 25 筆。
+            <RouterLink :to="{ name: 'app-audit', query: { member: account.id } }">在稽核紀錄查看全部</RouterLink>
+          </p>
         </template>
       </section>
 

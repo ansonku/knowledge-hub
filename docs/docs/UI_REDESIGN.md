@@ -640,3 +640,50 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
     - 沒有預期以外的 console 錯誤。
   - 導向檢查、P2 回歸和 `smoke.sh` 也都通過。
   - 測試資料：暫存的子集合和標籤都已經刪除或合併掉，tray-a 測試文件仍然只有「UI 測試標籤」。
+
+### P4d 稽核紀錄（2026-11-24）
+
+- 後端新增 `backend/hub/audit.py`，提供 `GET /api/admin/audit/`，限 `IsAdmin`、唯讀、`never_cache`：
+  - 資料來源有三個，用 SQL `UNION ALL` 合併，依 `created_at` 由新到舊排序，每頁 50 筆並回傳 `has_more`，最多 200 頁：
+    - `users.AuditLog`：類別 `account`；`login`／`logout` 歸到 `signin`。
+    - `documents.DocumentActivity`：類別 `document`、`publish`、`trash`，包含 P2a 回填的歷史紀錄。
+    - `documents.DocumentTrashAudit` 中 action 為 `permanent` 的紀錄：類別 `deletion`。文件永久刪除後，它的活動紀錄會跟著消失，所以永久刪除要從這裡讀，才能保留標題和版本數。
+  - 參數：
+    - `category`：`account`、`signin`、`document`、`publish`、`trash`、`deletion`。
+    - `actor`：操作者的 user id。
+    - `member`：只看與某位成員帳號有關的紀錄。
+    - `since`、`until`：ISO 時間。
+    - `signins`：預設為 true；前端在不分類別時傳 false，所以預設看不到登入和登出。
+    - 參數格式不對時回 400。
+  - 帳號紀錄的 `metadata` 只回傳白名單欄位：`reason`、`role`、`old_role`、`identity_verified`。
+  - 每列回傳 `id`（`來源:主鍵`）、`category`、`action`、`created_at`、`actor {id, name}`、`member`、`document {id, title, deleted}`、`version_number`、`detail`。
+  - 沒有 CSV 匯出（第 12 節第 10 點）。
+- 前端新增 `frontend/src/app/admin/AuditPage.vue`，網址 `/app/admin/audit/`，路由名稱 `app-audit`：
+  - 版面和成員、回收桶、全部文件一致：靠左、最寬 100rem。最初的版本是置中、chip 篩選、依日期分組的卡片，使用者指出跟其他頁不一致，所以改成表格。
+  - 工具列由左到右：類型下拉選單、操作者下拉選單、起訖日期（以瀏覽器的本地日期換算）、「包含登入與登出」勾選框、清除篩選。所有條件都寫在網址 query。
+  - 表格欄位依序是時間、類型、操作者、內容、細節：
+    - 時間格式和其他頁一樣，例如「今天 14:32」或「11/18」，滑過會顯示完整時間。
+    - 類型用小標籤顯示：帳號管理是藍色、發布是綠色、回收桶是琥珀色、永久刪除是紅色。
+    - 操作者連到成員頁。
+    - 內容是動作加上對象，對象連到成員或文件；永久刪除的文件標題加刪除線。
+    - 細節包括角色變更、理由、版本說明、資料變更等。
+  - 860 px 以下每一列改成卡片。
+  - 「載入更早的紀錄」分頁載入。
+  - 側欄新增 Admin 專用的「稽核紀錄」。成員詳細頁的「活動」分頁加上「在稽核紀錄查看全部」連結，會帶 `member` 篩選。
+  - 動作文字沿用 `members.ts` 的 `auditLabel` 和 `activity.ts` 的 `activityVerb`／`activityDetail`。
+- 測試：
+  - 後端新增 `hub/test_audit.py`，共 3 項：
+    - Visitor、Viewer、Editor 會收到 403。
+    - 三個來源依時間合併；`metadata` 白名單（刻意塞進去的 `secret` 不會出現）；永久刪除的紀錄保留標題和版本數。
+    - 各種篩選、`signins=false`、無效參數、分頁不重複。
+  - 後端共 63 項通過。
+  - Playwright 共 38 項通過，都只讀取資料：
+    - 版面：Admin 1920／1280／768／500 px，1280 和 500 另測深色。
+    - 預設不顯示登入、勾選後會顯示。
+    - 6 個類別各自只顯示該類別的紀錄。
+    - 永久刪除的文件標題有刪除線。
+    - 操作者篩選、日期篩選（只看今天）、載入更多（50 筆增加到 100 筆）。
+    - 從成員頁連過來時會帶上成員篩選。
+    - 側欄連結會反白；Editor 和 Viewer 沒有入口，直接開網址會看到權限說明。
+    - 沒有 console 錯誤。
+  - `smoke.sh` 通過。
