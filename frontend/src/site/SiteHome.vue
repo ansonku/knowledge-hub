@@ -1,55 +1,34 @@
 <script setup lang="ts">
-import { useSite } from '../stores/site'
 import Skeleton from 'primevue/skeleton'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
+import { useSite } from '../stores/site'
 import {
-  colorClass, markOf, publicApi, publicDate, type PublicCardPage, type PublicCollectionCount,
+  collectionStyle, colorClass, markOf, publicApi, publicDate, shortPublicDate, usePublicNav,
+  type PublicCard, type PublicCardPage, type PublicNode,
 } from './public'
 
-const site = useSite()
 const route = useRoute()
 const router = useRouter()
+const site = useSite()
+const portal = usePublicNav()
 
 const queryText = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
 const keywords = computed(() => queryText('q').trim())
 const collection = computed(() => queryText('collection'))
+const showAll = computed(() => queryText('view') === 'all')
 const page = computed(() => Math.max(1, Number.parseInt(queryText('page') || '1', 10) || 1))
+/** Overview (tiles + latest) unless the reader searched, picked a collection or asked for every article. */
+const listing = computed(() => Boolean(keywords.value || collection.value || showAll.value))
 
 function setQuery(patch: Record<string, string | number | undefined>) {
   const query: LocationQueryRaw = { ...route.query, page: undefined, ...patch }
   for (const key of Object.keys(query)) if (query[key] === '' || query[key] === undefined || query[key] === 1) delete query[key]
-  void router.replace({ query, hash: route.hash })
+  void router.replace({ query })
 }
 
-// ---- Search box -------------------------------------------------------------------
-const searchText = ref(keywords.value)
-watch(keywords, value => { searchText.value = value })
-function search() {
-  setQuery({ q: searchText.value.trim() })
-}
-function clearSearch() {
-  searchText.value = ''
-  setQuery({ q: '' })
-}
-
-// ---- Collections --------------------------------------------------------------------
-const collections = ref<PublicCollectionCount[]>([])
-const collectionsLoading = ref(true)
-async function loadCollections() {
-  collectionsLoading.value = true
-  try {
-    collections.value = (await publicApi<{ results: PublicCollectionCount[] }>('/api/public/collections/')).results
-  } catch {
-    collections.value = []
-  } finally {
-    collectionsLoading.value = false
-  }
-}
-const activeCollection = computed(() => collections.value.find(item => item.id === collection.value))
-
-// ---- Articles -----------------------------------------------------------------------
+// ---- Articles from the API (cards need excerpts) ----------------------------------------------------
 const data = ref<PublicCardPage>()
 const loading = ref(true)
 const error = ref('')
@@ -60,14 +39,14 @@ async function loadArticles() {
   controller = request
   loading.value = true
   error.value = ''
-  const params = new URLSearchParams({ page: String(page.value) })
+  const params = new URLSearchParams({ page: String(listing.value ? page.value : 1) })
   if (keywords.value) params.set('q', keywords.value)
   if (collection.value) params.set('collection', collection.value)
   try {
     const result = await publicApi<PublicCardPage>(`/api/public/articles/?${params}`, request.signal)
     if (request.signal.aborted) return
     data.value = result
-    if (result.page !== page.value) setQuery({ page: result.page })
+    if (listing.value && result.page !== page.value) setQuery({ page: result.page })
   } catch (cause) {
     if (request.signal.aborted) return
     data.value = undefined
@@ -76,172 +55,256 @@ async function loadArticles() {
     if (!request.signal.aborted) loading.value = false
   }
 }
-watch([keywords, collection, page], loadArticles, { immediate: true })
+watch([keywords, collection, showAll, page], loadArticles, { immediate: true })
 
+const latest = computed(() => data.value?.results.slice(0, 6) ?? [])
+
+// ---- Overview tiles from the navigation data ---------------------------------------------------------------
+const roots = computed(() => portal.childrenOf(null))
+function tile(node: PublicNode) {
+  const ids = portal.subtree(node.id)
+  const articles = portal.nav.value.articles
+    .filter(article => article.collection_id && ids.includes(article.collection_id))
+    .slice(0, 3)
+    .map(article => ({ ...article, sub: article.collection_id !== node.id ? portal.byId(article.collection_id)?.name ?? '' : '' }))
+  const nested = node.total_count - node.article_count
+  return {
+    node, articles, children: portal.childrenOf(node.id),
+    countLabel: nested ? `${node.total_count} 篇文章（含子集合 ${nested} 篇）` : `${node.total_count} 篇文章`,
+  }
+}
+const tiles = computed(() => roots.value.map(tile))
+const looseCount = computed(() => portal.articlesOf(null).length)
+const stats = computed(() => ({
+  articles: portal.nav.value.articles.length,
+  collections: portal.nav.value.collections.length,
+  updated: portal.lastUpdated.value ? shortPublicDate(portal.lastUpdated.value) : '—',
+}))
+
+// ---- Listing header ---------------------------------------------------------------------------------------------
+const activeNode = computed(() => portal.byId(collection.value))
+const activePath = computed(() => portal.pathIds(collection.value).map(id => portal.byId(id)!).filter(Boolean))
 const listHeading = computed(() => {
   if (keywords.value) return `搜尋「${keywords.value}」`
-  return activeCollection.value ? activeCollection.value.name : '最新文章'
+  if (collection.value) return activeNode.value?.name ?? '集合'
+  return '全部文章'
 })
-const resultLine = computed(() => {
-  if (loading.value && !data.value) return '正在載入…'
-  if (!data.value) return ''
-  return `${data.value.count} 篇文章`
-})
+const cardPath = (card: PublicCard) => card.path.map(item => item.name).join(' › ')
 
-onMounted(() => {
-  void loadCollections()
-  site.setTitle()
-})
+watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value ? listHeading.value : undefined), { immediate: true })
 </script>
 
 <template>
   <div class="home">
-    <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-inner">
-        <h1 id="hero-title">{{ site.name }}</h1>
-        <p v-if="site.tagline" class="lead">{{ site.tagline }}</p>
-        <form class="search" role="search" @submit.prevent="search">
-          <UiIcon name="search" :size="20" />
-          <label for="public-q" class="ui-visually-hidden">搜尋公開文章</label>
-          <input id="public-q" v-model="searchText" type="search" maxlength="240" placeholder="搜尋公開文章的標題或內文" enterkeyhint="search">
-          <button v-if="searchText" type="button" class="clear" aria-label="清除搜尋" @click="clearSearch">
-            <UiIcon name="close" :size="16" />
-          </button>
-          <button type="submit" class="submit">搜尋</button>
-        </form>
-      </div>
-    </section>
+    <!-- Overview -->
+    <template v-if="!listing">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="inner hero-inner">
+          <div class="hero-text">
+            <span class="eyebrow">公開知識庫</span>
+            <h1 id="hero-title">{{ site.name }}</h1>
+            <p v-if="site.tagline" class="lead">{{ site.tagline }}</p>
+          </div>
+          <dl class="stats">
+            <div><dt>公開文章</dt><dd>{{ stats.articles }}</dd></div>
+            <div><dt>集合</dt><dd>{{ stats.collections }}</dd></div>
+            <div><dt>最近更新</dt><dd>{{ stats.updated }}</dd></div>
+          </dl>
+        </div>
+      </section>
 
-    <div class="content">
-      <section v-if="!keywords && (collectionsLoading || collections.length)" class="block" aria-labelledby="browse-title">
-        <h2 id="browse-title">依集合瀏覽</h2>
-        <div class="collections">
-          <template v-if="collectionsLoading">
-            <Skeleton v-for="index in 3" :key="index" height="8.5rem" border-radius="14px" />
+      <div class="inner content">
+        <section v-if="tiles.length || !portal.navLoaded.value" class="block" aria-labelledby="browse-title">
+          <div class="block-head">
+            <h2 id="browse-title">依集合瀏覽</h2>
+            <span class="block-note">每個集合列出最新的文章</span>
+          </div>
+          <div class="tiles">
+            <template v-if="!portal.navLoaded.value">
+              <Skeleton v-for="index in 3" :key="index" height="15rem" border-radius="14px" />
+            </template>
+            <article v-for="item in tiles" v-else :key="item.node.id" class="tile" :style="collectionStyle(item.node)">
+              <div class="tile-bar" aria-hidden="true" />
+              <div class="tile-body">
+                <div class="tile-head">
+                  <span class="ui-col-mark tile-mark" :class="colorClass(item.node)" aria-hidden="true">{{ markOf(item.node.name) }}</span>
+                  <div class="tile-title">
+                    <RouterLink :to="{ name: 'site-home', query: { collection: item.node.id } }" class="tile-name">{{ item.node.name }}</RouterLink>
+                    <span class="tile-count">{{ item.countLabel }}</span>
+                  </div>
+                </div>
+                <div v-if="item.children.length" class="chips">
+                  <span class="chips-label">子集合</span>
+                  <RouterLink v-for="child in item.children" :key="child.id" :to="{ name: 'site-home', query: { collection: child.id } }" class="chip">
+                    <span class="ui-col-mark chip-mark" :class="colorClass(child)" aria-hidden="true">{{ markOf(child.name) }}</span>{{ child.name }}<span class="chip-count">{{ child.total_count }}</span>
+                  </RouterLink>
+                </div>
+                <ul class="tile-list">
+                  <li v-for="article in item.articles" :key="article.document_id">
+                    <RouterLink :to="{ name: 'public-article', params: { id: article.document_id } }" class="tile-link">
+                      <span class="tile-link-title">{{ article.title }}<span v-if="article.sub" class="sub">{{ article.sub }}</span></span>
+                      <time :datetime="article.published_at">{{ shortPublicDate(article.published_at) }}</time>
+                    </RouterLink>
+                  </li>
+                </ul>
+                <RouterLink :to="{ name: 'site-home', query: { collection: item.node.id } }" class="more">查看全部 <UiIcon name="arrowRight" :size="14" /></RouterLink>
+              </div>
+            </article>
+          </div>
+          <p v-if="looseCount" class="block-note">另有 {{ looseCount }} 篇文章未歸入集合，可在左側「其他文章」找到。</p>
+        </section>
+
+        <section class="block" aria-labelledby="latest-title">
+          <div class="block-head">
+            <h2 id="latest-title">最新文章</h2>
+            <RouterLink :to="{ name: 'site-home', query: { view: 'all' } }" class="more">全部文章 <UiIcon name="arrowRight" :size="14" /></RouterLink>
+          </div>
+          <p v-if="error" class="state" role="alert">{{ error }} <button type="button" class="link" @click="loadArticles">重試</button></p>
+          <div v-else class="cards">
+            <template v-if="loading && !data">
+              <Skeleton v-for="index in 6" :key="index" height="10rem" border-radius="14px" />
+            </template>
+            <RouterLink v-for="card in latest" v-else :key="card.document_id" :to="{ name: 'public-article', params: { id: card.document_id } }"
+              class="card" :style="collectionStyle(card.collection)">
+              <span class="card-meta">
+                <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
+                <time :datetime="card.published_at">{{ publicDate(card.published_at) }}</time>
+                <span aria-hidden="true">·</span><span>約 {{ card.reading_minutes }} 分鐘</span>
+              </span>
+              <span class="card-title">{{ card.title }}</span>
+              <span v-if="card.excerpt" class="card-excerpt">{{ card.excerpt }}</span>
+            </RouterLink>
+            <p v-if="!loading && !latest.length" class="state">這裡還沒有公開文章。</p>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <!-- Listing: search, a collection, or every article -->
+    <div v-else class="inner content listing">
+      <header class="list-head" :style="activeNode ? collectionStyle(activeNode) : undefined">
+        <nav v-if="activePath.length > 1" class="crumbs" aria-label="上層集合">
+          <RouterLink :to="{ name: 'site-home' }">首頁</RouterLink>
+          <template v-for="node in activePath.slice(0, -1)" :key="node.id">
+            <span aria-hidden="true">/</span>
+            <RouterLink :to="{ name: 'site-home', query: { collection: node.id } }">{{ node.name }}</RouterLink>
           </template>
-          <RouterLink v-for="item in collections" v-else :key="item.id"
-            :to="{ name: 'site-home', query: { collection: item.id }, hash: '#latest' }" class="collection-card">
-            <span class="ui-col-mark card-mark" :class="colorClass(item)" aria-hidden="true">{{ markOf(item.name) }}</span>
-            <span class="card-name">{{ item.name }}</span>
-            <span class="card-count">{{ item.article_count }} 篇文章 <UiIcon name="arrowRight" :size="14" /></span>
+        </nav>
+        <div class="list-title">
+          <span v-if="activeNode" class="ui-col-mark list-mark" :class="colorClass(activeNode)" aria-hidden="true">{{ markOf(activeNode.name) }}</span>
+          <h1>{{ listHeading }}</h1>
+        </div>
+        <p class="result-line" aria-live="polite">{{ loading && !data ? '正在載入…' : `${data?.count ?? 0} 篇文章` }}</p>
+        <div v-if="activeNode && portal.childrenOf(activeNode.id).length" class="chips">
+          <span class="chips-label">子集合</span>
+          <RouterLink v-for="child in portal.childrenOf(activeNode.id)" :key="child.id" :to="{ name: 'site-home', query: { collection: child.id } }" class="chip">
+            <span class="ui-col-mark chip-mark" :class="colorClass(child)" aria-hidden="true">{{ markOf(child.name) }}</span>{{ child.name }}<span class="chip-count">{{ child.total_count }}</span>
           </RouterLink>
         </div>
-      </section>
+      </header>
 
-      <section id="latest" class="block" aria-labelledby="latest-title">
-        <div class="list-head">
-          <div>
-            <h2 id="latest-title">{{ listHeading }}</h2>
-            <p class="result-line" aria-live="polite">{{ resultLine }}</p>
-          </div>
-          <div v-if="collections.length > 1 || collection" class="chips" role="group" aria-label="依集合篩選">
-            <button type="button" class="chip" :class="{ on: !collection }" :aria-pressed="!collection" @click="setQuery({ collection: '' })">全部</button>
-            <button v-for="item in collections" :key="item.id" type="button" class="chip" :class="{ on: collection === item.id }"
-              :aria-pressed="collection === item.id" @click="setQuery({ collection: item.id })">{{ item.name }}</button>
-          </div>
-        </div>
+      <p v-if="error" class="state" role="alert">{{ error }} <button type="button" class="link" @click="loadArticles">重試</button></p>
+      <div v-else-if="loading && !data" class="cards"><Skeleton v-for="index in 6" :key="index" height="10rem" border-radius="14px" /></div>
+      <div v-else-if="data?.results.length" class="cards" :class="{ stale: loading }">
+        <RouterLink v-for="card in data.results" :key="card.document_id" :to="{ name: 'public-article', params: { id: card.document_id } }"
+          class="card" :style="collectionStyle(card.collection)">
+          <span class="card-meta">
+            <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
+            <time :datetime="card.published_at">{{ publicDate(card.published_at) }}</time>
+            <span aria-hidden="true">·</span><span>約 {{ card.reading_minutes }} 分鐘</span>
+          </span>
+          <span class="card-title">{{ card.title }}</span>
+          <span v-if="card.excerpt" class="card-excerpt">{{ card.excerpt }}</span>
+        </RouterLink>
+      </div>
+      <div v-else class="empty">
+        <UiIcon name="search" :size="28" />
+        <p class="empty-title">{{ keywords ? `找不到符合「${keywords}」的文章` : '這裡還沒有公開文章' }}</p>
+        <RouterLink :to="{ name: 'site-home' }" class="more">回到首頁</RouterLink>
+      </div>
 
-        <p v-if="error" class="state error" role="alert">
-          {{ error }}
-          <button type="button" class="link" @click="loadArticles">重試</button>
-        </p>
-        <ol v-else-if="loading && !data" class="articles" aria-busy="true">
-          <li v-for="index in 4" :key="index" class="article"><Skeleton width="40%" /><Skeleton width="70%" height="1.5rem" /><Skeleton /></li>
-        </ol>
-        <ol v-else-if="data?.results.length" class="articles" :class="{ stale: loading }" :aria-busy="loading">
-          <li v-for="item in data.results" :key="item.document_id" class="article">
-            <article>
-              <div class="meta">
-                <span v-if="item.collection" class="collection-tag" :class="colorClass(item.collection)">{{ item.collection.name }}</span>
-                <time :datetime="item.published_at">{{ publicDate(item.published_at) }}</time>
-                <span aria-hidden="true">·</span>
-                <span>約 {{ item.reading_minutes }} 分鐘閱讀</span>
-              </div>
-              <h3><RouterLink :to="{ name: 'public-article', params: { id: item.document_id } }">{{ item.title }}</RouterLink></h3>
-              <p v-if="item.excerpt" class="excerpt">{{ item.excerpt }}</p>
-            </article>
-          </li>
-        </ol>
-        <div v-else class="state empty">
-          <UiIcon name="search" :size="28" />
-          <p class="empty-title">{{ keywords ? `找不到符合「${keywords}」的文章` : '這裡還沒有公開文章' }}</p>
-          <p v-if="keywords">換個關鍵字再試一次。</p>
-          <button v-if="keywords || collection" type="button" class="link" @click="searchText = ''; setQuery({ q: '', collection: '' })">查看全部文章</button>
-        </div>
-
-        <nav v-if="data && data.pages > 1" class="pager" aria-label="分頁">
-          <button type="button" class="page-button" :disabled="page <= 1" @click="setQuery({ page: page - 1 })">
-            <UiIcon name="chevronLeft" :size="16" />上一頁
-          </button>
-          <span>第 {{ data.page }} / {{ data.pages }} 頁</span>
-          <button type="button" class="page-button" :disabled="page >= data.pages" @click="setQuery({ page: page + 1 })">
-            下一頁<UiIcon name="chevronRight" :size="16" />
-          </button>
-        </nav>
-      </section>
+      <nav v-if="data && data.pages > 1" class="pager" aria-label="分頁">
+        <button type="button" class="page-button" :disabled="page <= 1" @click="setQuery({ page: page - 1 })"><UiIcon name="chevronLeft" :size="16" />上一頁</button>
+        <span>第 {{ data.page }} / {{ data.pages }} 頁</span>
+        <button type="button" class="page-button" :disabled="page >= data.pages" @click="setQuery({ page: page + 1 })">下一頁<UiIcon name="chevronRight" :size="16" /></button>
+      </nav>
     </div>
   </div>
 </template>
 
 <style scoped>
-.hero { padding: clamp(3rem, 7vw, 4.5rem) var(--ui-gutter) clamp(2.5rem, 5vw, 3.5rem); border-bottom: 1px solid var(--ui-border-subtle); background: var(--ui-bg-subtle); text-align: center; }
-.hero-inner { max-width: 45rem; margin: 0 auto; display: grid; justify-items: center; gap: var(--ui-space-4); }
-h1 { margin: 0; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); line-height: 1.2; font-weight: 700; letter-spacing: -.02em; }
+.inner { box-sizing: border-box; max-width: 85rem; margin: 0 auto; }
+.hero { padding: clamp(2rem, 4vw, 3.5rem) clamp(1rem, 3vw, 3rem) clamp(1.75rem, 3vw, 3rem); border-bottom: 1px solid var(--ui-border-subtle); background: color-mix(in srgb, var(--ui-accent-soft) 70%, var(--ui-bg-surface)); }
+.hero-inner { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--ui-space-5); }
+.hero-text { display: grid; gap: var(--ui-space-3); max-width: 48rem; }
+.eyebrow { color: var(--ui-accent-on-soft); font-size: var(--ui-text-sm); font-weight: 600; letter-spacing: .02em; }
+h1 { margin: 0; font-size: clamp(1.875rem, 1.3rem + 2vw, 2.75rem); line-height: 1.15; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .lead { margin: 0; color: var(--ui-text-secondary); font-size: 1.0625rem; line-height: 1.7; }
-.search {
-  position: relative; margin-top: var(--ui-space-3); width: 100%; display: flex; align-items: center; gap: var(--ui-space-2);
-  min-height: 3.5rem; padding: 0 .5rem 0 1.125rem; box-sizing: border-box; color: var(--ui-text-muted);
-  border: 1px solid var(--ui-border-strong); border-radius: .875rem; background: var(--ui-bg-surface); box-shadow: 0 4px 16px rgb(16 24 40 / .06);
-}
-.search:focus-within { border-color: var(--ui-accent); box-shadow: var(--ui-focus-ring); }
-.search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ui-text); font: inherit; font-size: 1rem; }
-.search input:focus-visible { box-shadow: none; }
-.search input::-webkit-search-cancel-button { display: none; }
-.clear { display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-muted); cursor: pointer; }
-.clear:hover { background: var(--ui-bg-muted); color: var(--ui-text); }
-.submit { height: 2.625rem; padding: 0 1.125rem; border: 0; border-radius: .625rem; background: var(--ui-accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-.submit:hover { background: var(--ui-accent-hover); }
-.hub-dark .submit { color: #0c111b; }
+.stats { display: flex; gap: var(--ui-space-6); margin: 0; }
+.stats div { display: flex; flex-direction: column-reverse; gap: 2px; }
+.stats dt { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.stats dd { margin: 0; font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.content { box-sizing: border-box; max-width: 70rem; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) var(--ui-gutter) 5rem; display: grid; gap: clamp(2.5rem, 5vw, 3.5rem); }
-.block { display: grid; gap: 1.125rem; min-width: 0; scroll-margin-top: 5rem; }
+.content { width: 100%; padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1rem, 3vw, 3rem) clamp(2.5rem, 5vw, 4rem); display: grid; gap: clamp(2rem, 4vw, 3rem); align-content: start; }
+.block { display: grid; gap: var(--ui-space-4); }
+.block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--ui-space-3); }
 h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
-.collections { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--ui-space-4); }
-.collection-card {
-  display: grid; gap: var(--ui-space-3); justify-items: start; padding: 1.375rem; border: 1px solid var(--ui-border);
-  border-radius: .875rem; background: var(--ui-bg-surface); color: var(--ui-text); text-decoration: none; transition: border-color .15s, box-shadow .15s;
-}
-.collection-card:hover { border-color: var(--ui-border-strong); box-shadow: var(--ui-shadow-sm); }
-.card-mark { width: 2.5rem; height: 2.5rem; border-radius: .625rem; font-size: 1rem; }
-.card-name { font-size: 1.0625rem; font-weight: 700; overflow-wrap: anywhere; }
-.card-count { display: inline-flex; align-items: center; gap: var(--ui-space-1); color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; }
+.block-note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.more { display: inline-flex; align-items: center; gap: var(--ui-space-1); color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
+.more:hover { text-decoration: underline; }
 
-.list-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--ui-space-3); }
-.result-line { margin: var(--ui-space-1) 0 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
-.chips { display: flex; flex-wrap: wrap; gap: .375rem; }
-.chip { min-height: 2.125rem; padding: 0 .875rem; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-pill); background: var(--ui-bg-surface); color: var(--ui-text-secondary); font: inherit; font-size: var(--ui-text-sm); cursor: pointer; }
-.chip:hover { border-color: var(--ui-text-muted); }
-.chip.on { border-color: var(--ui-text); background: var(--ui-text); color: var(--ui-bg-surface); font-weight: 600; }
-.articles { list-style: none; margin: 0; padding: 0; }
-.articles.stale { opacity: .6; transition: opacity .15s; }
-.article { display: grid; gap: var(--ui-space-2); padding: 1.375rem 0; border-top: 1px solid var(--ui-border-subtle); }
-.article article { display: grid; gap: var(--ui-space-2); }
-.meta { display: flex; flex-wrap: wrap; align-items: center; gap: .625rem; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
-.collection-tag { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-sm); font-weight: 600; }
-h3 { margin: 0; font-size: 1.1875rem; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
-h3 a { color: var(--ui-text); text-decoration: none; }
-h3 a:hover { color: var(--ui-accent); text-decoration: underline; text-underline-offset: .18em; }
-.excerpt { margin: 0; max-width: 72ch; color: var(--ui-text-secondary); font-size: .96875rem; line-height: 1.75; overflow-wrap: anywhere; }
-.state { margin: 0; padding: var(--ui-space-6) 0; border-top: 1px solid var(--ui-border-subtle); color: var(--ui-text-muted); }
-.empty { display: grid; justify-items: center; gap: var(--ui-space-2); text-align: center; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: var(--ui-space-4); }
+.tile { display: flex; flex-direction: column; border: 1px solid var(--ui-border); border-radius: .875rem; overflow: hidden; background: var(--ui-bg-surface); }
+.tile-bar { height: 4px; background: var(--col-fg); opacity: .75; }
+.tile-body { display: grid; gap: var(--ui-space-4); padding: 1.25rem 1.375rem 1.375rem; }
+.tile-head { display: flex; align-items: center; gap: var(--ui-space-3); }
+.tile-mark { width: 2.5rem; height: 2.5rem; border-radius: .625rem; font-size: 1.0625rem; }
+.tile-title { display: grid; min-width: 0; }
+.tile-name { color: var(--ui-text); font-size: 1.0625rem; font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.tile-name:hover { color: var(--ui-accent); text-decoration: underline; }
+.tile-count { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; font-size: var(--ui-text-sm); }
+.chips-label { color: var(--ui-text-muted); }
+.chip { display: inline-flex; align-items: center; gap: .375rem; padding: 2px .625rem 2px 3px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); color: var(--ui-text-secondary); text-decoration: none; }
+.chip:hover { border-color: var(--ui-border-strong); color: var(--ui-text); }
+.chip-mark { width: 1.125rem; height: 1.125rem; border-radius: 50%; font-size: .625rem; }
+.chip-count { color: var(--ui-text-muted); }
+.tile-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--ui-border-subtle); }
+.tile-list li { border-bottom: 1px solid var(--ui-border-subtle); }
+.tile-link { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ui-space-3); padding: .625rem 0; color: var(--ui-text); font-size: .90625rem; text-decoration: none; }
+.tile-link:hover .tile-link-title { color: var(--ui-accent); text-decoration: underline; }
+.tile-link-title { min-width: 0; overflow-wrap: anywhere; }
+.sub { margin-left: .375rem; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+.tile-link time { flex: none; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: var(--ui-space-4); }
+.cards.stale { opacity: .6; }
+.card { display: flex; flex-direction: column; gap: .625rem; padding: 1.25rem 1.375rem; border: 1px solid var(--ui-border); border-radius: .875rem; background: var(--ui-bg-surface); color: var(--ui-text); text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+.card:hover { border-color: var(--ui-border-strong); box-shadow: var(--ui-shadow-sm); }
+.card:hover .card-title { color: var(--ui-accent); }
+.card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+.tag { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-sm); font-weight: 600; }
+.card-title { font-size: 1.0625rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.card-excerpt { color: var(--ui-text-secondary); font-size: .90625rem; line-height: 1.7; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+
+.list-head { display: grid; gap: var(--ui-space-2); padding-bottom: var(--ui-space-2); }
+.crumbs { display: flex; flex-wrap: wrap; gap: .375rem; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.crumbs a { color: inherit; text-decoration: none; }
+.crumbs a:hover { color: var(--ui-accent); text-decoration: underline; }
+.list-title { display: flex; align-items: center; gap: var(--ui-space-3); }
+.list-title h1 { font-size: clamp(1.625rem, 1.2rem + 1.4vw, 2.25rem); }
+.list-mark { width: 2.5rem; height: 2.5rem; border-radius: .625rem; font-size: 1.0625rem; }
+.result-line { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.state { margin: 0; color: var(--ui-text-muted); }
+.link { padding: 0; border: 0; background: none; color: var(--ui-accent); font: inherit; font-weight: 600; cursor: pointer; }
+.empty { display: grid; justify-items: center; gap: var(--ui-space-2); padding: var(--ui-space-7) 0; border: 1px dashed var(--ui-border-strong); border-radius: var(--ui-radius-lg); color: var(--ui-text-muted); text-align: center; }
 .empty p { margin: 0; }
 .empty-title { color: var(--ui-text); font-weight: 600; font-size: var(--ui-text-lg); }
-.link { padding: 0; border: 0; background: none; color: var(--ui-accent); font: inherit; font-weight: 600; cursor: pointer; }
-.pager { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding-top: var(--ui-space-4); border-top: 1px solid var(--ui-border-subtle); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .page-button { display: inline-flex; align-items: center; gap: var(--ui-space-1); min-height: 2.5rem; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-bg-surface); color: var(--ui-text-secondary); font: inherit; cursor: pointer; }
 .page-button:disabled { opacity: .45; cursor: default; }
 @media (max-width: 640px) {
-  .submit { display: none; }
-  .search { padding-right: .375rem; }
+  .stats { gap: var(--ui-space-5); }
+  .stats dd { font-size: 1.375rem; }
 }
 </style>

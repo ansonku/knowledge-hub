@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from users.permissions import IsAdmin
 
 from . import activity, search, storage
-from .models import ArticlePublication, ArticlePublicationAudit, Document, SiteSettings
+from .models import ArticlePublication, ArticlePublicationAudit, Category, Document, SiteSettings
 from .public_html import readable_html
 
 
@@ -102,9 +102,9 @@ def published_articles():
 
 
 # ---- Public presentation -------------------------------------------------------------
-# Visitors only ever see the publication snapshot plus the name and colour of the article's
-# own collection (decision 6 in UI_REDESIGN.md): never descriptions, parents, internal counts,
-# authors or tags.
+# Visitors only ever see the publication snapshot plus the names and colours of the collections
+# on the path to a published article (decision 6, revised in P5b): never descriptions, internal
+# counts, collections with no published article in their subtree, authors or tags.
 
 EXCERPT_LENGTH = 120
 SAMPLE_LENGTH = 2000
@@ -116,7 +116,9 @@ MARKDOWN_NOISE = [
     (re.compile(r"(^|\s)#{1,6}\s+"), " "),               # heading markers
     (re.compile(r"(^|\s)(?:>|[-*+]|\d+\.)\s+"), " "),    # quotes and list markers
     (re.compile(r"\|"), " "),                           # table pipes
-    (re.compile(r"[*_`~]+"), ""),                       # emphasis and inline code marks
+    (re.compile(r"(^|\s):?-{3,}:?(?=\s|$)"), " "),       # table separator cells and rules (---, :---:)
+    (re.compile(r"[*`~]+"), ""),                        # emphasis and inline code marks
+    (re.compile(r"(?<!\w)_+|_+(?!\w)"), ""),            # _emphasis_, but not snake_case words
     (re.compile(r"<[^>]+>"), " "),                      # inline HTML tags
 ]
 
@@ -149,14 +151,72 @@ def presented(query):
     )
 
 
+def category_index():
+    """All collections as {id: (name, colour, parent_id)}; the table is small."""
+    return {pk: (name, color, parent) for pk, name, color, parent in Category.objects.values_list("pk", "name", "color", "parent_id")}
+
+
+def path_of(category_id, index):
+    """Root-to-leaf [{id, name, color}] for a collection, or [] when uncategorised."""
+    path, seen = [], set()
+    while category_id and category_id in index and category_id not in seen:
+        seen.add(category_id)
+        name, color, parent = index[category_id]
+        path.insert(0, {"id": category_id, "name": name, "color": color})
+        category_id = parent
+    return path
+
+
+def subtree_ids(category_id, index):
+    found, frontier = {category_id}, [category_id]
+    while frontier:
+        current = frontier.pop()
+        children = [pk for pk, (_, _, parent) in index.items() if parent == current and pk not in found]
+        found.update(children)
+        frontier.extend(children)
+    return found
+
+
+def public_tree(index):
+    """Collections holding published articles plus their ancestors, depth first by name.
+
+    Each node: id, name, color, parent, article_count (its own) and total_count (its subtree).
+    """
+    direct = dict(
+        published_articles().filter(document__category__isnull=False)
+        .values_list("document__category_id").annotate(count=Count("pk"))
+    )
+    visible = set()
+    for category_id in direct:
+        visible.update(node["id"] for node in path_of(category_id, index))
+    children = {}
+    for pk in visible:
+        children.setdefault(index[pk][2], []).append(pk)
+    nodes = []
+
+    def walk(parent, depth):
+        total = 0
+        for pk in sorted(children.get(parent, []), key=lambda key: (index[key][0].lower(), str(key))):
+            node = {"id": pk, "name": index[pk][0], "color": index[pk][1], "parent": parent,
+                    "depth": depth, "article_count": direct.get(pk, 0)}
+            nodes.append(node)
+            node["total_count"] = node["article_count"] + walk(pk, depth + 1)
+            total += node["total_count"]
+        return total
+
+    walk(None, 0)
+    return nodes
+
+
 def collection_of(row):
     if not row["document__category_id"]:
         return None
     return {"id": row["document__category_id"], "name": row["document__category__name"], "color": row["document__category__color"]}
 
 
-def article_card(row):
+def article_card(row, index):
     return {
+        "path": path_of(row["document__category_id"], index),
         "document_id": row["document_id"], "title": row["title"], "format": row["format"],
         "published_at": row["published_at"], "excerpt": summarise(row["sample"], row["title"], row["format"]),
         "reading_minutes": reading_minutes(row["sample"], row["text_length"]), "collection": collection_of(row),
@@ -171,13 +231,15 @@ def public_articles(request):
     articles = published_articles()
     for term in search.normalize(request.query_params.get("q", "")[:240]).split():
         articles = articles.filter(Q(title__icontains=term) | Q(search_text__icontains=term))
+    index = category_index()
     if request.query_params.get("collection"):
         collection = serializers.UUIDField().run_validation(request.query_params["collection"])
-        articles = articles.filter(document__category_id=collection)
+        # A collection's page lists its sub-collections' articles too.
+        articles = articles.filter(document__category_id__in=subtree_ids(collection, index))
     paginator = Paginator(presented(articles.order_by("-published_at", "document_id")), 20)
     page = paginator.get_page(request.query_params.get("page"))
     return Response({
-        "results": [article_card(row) for row in page], "page": page.number, "pages": paginator.num_pages,
+        "results": [article_card(row, index) for row in page], "page": page.number, "pages": paginator.num_pages,
         "count": paginator.count,
     })
 
@@ -187,12 +249,26 @@ def public_articles(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def public_collections(request):
-    rows = (
-        published_articles().filter(document__category__isnull=False)
-        .values("document__category_id", "document__category__name", "document__category__color")
-        .annotate(article_count=Count("pk")).order_by("document__category__name", "document__category_id")
-    )
-    return Response({"results": [collection_of(row) | {"article_count": row["article_count"]} for row in rows]})
+    return Response({"results": public_tree(category_index())})
+
+
+NAV_LIMIT = 1000
+
+
+@never_cache
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def public_nav(request):
+    """Everything the public site's side navigation needs in one request: the collection tree and
+    the titles of published articles (newest first)."""
+    index = category_index()
+    articles = [
+        {"document_id": pk, "title": title, "collection_id": category, "published_at": published}
+        for pk, title, category, published in published_articles().order_by("-published_at", "document_id")
+        .values_list("document_id", "title", "document__category_id", "published_at")[:NAV_LIMIT]
+    ]
+    return Response({"collections": public_tree(index), "articles": articles})
 
 
 @never_cache
@@ -210,7 +286,8 @@ def public_article(request, document_id):
     return Response({
         "title": row["title"], "format": row["format"], "body": row["body_text"],
         "published_at": row["published_at"], "reading_minutes": reading_minutes(row["sample"], row["text_length"]),
-        "collection": collection_of(row), "siblings": siblings,
+        "collection": collection_of(row), "path": path_of(row["document__category_id"], category_index()),
+        "siblings": siblings,
     })
 
 
