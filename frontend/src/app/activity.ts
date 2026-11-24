@@ -2,13 +2,14 @@ import type { Format } from './types'
 
 export type ActivityItem = {
   id: number
-  action: 'created' | 'uploaded' | 'edited' | 'restored_version' | 'metadata' | 'trashed' | 'restored' | 'published' | 'withdrawn'
+  action: 'created' | 'uploaded' | 'edited' | 'restored_version' | 'metadata' | 'trashed' | 'restored' | 'published' | 'withdrawn' | 'featured' | 'unfeatured'
   actor: string | null
   version_number: number | null
   detail: {
     note?: string
     restored_from?: number
     republished?: boolean
+    automatic?: boolean
     title?: { from: string; to: string }
     category?: { from: string | null; to: string | null }
     tags?: { added: string[]; removed: string[] }
@@ -32,6 +33,8 @@ export function activityVerb(item: ActivityItem) {
     case 'restored': return '從回收桶還原'
     case 'published': return item.detail.republished ? `重新發布 ${version}` : `發布 ${version} 為公開文章`
     case 'withdrawn': return '下架了公開文章'
+    case 'featured': return '加入首頁精選'
+    case 'unfeatured': return item.detail.automatic ? '因下架自動移出首頁精選' : '移出首頁精選'
   }
 }
 

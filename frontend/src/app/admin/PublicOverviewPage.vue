@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Message from 'primevue/message'
 import Skeleton from 'primevue/skeleton'
+import { useToast } from 'primevue/usetoast'
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '../../api'
@@ -10,11 +11,11 @@ import { colorClass, type PublicCollection } from '../../site/public'
 type Row = {
   document_id: string; title: string; published_at: string; path: PublicCollection[]
   published_version: number; latest_version: number; published_version_id: string; latest_version_id: string
-  behind: number; total: number; spark: number[]
+  behind: number; total: number; spark: number[]; featured: boolean
 }
 type Overview = {
   days: number; total: number; daily: { day: string; count: number }[]
-  articles: Row[]; lagging: number; idle: number
+  articles: Row[]; lagging: number; idle: number; featured: string[]; featured_max: number
 }
 
 const route = useRoute()
@@ -48,6 +49,48 @@ const pathLabel = (row: Row) => row.path.map(item => item.name).join(' › ')
 const leaf = (row: Row) => row.path[row.path.length - 1]
 const sparkPeak = (row: Row) => Math.max(1, ...row.spark)
 const sparkTotal = (row: Row) => row.spark.reduce((sum, value) => sum + value, 0)
+
+// ---- Featured on the public home (P6b): the whole ordered list is saved on every change ------------
+const toast = useToast()
+const featured = ref<string[]>([])
+const featuredMax = computed(() => data.value?.featured_max ?? 4)
+const saving = ref(false)
+watch(data, value => { featured.value = value?.featured ?? [] })
+const byId = computed(() => new Map((data.value?.articles ?? []).map(row => [row.document_id, row])))
+const featuredRows = computed(() => featured.value.map(id => byId.value.get(id)).filter((row): row is Row => Boolean(row)))
+
+async function saveFeatured(next: string[], message: string) {
+  if (saving.value) return
+  saving.value = true
+  const previous = featured.value
+  featured.value = next
+  try {
+    const result = await api<{ results: { document_id: string }[] }>('/api/admin/featured/', 'PUT', { documents: next })
+    featured.value = result.results.map(item => item.document_id)
+    toast.add({ severity: 'success', summary: message, life: 2500 })
+  } catch (cause) {
+    featured.value = previous
+    toast.add({ severity: 'error', summary: '無法更新首頁精選', detail: cause instanceof Error ? cause.message : undefined, life: 5000 })
+  } finally {
+    saving.value = false
+  }
+}
+function toggleFeatured(row: Row) {
+  if (featured.value.includes(row.document_id)) {
+    void saveFeatured(featured.value.filter(id => id !== row.document_id), `已從首頁精選移除「${row.title}」`)
+  } else if (featured.value.length >= featuredMax.value) {
+    toast.add({ severity: 'warn', summary: `首頁精選最多 ${featuredMax.value} 篇`, detail: '請先移除一篇再加入。', life: 4000 })
+  } else {
+    void saveFeatured([...featured.value, row.document_id], `已加入首頁精選「${row.title}」`)
+  }
+}
+function moveFeatured(index: number, step: -1 | 1) {
+  const next = [...featured.value]
+  const target = index + step
+  if (target < 0 || target >= next.length) return
+  ;[next[index], next[target]] = [next[target], next[index]]
+  void saveFeatured(next, '已更新精選順序')
+}
 </script>
 
 <template>
@@ -78,6 +121,10 @@ const sparkTotal = (row: Row) => row.spark.reduce((sum, value) => sum + value, 0
           <dd>{{ data.articles.length }}</dd>
         </div>
         <div class="kpi">
+          <dt>首頁精選<span class="kpi-note">最多 {{ featuredMax }} 篇</span></dt>
+          <dd>{{ featured.length }} / {{ featuredMax }}</dd>
+        </div>
+        <div class="kpi">
           <dt>落後最新版<span class="kpi-note" :class="{ warn: data.lagging }">{{ data.lagging ? '需要重新發布' : '全部都是最新版' }}</span></dt>
           <dd>{{ data.lagging }}</dd>
         </div>
@@ -97,6 +144,7 @@ const sparkTotal = (row: Row) => row.spark.reduce((sum, value) => sum + value, 0
           <div class="axis"><span>{{ dayLabel(data.daily[0].day) }}</span><span>今天</span></div>
         </section>
 
+        <div class="side">
         <section class="card todo" aria-labelledby="todo-title">
           <h2 id="todo-title">待處理</h2>
           <div v-for="row in lagging" :key="row.document_id" class="lag">
@@ -112,6 +160,28 @@ const sparkTotal = (row: Row) => row.spark.reduce((sum, value) => sum + value, 0
           <p v-if="!lagging.length" class="ok"><UiIcon name="check" :size="16" />所有公開文章都是最新版本。</p>
           <p v-if="data.idle" class="idle">{{ data.idle }} 篇公開文章在這段期間沒有任何瀏覽。</p>
         </section>
+
+        <section class="card picks" aria-labelledby="picks-title">
+          <div class="card-head">
+            <h2 id="picks-title">首頁精選</h2>
+            <a href="/articles/" target="_blank" rel="noopener" class="muted-link">在公開首頁查看</a>
+          </div>
+          <ol v-if="featuredRows.length" class="pick-list" :aria-busy="saving">
+            <li v-for="(row, index) in featuredRows" :key="row.document_id" class="pick">
+              <span class="rank" aria-hidden="true">{{ index + 1 }}</span>
+              <span class="pick-title">{{ row.title }}</span>
+              <button type="button" class="icon-button" :aria-label="`上移「${row.title}」`" :disabled="saving || index === 0"
+                @click="moveFeatured(index, -1)"><UiIcon name="chevronDown" :size="16" class="up" /></button>
+              <button type="button" class="icon-button" :aria-label="`下移「${row.title}」`" :disabled="saving || index === featuredRows.length - 1"
+                @click="moveFeatured(index, 1)"><UiIcon name="chevronDown" :size="16" /></button>
+              <button type="button" class="icon-button" :aria-label="`從精選移除「${row.title}」`" :disabled="saving"
+                @click="toggleFeatured(row)"><UiIcon name="close" :size="16" /></button>
+            </li>
+          </ol>
+          <p v-else class="note">還沒有精選文章。在下方表格點星號加入，最多 {{ featuredMax }} 篇。</p>
+          <p class="note">依順序顯示在公開首頁「熱門文章」之後；熱門排行會略過精選文章。文章下架或移入回收桶時會自動移出。</p>
+        </section>
+        </div>
       </div>
 
       <section class="card table-card" aria-labelledby="articles-title">
@@ -124,6 +194,7 @@ const sparkTotal = (row: Row) => row.spark.reduce((sum, value) => sum + value, 0
           <table>
             <thead>
               <tr>
+                <th scope="col" class="star-col"><span class="ui-visually-hidden">首頁精選</span></th>
                 <th scope="col">文章</th>
                 <th scope="col">公開版本</th>
                 <th scope="col" class="num">瀏覽</th>
@@ -132,6 +203,14 @@ const sparkTotal = (row: Row) => row.spark.reduce((sum, value) => sum + value, 0
             </thead>
             <tbody>
               <tr v-for="row in data.articles" :key="row.document_id">
+                <td class="star-col">
+                  <button type="button" class="star" :class="{ on: featured.includes(row.document_id) }" :disabled="saving"
+                    :aria-pressed="featured.includes(row.document_id)"
+                    :aria-label="featured.includes(row.document_id) ? `從首頁精選移除「${row.title}」` : `加入首頁精選「${row.title}」`"
+                    @click="toggleFeatured(row)">
+                    <UiIcon name="star" :size="18" :filled="featured.includes(row.document_id)" />
+                  </button>
+                </td>
                 <td>
                   <RouterLink :to="{ name: 'app-document', params: { id: row.document_id } }" class="title">{{ row.title }}</RouterLink>
                   <span v-if="row.path.length" class="tag" :class="colorClass(leaf(row))">{{ pathLabel(row) }}</span>
@@ -171,17 +250,34 @@ h2 { margin: 0; font-size: 1rem; }
 .range button { height: 2rem; padding: 0 var(--ui-space-3); border: 0; border-radius: var(--ui-radius-sm); background: transparent; color: var(--ui-text-muted); font: inherit; font-size: var(--ui-text-sm); cursor: pointer; }
 .range button.on { background: var(--ui-bg-surface); color: var(--ui-text); font-weight: 600; box-shadow: var(--ui-shadow-sm); }
 
-/* Three figures: one row whenever each gets at least 9rem, otherwise stacked. */
-.kpis { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(max(9rem, calc((100% - 2 * var(--ui-space-3)) / 3)), 1fr)); gap: var(--ui-space-3); }
+/* Four figures: one row, or 2 × 2 on narrow screens. */
+.kpis { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ui-space-3); }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .kpi { display: flex; flex-direction: column-reverse; gap: var(--ui-space-1); padding: var(--ui-space-4) var(--ui-space-5); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }
 .kpi dt { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .kpi dd { margin: 0; font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .kpi-note { display: block; margin-top: 2px; font-size: var(--ui-text-xs); }
 .kpi-note.warn { color: var(--ui-lagging-text); }
 
-.split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(min(100%, 20rem), 1fr); gap: var(--ui-space-4); align-items: stretch; }
+.split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(min(100%, 20rem), 1fr); gap: var(--ui-space-4); align-items: start; }
 @media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); } }
 .card { display: grid; align-content: start; gap: var(--ui-space-3); padding: var(--ui-space-5); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); min-width: 0; }
+.side { display: grid; gap: var(--ui-space-4); align-content: start; min-width: 0; }
+.muted-link { color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
+.muted-link:hover { text-decoration: underline; }
+.pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ui-space-2); }
+.pick { display: flex; align-items: center; gap: var(--ui-space-2); padding: var(--ui-space-2) var(--ui-space-2) var(--ui-space-2) var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); }
+.rank { flex: none; display: grid; place-items: center; width: 1.625rem; height: 1.625rem; border-radius: 50%; background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); font-size: var(--ui-text-xs); font-weight: 700; }
+.pick-title { flex: 1; min-width: 0; font-weight: 600; font-size: var(--ui-text-sm); overflow-wrap: anywhere; }
+.icon-button { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-bg-surface); color: var(--ui-text-secondary); cursor: pointer; }
+.icon-button:hover:not(:disabled) { border-color: var(--ui-border-strong); color: var(--ui-text); }
+.icon-button:disabled { opacity: .4; cursor: default; }
+.up { transform: rotate(180deg); }
+.note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); line-height: 1.6; }
+.star-col { width: 2.5rem; padding-right: 0 !important; }
+.star { display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: var(--ui-radius-sm); background: transparent; color: var(--ui-text-muted); cursor: pointer; }
+.star:hover:not(:disabled) { background: var(--ui-bg-subtle); color: var(--ui-text); }
+.star.on { color: #d99a00; }
 .card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--ui-space-2); }
 
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 11rem; padding-bottom: 4px; border-bottom: 1px solid var(--ui-border); }

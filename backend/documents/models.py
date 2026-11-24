@@ -161,6 +161,8 @@ class DocumentActivity(models.Model):
         RESTORED = "restored", "Restored from trash"
         PUBLISHED = "published", "Published"
         WITHDRAWN = "withdrawn", "Withdrawn"
+        FEATURED = "featured", "Featured on the public home"
+        UNFEATURED = "unfeatured", "Removed from the public home"
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="activities")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
@@ -202,4 +204,14 @@ class ArticleViewDaily(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint("document", "day", name="unique_article_view_day")]
         indexes = [models.Index(fields=["day"], name="article_view_day")]
+
+
+class FeaturedArticle(models.Model):
+    """P6b: published articles an Admin pins to the public home, in order (at most four)."""
+    document = models.OneToOneField(Document, primary_key=True, on_delete=models.CASCADE, related_name="+")
+    position = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["position"]
 

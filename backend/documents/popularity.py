@@ -18,6 +18,7 @@ from rest_framework.throttling import SimpleRateThrottle
 
 from users.permissions import IsAdmin
 
+from .featured import MAX_FEATURED, featured_ids
 from .models import ArticleViewDaily, Document
 from .publication import article_card, category_index, path_of, presented, published_articles
 
@@ -73,6 +74,7 @@ def popular_articles(request):
     totals = dict(
         ArticleViewDaily.objects.filter(day__gte=window_start(), document__articlepublication__isnull=False,
                                         document__is_trashed=False)
+        .exclude(document_id__in=featured_ids())  # featured articles have their own section (decision 18)
         .values_list("document_id").annotate(total=Sum("count"))
     )
     if len(totals) < POPULAR_MINIMUM:
@@ -120,6 +122,7 @@ def public_overview(request):
     window = [start + timedelta(days=offset) for offset in range(days)]
     spark_days = [today - timedelta(days=offset) for offset in range(SPARK_DAYS - 1, -1, -1)]
     index = category_index()
+    featured = featured_ids()
     articles = []
     for row in publications:
         daily = counts.get(row["document_id"], {})
@@ -132,6 +135,7 @@ def public_overview(request):
             "latest_version_id": row["document__current_version_id"] or row["version_id"],
             "total": sum(daily.get(day, 0) for day in window),
             "spark": [daily.get(day, 0) for day in spark_days],
+            "featured": row["document_id"] in featured,
         })
     articles.sort(key=lambda item: (-item["total"], item["title"]))
     totals = [{"day": day, "count": sum(counts.get(row["document_id"], {}).get(day, 0) for row in publications)} for day in window]
@@ -142,4 +146,5 @@ def public_overview(request):
         "articles": articles,
         "lagging": sum(1 for item in articles if item["behind"]),
         "idle": sum(1 for item in articles if not item["total"]),
+        "featured": featured, "featured_max": MAX_FEATURED,
     })
