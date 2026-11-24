@@ -536,3 +536,45 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 安全頁面連結都存在，而且可以開啟（回應 200 或 302）。
   - 訪客會被導向登入頁。
   - 沒有溢出，也沒有 console 錯誤。
+
+### P4b 成員管理（2026-11-24）
+
+- 前端 `frontend/src/app/admin/`：
+  - `MembersPage.vue`（`/app/admin/members/`）：
+    - 搜尋帳號、名稱或電子郵件，依角色、狀態篩選，都寫進網址 query。
+    - 清單顯示角色、狀態、最後登入，自己那一列標「（你）」。手機上改成卡片。
+    - 右側滑出的邀請面板，角色用卡片選擇並附說明。
+  - `MemberPage.vue`（`/app/admin/members/:id/`）：
+    - 「資料」分頁：基本資料和變更角色。
+    - 「安全」分頁：雙因素驗證、Google 綁定狀態，寄送密碼重設信，待啟用帳號另有重寄啟用信。
+    - 「活動」分頁：最近 25 筆帳號稽核紀錄，動作名稱翻成中文。
+    - 底部危險區：停用／重新啟用帳號、重設雙因素驗證（必須填理由並勾選已核對身分）。
+    - 每個操作都先跳出確認對話框。
+    - 打開自己的帳號時，角色和危險區都鎖住，說明要由另一位 Admin 執行；後端本來就會拒絕這類操作。
+  - `members.ts`：型別、標籤和狀態的輔助函式。
+  - 側欄的「帳號管理」改名為「成員管理」，連到新頁面。
+- **所有修改帳號的操作仍然是原生 `<form method="post">`**，送到既有的 `/accounts/manage/` 和 `/accounts/manage/<id>/`，帶 `csrfmiddlewaretoken`。CSRF、`reauthentication_required`、管理員鎖定、「至少保留一位管理員」的規則和稽核紀錄都沒有改。
+  - 實測確認：需要重新驗證身分時，allauth 會在驗證後自動重送原本的 POST（`suspend_request`／`resume_request`），所以操作不會遺失。
+- 後端 `users/views.py`：
+  - `GET /api/users/` 新增 `q`、`role`、`status`（`active`、`pending`、`disabled`）三個參數；每列多回傳 `last_login`、`date_joined`。
+  - `GET /api/users/:id/` 的 `account` 新增 `mfa_enabled`、`google_linked`、`is_self`。這些都是 Admin 限定的狀態旗標，不含驗證器密鑰、復原碼或 OAuth token。
+  - `manage_users`、`manage_user` 改成只處理 POST：
+    - 成功和失敗都導回 `/app/admin/members/...`。
+    - 表單錯誤改用 Django messages 傳回（標記 `members`），不再用舊的 Django 範本頁顯示。
+    - GET 也直接導向新頁面。
+  - `management_context` 只回傳標記 `members` 的訊息，所以 allauth 的「成功登入」這類訊息不會出現在成員頁。
+  - `lifecycle.notify` 寄信失敗的警告也加上這個標記。
+- Vue router：重新驗證身分後，系統會導回 `/accounts/manage/` 和 `/accounts/manage/:id/`，所以把這兩個網址接到新頁面。這屬於第 12 節第 9 點所說的系統內部導向。舊的 `ManageAccounts.vue` 已經沒有路由使用，P4f 再刪除。
+- 邀請失敗時，例如帳號或電子郵件重複，頁面會自動重新打開邀請面板，帶回剛才填的內容。內容只暫存在 `sessionStorage`，讀取後立即清除，而且不含密碼。
+- 測試：
+  - 後端新增 1 項：篩選、旗標、表單錯誤會以 notices 回傳、自己停用自己會被拒絕、非 Admin 回 403、登入訊息不會出現。另外調整 2 項既有測試的導向目標。後端共 55 項通過。
+  - Playwright 共 52 項通過：
+    - 版面：Admin 在 1920／1280／768／500 px 檢查清單和詳細頁，1280 和 500 另測深色。
+    - 搜尋、角色和狀態篩選、空狀態。
+    - 重複電子郵件的邀請：經過重新驗證身分後顯示錯誤、自動帶回草稿，而且沒有建立任何帳號。
+    - 把 `uitest-viewer` 的角色改成 Editor 再改回 Viewer，活動紀錄有兩筆變更。
+    - 安全分頁、危險區、開啟自己帳號時的鎖定。
+    - 舊網址會導到新頁面，側欄連結會反白。
+    - Editor 和 Viewer 沒有側欄連結，直接開網址會看到權限說明。
+    - 沒有 console 錯誤。
+  - `smoke.sh` 通過。測試帳號最後都維持原本的角色和啟用狀態。

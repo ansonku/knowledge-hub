@@ -147,9 +147,11 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
       <button v-if="session.canEdit" type="button" class="item" @click="emit('manageTaxonomy')">
         <UiIcon name="sliders" :size="17" /><span class="label">集合與標籤</span>
       </button>
-      <a v-if="session.isAdmin" href="/accounts/manage/" class="item">
-        <UiIcon name="users" :size="17" /><span class="label">帳號管理</span>
-      </a>
+      <RouterLink v-if="session.isAdmin" :to="{ name: 'app-members' }" class="item"
+        :class="{ active: String(route.name ?? '').startsWith('app-member') }"
+        :aria-current="String(route.name ?? '').startsWith('app-member') ? 'page' : undefined" @click="emit('navigate')">
+        <UiIcon name="users" :size="17" /><span class="label">成員管理</span>
+      </RouterLink>
     </div>
 
     <div class="spacer" />

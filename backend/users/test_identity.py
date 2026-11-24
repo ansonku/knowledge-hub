@@ -61,7 +61,7 @@ class AccountTests(TestCase):
             response = self.client.post(reverse("manage_users"), {
                 "username": "invited", "email": "Invite@EXAMPLE.test", "role": User.Role.EDITOR,
             })
-        self.assertRedirects(response, reverse("manage_users"))
+        self.assertRedirects(response, "/app/admin/members/", fetch_redirect_response=False)
         return User.objects.get(username="invited"), path_from_last_email()
 
     def test_invitation_resend_expiry_activation_and_replay(self):
@@ -134,12 +134,58 @@ class AccountTests(TestCase):
                 "username": "new-reader", "email": "new-reader@example.test",
                 "role": User.Role.VIEWER, "csrfmiddlewaretoken": accounts["csrf_token"],
             })
-        self.assertRedirects(response, reverse("manage_users"), fetch_redirect_response=False)
+        self.assertRedirects(response, "/app/admin/members/", fetch_redirect_response=False)
         account = User.objects.get(username="new-reader")
         detail = browser.get(reverse("user_api", args=[account.pk])).json()
         self.assertTrue(detail["account"]["pending_activation"])
         self.assertEqual(detail["audit"][0]["action"], "invited")
         self.assertTrue(detail["notices"])
+
+    def test_member_list_filters_flags_and_flashed_errors(self):
+        self.reauthenticate_admin()
+        User.objects.create_user("pending-one", "pending@example.test", display_name="Pat Pending",
+                                           is_active=False, pending_activation=True)
+        User.objects.create_user("gone", "gone@example.test", is_active=False)
+        api = reverse("users_api")
+        # allauth's login message is not a member-management notice.
+        self.assertEqual(self.client.get(api).json()["notices"], [])
+
+        def names(**params):
+            return sorted(row["username"] for row in self.client.get(api, params).json()["results"])
+
+        self.assertEqual(names(q="pat"), ["pending-one"])
+        self.assertEqual(names(q="GONE@"), ["gone"])
+        self.assertEqual(names(role="admin"), [self.admin.username])
+        self.assertEqual(names(status="pending"), ["pending-one"])
+        self.assertEqual(names(status="disabled"), ["gone"])
+        self.assertNotIn("gone", names(status="active"))
+        self.assertNotIn("pending-one", names(status="active"))
+        self.assertEqual(len(names(role="nonsense")), User.objects.count())
+        row = self.client.get(api, {"q": "pat"}).json()["results"][0]
+        self.assertEqual(set(row), {"id", "username", "email", "display_name", "role", "is_active",
+                                    "pending_activation", "last_login", "date_joined"})
+
+        self.enable_mfa(self.viewer)
+        detail = self.client.get(reverse("user_api", args=[self.viewer.pk])).json()["account"]
+        self.assertTrue(detail["mfa_enabled"])
+        self.assertFalse(detail["google_linked"])
+        self.assertFalse(detail["is_self"])
+        self.assertTrue(self.client.get(reverse("user_api", args=[self.admin.pk])).json()["account"]["is_self"])
+        self.assertNotIn("secret", str(detail))
+
+        # Invalid submissions come back to the workspace page with the errors as notices.
+        response = self.client.post(reverse("manage_users"), {"username": "dup", "email": "GONE@example.test", "role": "viewer"})
+        self.assertRedirects(response, "/app/admin/members/", fetch_redirect_response=False)
+        self.assertFalse(User.objects.filter(username="dup").exists())
+        self.assertEqual(self.client.get(api).json()["notices"], [{"text": "此電子郵件已被使用。", "warning": True}])
+        response = self.client.post(reverse("manage_user", args=[self.admin.pk]), {"action": "disable"})
+        self.assertRedirects(response, f"/app/admin/members/{self.admin.pk}/", fetch_redirect_response=False)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+        self.assertIn("這項操作需要由另一位管理員執行。", str(self.client.get(api).json()["notices"]))
+        # Non-admins still get nothing.
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(api, {"q": "pat"}).status_code, 403)
 
     def test_vue_profile_update_requires_session_and_csrf(self):
         browser = Client(enforce_csrf_checks=True)
@@ -247,12 +293,15 @@ class AccountTests(TestCase):
         self.login(self.viewer, pending)
         self.reauthenticate_admin()
         url = reverse("manage_user", args=[self.viewer.pk])
-        self.assertEqual(self.client.post(url, {"action": "mfa", "reason": "Help desk"}).status_code, 200)
+        refused = self.client.post(url, {"action": "mfa", "reason": "Help desk"})
+        self.assertRedirects(refused, f"/app/admin/members/{self.viewer.pk}/", fetch_redirect_response=False)
         self.assertTrue(Authenticator.objects.filter(user=self.viewer).exists())
+        notices = self.client.get(reverse("user_api", args=[self.viewer.pk])).json()["notices"]
+        self.assertEqual(notices, [{"text": "重設雙因素驗證需要填寫理由並確認已完成身分核對。", "warning": True}])
 
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(url, {"action": "mfa", "reason": "In-person check", "verified": "on"})
-        self.assertRedirects(response, url)
+        self.assertRedirects(response, f"/app/admin/members/{self.viewer.pk}/", fetch_redirect_response=False)
         self.assertFalse(Authenticator.objects.filter(user=self.viewer).exists())
         log = AuditLog.objects.get(target=self.viewer, action="mfa_admin_reset")
         self.assertEqual(log.actor_id, self.admin.pk)

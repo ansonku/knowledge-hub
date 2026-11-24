@@ -4,6 +4,7 @@ from allauth.account.decorators import reauthentication_required
 from allauth.account.utils import url_str_to_user_pk
 from allauth.account.views._password_reset import PasswordResetFromKeyView
 from allauth.mfa.models import Authenticator
+from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.adapter import get_adapter
 from allauth.socialaccount.providers.base import AuthProcess
 from django.conf import settings
@@ -13,10 +14,10 @@ from django.contrib.auth.forms import SetPasswordForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import Http404
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods, require_POST, require_safe
@@ -31,6 +32,22 @@ from .models import AuditLog, User
 from .permissions import CanReadLibrary, IsAdmin, has_role
 
 ACTIVATION_SESSION = "hub_activation"
+# Workspace pages that show member management. The Django views below only accept the form
+# POSTs (CSRF, re-authentication, admin locking and audit stay here) and send the admin back.
+MEMBERS_URL = "/app/admin/members/"
+# Only messages tagged for member management are shown there; others (e.g. allauth's login
+# notice) are consumed with them so they do not surface later out of context.
+MEMBERS_TAG = "members"
+
+
+def member_url(user_id):
+    return f"{MEMBERS_URL}{user_id}/"
+
+
+def flash_form_errors(request, form):
+    for errors in form.errors.values():
+        for error in errors:
+            messages.error(request, error, extra_tags=MEMBERS_TAG)
 
 
 def account_payload(user):
@@ -67,7 +84,21 @@ def save_profile(user):
 @api_view(["GET"])
 @permission_classes([IsAdmin])
 def users_api(request):
-    page = Paginator(User.objects.order_by("username"), 25).get_page(request.GET.get("page"))
+    accounts = User.objects.order_by("username")
+    if keywords := request.GET.get("q", "").strip()[:150]:
+        accounts = accounts.filter(
+            Q(username__icontains=keywords) | Q(email__icontains=keywords) | Q(display_name__icontains=keywords)
+        )
+    if (role := request.GET.get("role")) in User.Role.values:
+        accounts = accounts.filter(role=role)
+    status = request.GET.get("status")
+    if status == "active":
+        accounts = accounts.filter(is_active=True, pending_activation=False)
+    elif status == "pending":
+        accounts = accounts.filter(pending_activation=True)
+    elif status == "disabled":
+        accounts = accounts.filter(is_active=False, pending_activation=False)
+    page = Paginator(accounts, 25).get_page(request.GET.get("page"))
     return Response({
         "count": page.paginator.count,
         "page": page.number,
@@ -78,7 +109,10 @@ def users_api(request):
 
 
 def managed_account(user):
-    return {**account_payload(user), "is_active": user.is_active, "pending_activation": user.pending_activation}
+    return {
+        **account_payload(user), "is_active": user.is_active, "pending_activation": user.pending_activation,
+        "last_login": user.last_login, "date_joined": user.date_joined,
+    }
 
 
 def management_context(request):
@@ -88,6 +122,7 @@ def management_context(request):
         "notices": [
             {"text": str(message), "warning": message.level >= messages.WARNING}
             for message in messages.get_messages(request)
+            if MEMBERS_TAG in message.tags.split()
         ],
     }
 
@@ -101,7 +136,12 @@ def user_api(request, user_id):
     form = AdminActionForm()
     audits = AuditLog.objects.filter(target=user).select_related("actor").order_by("-created_at")[:25]
     return Response({
-        "account": managed_account(user),
+        # Status flags only: never authenticator secrets, recovery codes or OAuth tokens.
+        "account": managed_account(user) | {
+            "mfa_enabled": Authenticator.objects.filter(user=user).exists(),
+            "google_linked": SocialAccount.objects.filter(user=user, provider="google").exists(),
+            "is_self": user.pk == request.user.pk,
+        },
         "actions": list(form.fields["action"].choices),
         "audit": [
             {
@@ -229,10 +269,11 @@ def manage_users(request):
         except IntegrityError:
             form.add_error(None, "帳號名稱或電子郵件已被使用。")
         else:
-            messages.success(request, "已建立待啟用帳號。")
-            return redirect("manage_users")
-    page = Paginator(User.objects.order_by("username"), 25).get_page(request.GET.get("page"))
-    return render(request, "users/manage.html", {"form": form, "page": page})
+            messages.success(request, f"已建立待啟用帳號 {user.username}，並寄出啟用信。", extra_tags=MEMBERS_TAG)
+            return redirect(MEMBERS_URL)
+    if request.method == "POST":
+        flash_form_errors(request, form)
+    return redirect(MEMBERS_URL)
 
 
 def apply_admin_action(request, actor, user, active_admin_count, data):
@@ -290,10 +331,11 @@ def manage_user(request, user_id):
         except ValidationError as error:
             form.add_error(None, error)
         else:
-            messages.success(request, "已完成帳號操作。")
-            return redirect(reverse("manage_user", kwargs={"user_id": user_id}))
-    audits = AuditLog.objects.filter(target=user).select_related("actor").order_by("-created_at")[:25]
-    return render(request, "users/manage_detail.html", {"target": user, "form": form, "audits": audits})
+            messages.success(request, "已完成帳號操作。", extra_tags=MEMBERS_TAG)
+            return redirect(member_url(user_id))
+    if request.method == "POST":
+        flash_form_errors(request, form)
+    return redirect(member_url(user_id))
 
 
 @never_cache

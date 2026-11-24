@@ -30,7 +30,7 @@ def notify(request, user, subject, body):
             send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email])
         except Exception:
             logger.error("Account notification delivery failed")
-            messages.warning(request, "郵件寄送失敗，請確認郵件設定後重試。")
+            messages.warning(request, "郵件寄送失敗，請確認郵件設定後重試。", extra_tags="members")
 
     transaction.on_commit(deliver)
 

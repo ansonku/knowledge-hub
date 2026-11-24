@@ -31,7 +31,12 @@ const router = createRouter({
     { path: '/library/:id/versions/', name: 'version-history', component: () => import('./VersionHistory.vue') },
     { path: '/library/:id/', name: 'document-reader', component: () => import('./DocumentReader.vue') },
     { path: '/accounts/profile/', component: Profile },
-    { path: '/accounts/manage/:id?', component: () => import('./ManageAccounts.vue') },
+    // Django sends admins back here after re-authentication; member management lives in the workspace.
+    {
+      path: '/accounts/manage/:id?',
+      redirect: to => typeof to.params.id === 'string' && to.params.id
+        ? { name: 'app-member', params: { id: to.params.id } } : { name: 'app-members' },
+    },
     {
       path: '/app/',
       component: () => import('./app/AppLayout.vue'),
@@ -46,6 +51,8 @@ const router = createRouter({
         { path: 'docs/:id/', name: 'app-document', component: () => import('./app/DocumentPage.vue') },
         { path: 'docs/:id/compare/', name: 'app-compare', component: () => import('./app/ComparePage.vue') },
         { path: 'settings/', name: 'app-settings', component: () => import('./app/SettingsPage.vue') },
+        { path: 'admin/members/', name: 'app-members', component: () => import('./app/admin/MembersPage.vue') },
+        { path: 'admin/members/:id/', name: 'app-member', component: () => import('./app/admin/MemberPage.vue') },
         { path: ':pathMatch(.*)*', redirect: { name: 'app-home' } },
       ],
     },
