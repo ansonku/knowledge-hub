@@ -14,8 +14,16 @@ import { themeOptions } from './theme'
 
 const router = createRouter({
   history: createWebHistory(),
+  // Only the public home scrolls to a hash (collection links jump to the article list);
+  // every other route keeps the browser's position, as before.
+  scrollBehavior: to => (to.name === 'site-home' && to.hash ? { el: to.hash, top: 80, behavior: 'smooth' } : false),
   routes: [
     { path: '/', alias: '/library/', name: 'library', component: () => import('./Library.vue') },
+    {
+      path: '/articles/',
+      component: () => import('./site/PublicLayout.vue'),
+      children: [{ path: '', name: 'site-home', component: () => import('./site/SiteHome.vue') }],
+    },
     { path: '/articles/:id/', name: 'public-article', component: () => import('./PublicArticle.vue') },
     { path: '/library/trash/', component: () => import('./Trash.vue') },
     { path: '/library/:id/versions/', name: 'version-history', component: () => import('./VersionHistory.vue') },
