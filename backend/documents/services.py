@@ -1,3 +1,4 @@
+import logging
 import uuid
 from pathlib import Path
 
@@ -11,9 +12,11 @@ from users.models import User
 from users.permissions import has_role
 
 from . import activity, search, storage
-from .models import Document, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
+from .models import ArticlePublication, Document, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
 from .publication import withdraw_publication
 
+
+logger = logging.getLogger(__name__)
 
 STORAGE_LOCK_KEY = "knowledge-hub:document-files"
 
@@ -158,7 +161,8 @@ def publish_version(document, actor, temporary, sha256, size, number, filename, 
     version = Version.objects.create(
         id=version_id, document=document, number=number, path=path, filename=filename,
         sha256=sha256, size=size, note=note, created_by=actor, source=source,
-        restored_from=restored_from, search_text=search_text,
+        restored_from=restored_from, restored_from_number=restored_from.number if restored_from else None,
+        search_text=search_text,
     )
     document.current_version = version
     document.save(update_fields=["current_version", "updated_at"])
@@ -191,8 +195,46 @@ def restore_version(actor, document_id, version_id, *, base_version, note=""):
         )
         VersionRestoreAudit.objects.create(
             document=document, actor=actor, restored_from=selected, previous_version=previous, new_version=version,
+            restored_from_number=selected.number, previous_number=previous.number, new_number=version.number,
         )
     return document
+
+
+def delete_version(actor, document_id, version_id, *, number, reason=""):
+    """Permanently delete one version (Admin only). The current and the published version cannot be deleted.
+
+    Numbers are never reused or renumbered; the history shows where the version was.
+    """
+    if not has_role(actor, User.Role.ADMIN):
+        raise PermissionDenied("只有 Admin 可以刪除版本。")
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            # Shared like every other write, so a storage check never sees a half-deleted version.
+            cursor.execute("SELECT pg_advisory_xact_lock_shared(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
+        document = get_object_or_404(active_documents().select_for_update(), pk=document_id)
+        version = get_object_or_404(Version.objects.defer("search_text"), pk=version_id, document=document)
+        if version.number != number:
+            raise ValidationError({"number": f"版本號不符，請輸入 v{version.number} 確認。"})
+        if version.pk == document.current_version_id:
+            raise ValidationError({"detail": "目前版本不能刪除。請先用其他版本還原，再刪除這個版本。"})
+        if ArticlePublication.objects.filter(document=document, version=version).exists():
+            raise ValidationError({"detail": "公開中的版本不能刪除。請先改發布其他版本或下架。"})
+        path = storage.root() / f"versions/{document.pk}/{version.pk}"
+        if version.path != str(path.relative_to(storage.root())):
+            raise ValidationError({"detail": "版本檔案位置不正確，請聯絡管理員檢查。"})
+        version.delete()
+        activity.record(document.pk, actor, activity.Action.VERSION_DELETED, version_number=number, reason=reason.strip())
+        transaction.on_commit(lambda: remove_version_file(path))
+    return document
+
+
+def remove_version_file(path):
+    try:
+        path.unlink(missing_ok=True)
+        storage.sync_directory(path.parent)
+    except OSError:
+        # Reported by check_document_storage as an unreferenced file; nothing refers to it any more.
+        logger.error("Could not remove the file of a deleted version.")
 
 
 def record_trash_action(document, actor, action):

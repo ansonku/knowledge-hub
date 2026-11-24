@@ -2,7 +2,7 @@ import type { Format } from './types'
 
 export type ActivityItem = {
   id: number
-  action: 'created' | 'uploaded' | 'edited' | 'restored_version' | 'metadata' | 'trashed' | 'restored' | 'published' | 'withdrawn' | 'featured' | 'unfeatured'
+  action: 'created' | 'uploaded' | 'edited' | 'restored_version' | 'metadata' | 'trashed' | 'restored' | 'published' | 'withdrawn' | 'featured' | 'unfeatured' | 'version_deleted'
   actor: string | null
   version_number: number | null
   detail: {
@@ -10,6 +10,7 @@ export type ActivityItem = {
     restored_from?: number
     republished?: boolean
     automatic?: boolean
+    reason?: string
     title?: { from: string; to: string }
     category?: { from: string | null; to: string | null }
     tags?: { added: string[]; removed: string[] }
@@ -35,6 +36,7 @@ export function activityVerb(item: ActivityItem) {
     case 'withdrawn': return '下架了公開文章'
     case 'featured': return '加入首頁精選'
     case 'unfeatured': return item.detail.automatic ? '因下架自動移出首頁精選' : '移出首頁精選'
+    case 'version_deleted': return `永久刪除了 ${version}`
   }
 }
 
@@ -42,6 +44,7 @@ export function activityVerb(item: ActivityItem) {
 export function activityDetail(item: ActivityItem) {
   const { detail } = item
   if (detail.note) return detail.note
+  if (item.action === 'version_deleted') return detail.reason ? `原因：${detail.reason}` : ''
   const parts: string[] = []
   if (detail.title) parts.push(`標題改為「${detail.title.to}」`)
   if (detail.category) parts.push(`集合改為「${detail.category.to ?? '未分類'}」`)

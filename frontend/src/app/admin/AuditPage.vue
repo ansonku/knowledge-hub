@@ -127,13 +127,13 @@ function asActivity(row: AuditRow) {
   return { action: row.action, version_number: row.version_number, detail: row.detail } as unknown as ActivityItem
 }
 function verb(row: AuditRow) {
-  if (row.category === 'deletion') return '永久刪除了文件'
+  if (row.category === 'deletion' && row.action !== 'version_deleted') return '永久刪除了文件'
   if (row.category === 'account' || row.category === 'signin') return auditLabel(row.action)
   return activityVerb(asActivity(row))
 }
 function detailLine(row: AuditRow) {
   const detail = row.detail
-  if (row.category === 'deletion') return `共 ${detail.version_count ?? '?'} 個版本`
+  if (row.category === 'deletion' && row.action !== 'version_deleted') return `共 ${detail.version_count ?? '?'} 個版本`
   if (row.category === 'account' || row.category === 'signin') {
     if (detail.maintenance) return maintenanceSummary(detail.maintenance as MaintenanceResults)
     const parts: string[] = []

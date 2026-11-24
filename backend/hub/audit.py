@@ -26,6 +26,8 @@ PUBLISH_ACTIONS = (
     DocumentActivity.Action.FEATURED, DocumentActivity.Action.UNFEATURED,
 )
 TRASH_ACTIONS = (DocumentActivity.Action.TRASHED, DocumentActivity.Action.RESTORED)
+# Shown with permanent document deletions: both remove content for good.
+DELETION_ACTIONS = (DocumentActivity.Action.VERSION_DELETED,)
 CATEGORIES = ("account", "signin", "document", "publish", "trash", "deletion")
 # "maintenance" holds counts only (see hub.maintenance), never paths.
 ACCOUNT_DETAIL_KEYS = ("reason", "role", "old_role", "identity_verified", "maintenance")
@@ -84,10 +86,12 @@ def sources(data):
         ))
     if "member" in data:
         return parts  # member filter: account events about that person only
-    if category in (None, "document", "publish", "trash"):
+    if category in (None, "document", "publish", "trash", "deletion"):
         activity = bounded(DocumentActivity.objects.all(), data)
         if category == "document":
-            activity = activity.exclude(action__in=(*PUBLISH_ACTIONS, *TRASH_ACTIONS))
+            activity = activity.exclude(action__in=(*PUBLISH_ACTIONS, *TRASH_ACTIONS, *DELETION_ACTIONS))
+        elif category == "deletion":
+            activity = activity.filter(action__in=DELETION_ACTIONS)
         elif category == "publish":
             activity = activity.filter(action__in=PUBLISH_ACTIONS)
         elif category == "trash":
@@ -107,7 +111,7 @@ def sources(data):
 
 
 def category_of(source, action):
-    if source == "deletion":
+    if source == "deletion" or action in DELETION_ACTIONS:
         return "deletion"
     if source == "account":
         return "signin" if action in SIGNIN_ACTIONS else "account"

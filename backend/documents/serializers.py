@@ -36,7 +36,7 @@ class TagSerializer(serializers.ModelSerializer):
 
 class VersionSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
-    restored_from_number = serializers.IntegerField(source="restored_from.number", read_only=True, default=None)
+    restored_from_number = serializers.IntegerField(read_only=True)
 
     def get_author(self, version):
         user = version.created_by
@@ -119,6 +119,11 @@ class NewUpload(DocumentMetadata, VersionUpload):
 
 class MarkdownEdit(VersionUpload):
     base_version = serializers.UUIDField()
+
+
+class DeleteVersion(serializers.Serializer):
+    number = serializers.IntegerField(min_value=1)
+    reason = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
 
 
 class RestoreVersion(serializers.Serializer):

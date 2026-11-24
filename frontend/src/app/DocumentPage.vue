@@ -531,6 +531,7 @@ onBeforeUnmount(() => {
           <InfoTab v-if="tab === 'info'" :document="file" :headings="file.format === 'md' ? tocHeadings : []"
             :editable="session.canEdit" @jump="jump" @updated="doc.applyMetadata" />
           <VersionsTab v-else-if="tab === 'versions'" :document="file" :shown-id="historical?.id" :can-restore="session.canEdit"
+            :can-delete="session.isAdmin"
             :published-number="publishedNumber" @restored="onRestored" />
           <ActivityTab v-else-if="tab === 'activity'" :document-id="file.id" :revision="`${file.current_version.id}-${file.updated_at}`" />
           <PublishTab v-else :document="file" :status="publication" :error="publicationError"

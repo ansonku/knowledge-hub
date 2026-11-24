@@ -88,7 +88,7 @@ export function useDocument(documentId: Ref<string>, versionId: Ref<string | und
       if (request.signal.aborted) return
       if (versionId.value) {
         const selected = await api<VersionInfo>(`/api/documents/${id}/versions/${encodeURIComponent(versionId.value)}/`)
-          .catch(cause => { throw cause instanceof ApiError && cause.status === 404 ? new Error('找不到指定的文件版本。') : cause })
+          .catch(cause => { throw cause instanceof ApiError && cause.status === 404 ? new Error('找不到這個版本，可能已被 Admin 刪除。') : cause })
         if (request.signal.aborted) return
         if (selected.id !== details.current_version.id) historical.value = selected
       }

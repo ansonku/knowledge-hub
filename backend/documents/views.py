@@ -28,6 +28,7 @@ from .serializers import (
     ActivitySerializer,
     BulkChange,
     CategorySerializer,
+    DeleteVersion,
     DocumentListSerializer,
     DocumentMetadata,
     DocumentSerializer,
@@ -260,8 +261,8 @@ def new_version(request, document_id, edit=False):
 
 def document_versions(document_id):
     return Version.objects.filter(document_id=document_id, document__is_trashed=False).select_related(
-        "created_by", "restored_from",
-    ).defer("search_text", "restored_from__search_text")
+        "created_by",
+    ).defer("search_text")
 
 
 def version_history(request, document_id):
@@ -269,9 +270,18 @@ def version_history(request, document_id):
     page = serializers.IntegerField(min_value=1, max_value=1_000_000).run_validation(request.query_params.get("page", 1))
     size = 25
     query = document_versions(document_id).order_by("-number")
+    deleted = DocumentActivity.objects.filter(
+        document_id=document_id, action=DocumentActivity.Action.VERSION_DELETED,
+    ).select_related("actor").order_by("-version_number")
     return Response({
         "current": current, "count": query.count(), "page_size": size,
         "results": VersionSerializer(query[(page - 1) * size:page * size], many=True).data,
+        # Where deleted versions were, so the history keeps its numbering.
+        "deleted": [{
+            "number": entry.version_number, "deleted_at": entry.created_at,
+            "deleted_by": (entry.actor.display_name or entry.actor.username) if entry.actor else None,
+            "reason": entry.detail.get("reason", ""),
+        } for entry in deleted],
     })
 
 
@@ -320,6 +330,16 @@ def restore_version(request, document_id, version_id):
     form.is_valid(raise_exception=True)
     document = services.restore_version(request.user, document_id, version_id, **form.validated_data)
     return Response(DocumentSerializer(document).data, status=201)
+
+
+@never_cache
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def delete_version(request, document_id, version_id):
+    form = DeleteVersion(data=request.data)
+    form.is_valid(raise_exception=True)
+    services.delete_version(request.user, document_id, version_id, **form.validated_data)
+    return Response(status=204)
 
 
 class PermanentDeletion(serializers.Serializer):
