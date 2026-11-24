@@ -15,10 +15,23 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "parent", "description", "color", "document_count"]
 
 
-class TagSerializer(serializers.ModelSerializer):
+class TagLabelSerializer(serializers.ModelSerializer):
+    """Tags as they appear on a document: no usage counts."""
     class Meta:
         model = Tag
         fields = ["id", "name"]
+
+
+class TagSerializer(serializers.ModelSerializer):
+    document_count = serializers.SerializerMethodField()
+
+    def get_document_count(self, tag):
+        # Non-trashed documents carrying the tag.
+        return getattr(tag, "document_count", 0)
+
+    class Meta:
+        model = Tag
+        fields = ["id", "name", "document_count"]
 
 
 class VersionSerializer(serializers.ModelSerializer):
@@ -38,7 +51,7 @@ class VersionSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", default=None, read_only=True)
-    tags = TagSerializer(many=True, read_only=True)
+    tags = TagLabelSerializer(many=True, read_only=True)
     current_version = VersionSerializer(read_only=True)
 
     class Meta:

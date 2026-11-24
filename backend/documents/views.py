@@ -7,7 +7,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.views.decorators.cache import never_cache
 from rest_framework import serializers, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 
 from users.models import User
@@ -370,6 +370,11 @@ def delete_trashed_document(request, document_id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class TagMerge(serializers.Serializer):
+    sources = serializers.ListField(child=serializers.UUIDField(), allow_empty=False, max_length=services.MERGE_LIMIT)
+    target = serializers.UUIDField()
+
+
 class TaxonomyViewSet(viewsets.ModelViewSet):
     permission_classes = [CanReadLibrary]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
@@ -422,3 +427,13 @@ class CategoryViewSet(TaxonomyViewSet):
 class TagViewSet(TaxonomyViewSet):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
+
+    def get_queryset(self):
+        return Tag.objects.annotate(document_count=Count("document", filter=Q(document__is_trashed=False)))
+
+    @action(detail=False, methods=["post"], permission_classes=[IsAdmin])
+    def merge(self, request):
+        payload = TagMerge(data=request.data)
+        payload.is_valid(raise_exception=True)
+        result = services.merge_tags(request.user, payload.validated_data["sources"], payload.validated_data["target"])
+        return Response(result)

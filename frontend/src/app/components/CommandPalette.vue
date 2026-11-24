@@ -9,7 +9,7 @@ import type { DocumentPage, DocumentRow } from '../types'
 import UiIcon, { type IconName } from './UiIcon.vue'
 
 const open = defineModel<boolean>('open', { required: true })
-const emit = defineEmits<{ upload: []; manageTaxonomy: [] }>()
+const emit = defineEmits<{ upload: [] }>()
 
 const router = useRouter()
 const session = useSession()
@@ -43,7 +43,7 @@ const navigation = computed<Command[]>(() => [
 const actions = computed<Command[]>(() => [
   ...(session.canEdit ? [
     { id: 'act-upload', group: '動作', label: '上傳文件', icon: 'upload' as const, run: () => { open.value = false; emit('upload') } },
-    { id: 'act-taxonomy', group: '動作', label: '管理集合與標籤', icon: 'sliders' as const, run: () => { open.value = false; emit('manageTaxonomy') } },
+    { id: 'act-taxonomy', group: '動作', label: '管理集合與標籤', icon: 'sliders' as const, run: () => go({ name: 'app-taxonomy' }) },
   ] : []),
   {
     id: 'act-theme', group: '動作', label: theme.isDark ? '切換為淺色模式' : '切換為深色模式',

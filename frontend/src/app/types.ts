@@ -1,5 +1,7 @@
 export type Format = 'html' | 'md'
 export type Label = { id: string; name: string }
+/** A tag from /api/tags/, with the number of non-trashed documents carrying it. */
+export type TagItem = Label & { document_count?: number }
 export type CollectionColor = 'blue' | 'teal' | 'green' | 'amber' | 'orange' | 'red' | 'purple' | 'gray'
 export type Category = Label & {
   parent: string | null

@@ -11,7 +11,7 @@ from users.models import User
 from users.permissions import has_role
 
 from . import activity, search, storage
-from .models import Document, DocumentTrashAudit, Version, VersionRestoreAudit
+from .models import Document, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
 from .publication import withdraw_publication
 
 
@@ -185,3 +185,46 @@ def record_trash_action(document, actor, action):
         document_id=document.pk, title=document.title, actor=actor,
         action=action, version_count=document.versions.count(),
     )
+
+
+MERGE_LIMIT = 50
+
+
+def require_admin(user):
+    if not has_role(user, User.Role.ADMIN):
+        raise PermissionDenied("只有 Admin 可以合併標籤。")
+
+
+@transaction.atomic
+def merge_tags(actor, source_ids, target_id):
+    """Move every document from the source tags onto the target tag, then delete the sources.
+
+    Runs in one transaction with the tags and affected documents locked in a stable order.
+    Each changed document gets a metadata activity entry; `updated_at` is left alone because
+    tidying the taxonomy is not an edit of the document.
+    """
+    require_admin(actor)
+    sources = list(dict.fromkeys(source_ids))
+    if not sources or len(sources) > MERGE_LIMIT:
+        raise ValidationError({"sources": f"請選擇 1 至 {MERGE_LIMIT} 個要合併的標籤。"})
+    if target_id in sources:
+        raise ValidationError({"target": "目標標籤不能同時是被合併的標籤。"})
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", ["knowledge-hub:tags"])
+    tags = {tag.pk: tag for tag in Tag.objects.select_for_update().filter(pk__in=[*sources, target_id]).order_by("pk")}
+    if target_id not in tags or any(pk not in tags for pk in sources):
+        raise ValidationError({"detail": "部分標籤已不存在，請重新整理後再試。"})
+    target = tags[target_id]
+    # FOR UPDATE cannot be combined with DISTINCT: collect the ids, then lock those rows.
+    affected = set(Document.tags.through.objects.filter(tag_id__in=sources).values_list("document_id", flat=True))
+    documents = list(
+        Document.objects.select_for_update(of=("self",)).filter(pk__in=affected).order_by("pk").select_related("category")
+    )
+    for document in documents:
+        before = activity.metadata_snapshot(document)
+        document.tags.remove(*sources)
+        document.tags.add(target)
+        activity.record_metadata(document, actor, before)
+    Tag.objects.filter(pk__in=sources).delete()
+    return {"target": str(target.pk), "merged": len(sources), "documents": len(documents)}
+

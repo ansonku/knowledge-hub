@@ -9,7 +9,7 @@ import { useTheme, type ThemeMode } from '../stores/theme'
 import { useWorkspace } from '../stores/workspace'
 import UiIcon, { type IconName } from './components/UiIcon.vue'
 
-const emit = defineEmits<{ search: []; manageTaxonomy: []; navigate: [] }>()
+const emit = defineEmits<{ search: []; navigate: [] }>()
 
 const session = useSession()
 const taxonomy = useTaxonomy()
@@ -103,10 +103,10 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
     <div class="group">
       <div class="group-head">
         <span id="collections-heading">集合</span>
-        <button v-if="session.canEdit" type="button" class="icon-button" aria-label="管理集合與標籤"
-          @click="emit('manageTaxonomy')">
+        <RouterLink v-if="session.canEdit" :to="{ name: 'app-taxonomy', query: { new: 'collection' } }" class="icon-button"
+          aria-label="新增集合" title="新增集合" @click="emit('navigate')">
           <UiIcon name="plus" :size="15" />
-        </button>
+        </RouterLink>
       </div>
       <ul class="tree" aria-labelledby="collections-heading">
         <li v-for="node in visibleNodes" :key="node.id" class="tree-row" :style="{ '--depth': node.depth }">
@@ -143,9 +143,10 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
         <UiIcon :name="item.icon" :size="17" /><span class="label">{{ item.label }}</span>
         <span v-if="item.badge" class="badge" :class="item.tone">{{ item.badge }}</span>
       </RouterLink>
-      <button v-if="session.canEdit" type="button" class="item" @click="emit('manageTaxonomy')">
+      <RouterLink v-if="session.canEdit" :to="{ name: 'app-taxonomy' }" class="item" :class="{ active: route.name === 'app-taxonomy' }"
+        :aria-current="route.name === 'app-taxonomy' ? 'page' : undefined" @click="emit('navigate')">
         <UiIcon name="sliders" :size="17" /><span class="label">集合與標籤</span>
-      </button>
+      </RouterLink>
       <RouterLink v-if="session.isAdmin" :to="{ name: 'app-members' }" class="item"
         :class="{ active: String(route.name ?? '').startsWith('app-member') }"
         :aria-current="String(route.name ?? '').startsWith('app-member') ? 'page' : undefined" @click="emit('navigate')">

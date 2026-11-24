@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../api'
-import type { Category, Label } from '../app/types'
+import type { Category, TagItem } from '../app/types'
 
 export type CategoryNode = Category & { depth: number; hasChildren: boolean }
 
@@ -9,13 +9,13 @@ export const UNCATEGORIZED = 'uncategorized'
 
 export const useTaxonomy = defineStore('taxonomy', () => {
   const categories = ref<Category[]>([])
-  const tags = ref<Label[]>([])
+  const tags = ref<TagItem[]>([])
   const loaded = ref(false)
 
   async function load() {
     const [nextCategories, nextTags] = await Promise.all([
       api<Category[]>('/api/categories/'),
-      api<Label[]>('/api/tags/'),
+      api<TagItem[]>('/api/tags/'),
     ])
     categories.value = nextCategories
     tags.value = nextTags

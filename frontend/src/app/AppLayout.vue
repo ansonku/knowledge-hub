@@ -12,7 +12,6 @@ import { useTheme } from '../stores/theme'
 import { useWorkspace } from '../stores/workspace'
 import AppSidebar from './AppSidebar.vue'
 import CommandPalette from './components/CommandPalette.vue'
-import TaxonomyDialog from './components/TaxonomyDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadTray from './components/UploadTray.vue'
 import { useUploads } from '../stores/uploads'
@@ -27,7 +26,6 @@ const detachTheme = theme.attach()
 const ready = ref(false)
 const failed = ref(false)
 const drawerOpen = ref(false)
-const taxonomyOpen = ref(false)
 const paletteOpen = ref(false)
 const uploads = useUploads()
 const chooser = ref<HTMLInputElement>()
@@ -147,13 +145,12 @@ onBeforeUnmount(() => {
       </header>
       <div v-if="drawerOpen" class="scrim" aria-hidden="true" @click="drawerOpen = false" />
       <aside id="app-sidebar" class="sidebar-slot">
-        <AppSidebar @search="openSearch" @manage-taxonomy="taxonomyOpen = true" @navigate="drawerOpen = false" />
+        <AppSidebar @search="openSearch" @navigate="drawerOpen = false" />
       </aside>
       <main id="app-main" class="main" tabindex="-1">
         <RouterView @upload="chooseFiles" />
       </main>
-      <TaxonomyDialog v-model:visible="taxonomyOpen" @changed="workspace.refresh(true)" />
-      <CommandPalette v-model:open="paletteOpen" @upload="chooseFiles" @manage-taxonomy="taxonomyOpen = true" />
+      <CommandPalette v-model:open="paletteOpen" @upload="chooseFiles" />
       <input ref="chooser" type="file" accept=".md,.html" multiple hidden @change="onChosen">
       <UploadTray />
       <div v-if="dragDepth > 0" class="drop" aria-hidden="true">
