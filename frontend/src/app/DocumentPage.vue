@@ -6,6 +6,7 @@ import type { MenuItem } from 'primevue/menuitem'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import Skeleton from 'primevue/skeleton'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -74,7 +75,7 @@ const article = ref<HTMLElement>()
 watch([documentId, versionId], () => {
   mode.value = 'read'
   note.value = ''
-  previewUrl.value = ''
+  closePreview()
   previewError.value = ''
 })
 watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
@@ -119,19 +120,46 @@ function discard() {
 const previewUrl = ref('')
 const previewError = ref('')
 const previewLoading = ref(false)
+// Each request gets a number so a slow ticket for a previous document/version never replaces a newer one.
+let previewRequest = 0
 async function openPreview() {
-  if (previewLoading.value) return
+  const request = ++previewRequest
   previewLoading.value = true
   previewError.value = ''
   previewUrl.value = ''
   try {
-    previewUrl.value = await doc.issuePreview()
+    const url = await doc.issuePreview()
+    if (request === previewRequest) previewUrl.value = url
   } catch (cause) {
-    previewError.value = cause instanceof Error ? cause.message : '目前無法開啟 HTML 預覽。'
+    if (request === previewRequest) previewError.value = cause instanceof Error ? cause.message : '目前無法開啟 HTML 預覽。'
   } finally {
-    previewLoading.value = false
+    if (request === previewRequest) previewLoading.value = false
   }
 }
+function closePreview() {
+  previewRequest++
+  previewLoading.value = false
+  previewUrl.value = ''
+}
+
+// Loading the preview lets the document fetch its external HTTPS resources, so each
+// browser remembers whether to do that on open (default) or only after a click.
+const autoPreviewKey = 'knowledge-hub.app.html-autopreview'
+function storedAutoPreview() {
+  try { return localStorage.getItem(autoPreviewKey) !== 'off' } catch { return true }
+}
+const autoPreview = ref(storedAutoPreview())
+watch(autoPreview, on => {
+  try { localStorage.setItem(autoPreviewKey, on ? 'on' : 'off') } catch { /* storage may be disabled */ }
+  if (on && !previewUrl.value && !previewLoading.value) void maybeAutoPreview()
+})
+function maybeAutoPreview() {
+  if (!autoPreview.value || loading.value || file.value?.format !== 'html' || !file.value.preview_available) return
+  return openPreview()
+}
+watch(() => [loading.value, file.value?.id, shownVersion.value?.id] as const, ([busy]) => {
+  if (!busy) void maybeAutoPreview()
+})
 
 // ---- Breadcrumb and header --------------------------------------------------
 const crumbs = computed(() => file.value ? taxonomy.pathOf(file.value.category) : [])
@@ -418,11 +446,15 @@ onBeforeUnmount(() => {
           <div v-else class="html">
             <template v-if="file.preview_available">
               <Message severity="warn" size="small">
-                HTML 預覽在隔離的沙箱中執行。相容模式可載入外部 HTTPS 資源，外部服務可能收到你的連線資訊。
+                HTML 預覽在隔離的沙箱中執行。相容模式可載入外部 HTTPS 資源，外部服務可能收到你的連線資訊。關閉「自動載入」後，需按下按鈕才會載入。
               </Message>
               <div class="html-actions">
                 <Button :label="previewUrl ? '重新載入預覽' : '開啟 HTML 預覽'" size="small" :loading="previewLoading" @click="openPreview" />
-                <Button v-if="previewUrl" label="關閉預覽" text size="small" @click="previewUrl = ''" />
+                <Button v-if="previewUrl" label="關閉預覽" text size="small" @click="closePreview" />
+                <span class="auto-preview">
+                  <ToggleSwitch v-model="autoPreview" input-id="html-autopreview" />
+                  <label for="html-autopreview">自動載入</label>
+                </span>
                 <a :href="doc.downloadUrl.value" class="download">下載原始檔</a>
               </div>
               <Message v-if="previewError" severity="error" size="small">{{ previewError }}</Message>
@@ -567,6 +599,8 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 /* HTML */
 .html { display: grid; gap: var(--ui-space-3); }
 .html-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); }
+.auto-preview { display: inline-flex; align-items: center; gap: var(--ui-space-2); margin-left: var(--ui-space-2); color: var(--ui-text-secondary); font-size: var(--ui-text-sm); }
+.auto-preview label { cursor: pointer; }
 .download { margin-left: auto; color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; }
 .html-frame { box-sizing: border-box; width: 100%; min-height: 72vh; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: #fff; }
 
