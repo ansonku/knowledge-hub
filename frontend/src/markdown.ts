@@ -50,11 +50,13 @@ parser.renderer.rules.fence = (tokens, index, options, context, renderer) => {
   return `<figure data-diagram="${diagram}"><pre><code>${parser.utils.escapeHtml(token.content)}</code></pre></figure>\n`
 }
 
-export function renderMarkdown(source: string): RenderedMarkdown {
+/** `sourceLines` marks each top-level block with its first source line (1-based), for the editor's synced preview. */
+export function renderMarkdown(source: string, options: { sourceLines?: boolean } = {}): RenderedMarkdown {
   const context: RenderContext = { diagrams: [] }
   const headings: Heading[] = []
   const tokens = parser.parse(source, context)
   for (const [index, token] of tokens.entries()) {
+    if (options.sourceLines && token.map && token.level === 0 && token.nesting >= 0) token.attrSet('data-source-line', String(token.map[0] + 1))
     if (token.type !== 'heading_open') continue
     const title = tokens[index + 1]
     const text = title.children?.map(part => part.children?.map(child => child.content).join('') ?? part.content).join('') || title.content

@@ -27,7 +27,8 @@ PUBLISH_ACTIONS = (
 )
 TRASH_ACTIONS = (DocumentActivity.Action.TRASHED, DocumentActivity.Action.RESTORED)
 CATEGORIES = ("account", "signin", "document", "publish", "trash", "deletion")
-ACCOUNT_DETAIL_KEYS = ("reason", "role", "old_role", "identity_verified")
+# "maintenance" holds counts only (see hub.maintenance), never paths.
+ACCOUNT_DETAIL_KEYS = ("reason", "role", "old_role", "identity_verified", "maintenance")
 
 
 class AuditQuery(serializers.Serializer):

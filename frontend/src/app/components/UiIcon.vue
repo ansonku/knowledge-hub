@@ -35,6 +35,20 @@ const paths = {
   chart: 'M4 20h16M7 16v-5M12 16V6M17 16v-8',
   info: 'M12 8h.01M11 12h1v5h1M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
   enter: 'M9 10l-5 5 5 5M20 4v7a4 4 0 0 1-4 4H4',
+  // Markdown editor toolbar
+  bold: 'M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z',
+  italic: 'M10 5h8M6 19h8M14 5l-4 14',
+  strike: 'M4 12h16M16 7.5C15.4 6 13.9 5 12 5c-2.5 0-4 1.3-4 3 0 1.2.7 2 1.9 2.6M8 16.3c.6 1.6 2.1 2.7 4 2.7 2.5 0 4-1.3 4-3',
+  code: 'M9 8l-4 4 4 4M15 8l4 4-4 4',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  quote: 'M5 5v14M9 7h10M9 12h10M9 17h6',
+  listBullet: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
+  listOrdered: 'M10 6h10M10 12h10M10 18h10M4 5l1.5-1v5M3.5 14.5a1.5 1.5 0 0 1 3 0c0 1-3 2.5-3 4h3',
+  listTask: 'M3.5 6l1.8 1.8L8.5 4.5M11 6h9M11 12h9M11 18h9M4 15h4v4H4z',
+  codeBlock: 'M4 4h16v16H4zM9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5',
+  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  rule: 'M4 12h16M4 6h.01M20 6h.01M4 18h.01M20 18h.01',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9.5h.01',
 } as const
 
 export type IconName = keyof typeof paths
