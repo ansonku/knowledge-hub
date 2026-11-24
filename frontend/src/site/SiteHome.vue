@@ -155,7 +155,7 @@ onMounted(() => {
                 <span aria-hidden="true">·</span>
                 <span>約 {{ item.reading_minutes }} 分鐘閱讀</span>
               </div>
-              <h3><a :href="`/articles/${item.document_id}/`">{{ item.title }}</a></h3>
+              <h3><RouterLink :to="{ name: 'public-article', params: { id: item.document_id } }">{{ item.title }}</RouterLink></h3>
               <p v-if="item.excerpt" class="excerpt">{{ item.excerpt }}</p>
             </article>
           </li>

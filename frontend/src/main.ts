@@ -22,9 +22,11 @@ const router = createRouter({
     {
       path: '/articles/',
       component: () => import('./site/PublicLayout.vue'),
-      children: [{ path: '', name: 'site-home', component: () => import('./site/SiteHome.vue') }],
+      children: [
+        { path: '', name: 'site-home', component: () => import('./site/SiteHome.vue') },
+        { path: ':id/', name: 'public-article', component: () => import('./site/SiteArticle.vue') },
+      ],
     },
-    { path: '/articles/:id/', name: 'public-article', component: () => import('./PublicArticle.vue') },
     { path: '/library/trash/', component: () => import('./Trash.vue') },
     { path: '/library/:id/versions/', name: 'version-history', component: () => import('./VersionHistory.vue') },
     { path: '/library/:id/', name: 'document-reader', component: () => import('./DocumentReader.vue') },

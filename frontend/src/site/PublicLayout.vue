@@ -27,7 +27,7 @@ const activeCollection = computed(() => typeof route.query.collection === 'strin
 </script>
 
 <template>
-  <div class="hub-app site">
+  <div class="hub-app site" :class="{ wide: route.name === 'public-article' }">
     <a class="skip" href="#site-main">跳至內容</a>
     <header class="site-head">
       <div class="head-inner">
@@ -76,6 +76,8 @@ const activeCollection = computed(() => typeof route.query.collection === 'strin
 .skip:focus { transform: none; }
 .site-head { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-bg-surface) 92%, transparent); backdrop-filter: blur(8px); }
 .head-inner, .foot-inner { box-sizing: border-box; max-width: 70rem; margin: 0 auto; padding: 0 var(--ui-gutter); }
+/* Article pages use a wider three-column grid; the header and footer line up with it. */
+.wide .head-inner, .wide .foot-inner { max-width: 90rem; }
 .head-inner { min-height: 4rem; display: flex; align-items: center; gap: var(--ui-space-2) var(--ui-space-5); }
 .brand { display: flex; align-items: center; gap: .625rem; color: var(--ui-text); text-decoration: none; }
 .brand-mark { display: grid; color: var(--ui-accent); }

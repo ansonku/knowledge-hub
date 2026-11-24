@@ -446,3 +446,34 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 搜尋、搜尋無結果、回到全部、集合卡片篩選、無效集合參數顯示錯誤、文章連結格式。
   - 已登入成員看到「進入工作區」。
   - 沒有溢出，也沒有預期以外的 console 錯誤。
+
+### P3c 文章頁與 SEO（2026-11-24）
+
+- `frontend/src/site/SiteArticle.vue`：`/articles/:id/` 改為 `PublicLayout` 的子路由，路由名稱沿用 `public-article`，所以舊的 `Library.vue`、`PublicationDialog.vue`、`PublishTab.vue` 裡的連結都不用改。
+  - 版面三欄：左側同集合文章（目前這篇反白）、中間正文、右側本頁目錄。
+  - 寬度 ≤1200 px 時拿掉目錄；≤900 px 時改成單欄，同集合清單移到文章下方。沒有集合的文章不顯示左欄。
+  - Markdown：跟文件頁一樣，隱藏和標題重複的開頭 H1。點目錄會更新 `#section-N`，重新整理後也會捲回原位置。
+  - HTML：沿用舊頁的靜態閱讀方式，`<iframe sandbox="">` 加上 `srcdoc` 內的 CSP（`default-src 'none'`），以及 `referrerpolicy="no-referrer"`。iframe 固定高度 78vh，內容在裡面捲動。
+  - 頁尾：更新日期、複製連結、上一篇／下一篇（依同集合的發布順序）。
+  - 拿掉「標準／寬版／全頁」選單。
+  - `PublicArticle.vue` 已經沒有路由使用，檔案留到 P4 再刪除。
+  - 正文寬度：Markdown 文章維持 48rem 的閱讀寬度。HTML 文章常有圖表和寬表格，所以正文填滿左欄以外的寬度（整頁最寬 90rem）；沒有集合的 HTML 文章最寬 72rem。
+  - 文章頁的頁首和頁尾寬度跟著放寬到 90rem，跟三欄版面對齊。首頁維持 70rem。
+- SEO：
+  - `documents/publication.py`：`/articles/` 和 `/articles/<id>/` 的 X-Accel 回應會帶 `X-Hub-Head`，內容是 `<title>`、`description`、`og:site_name`、`og:type`、`og:title`、`og:description`、`og:url`。
+    - 每個值都先正規化空白、限制在 120 字，再 `html.escape`，非 ASCII 字元轉成數字字元參照，所以 header 只會有 ASCII。
+    - `og:url` 使用 `PUBLIC_ORIGIN`。
+    - 未公開、已下架的文章維持回 404，不帶 header。
+  - `nginx/default.conf`：
+    - 用 `map $upstream_http_x_hub_head $hub_head` 取出 header，在 `location = /index.html` 以 `sub_filter` 取代 `<title>Knowledge Hub</title>`。沒有這個 header 時保留原本的標題，所以 `/app/`、`/` 等頁面不受影響。
+    - 實測確認：upstream header 經過內部轉址後仍讀得到；`X-Hub-Head` 不會出現在給瀏覽器的回應 header 裡。
+    - `/articles/` 的 `proxy_buffer_size` 調大到 16k（`proxy_buffers 8 16k`、`proxy_busy_buffers_size 32k`），避免標題很長時 header 超出預設緩衝區。
+- 測試：
+  - 後端新增 2 項：含 `"><script>`、`&`、`<b>` 的惡意標題會被 escape，header 只有 ASCII，所有屬性值都留在引號內，下架後不再帶 header；另外測試長度上限。後端共 54 項通過。
+  - Playwright 共 90 項通過：
+    - 訪客，1920／1280／768／500 px，淺色和深色。
+    - HTML 文章：`sandbox=""`、CSP、集合導覽。
+    - Markdown 文章：用攔截的 API 回應模擬，不寫進資料庫。檢查隱藏開頭 H1、內文的 `<script>` 不會執行、目錄只在寬螢幕顯示、上一篇／下一篇、目錄跳轉和重新整理後回到 hash 位置。
+    - 未分類文章、複製連結、首頁點進文章、找不到的文章、舊介面的路由。
+    - 沒有溢出，也沒有預期以外的 console 錯誤。
+  - `smoke.sh` 通過。

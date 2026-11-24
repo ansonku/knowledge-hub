@@ -131,3 +131,40 @@ class PublicSiteTests(TransactionTestCase):
         self.assertEqual(reading_minutes("", 0), 1)
         self.assertEqual(reading_minutes("字" * 100, 4000), 10)
         self.assertEqual(reading_minutes("a" * 100, 4000), 4)
+
+    def test_entry_pages_send_escaped_ascii_head_for_published_articles_only(self):
+        hostile = '"><script>alert(1)</script> 部署 & <b>'
+        article = self.upload(b"# Body\n\nSummary with <img src=x onerror=alert(2)> text", title=hostile)
+        page = f"/articles/{article}/"
+        self.assertEqual(self.visitor.get(page).status_code, 404)
+        self.publish(article)
+
+        response = self.visitor.get(page)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Accel-Redirect"], "/index.html")
+        head = response["X-Hub-Head"]
+        self.assertTrue(head.isascii())
+        self.assertNotIn("<script", head)
+        self.assertNotIn("<img", head)
+        self.assertIn("&lt;script&gt;", head)
+        self.assertIn("&#37096;&#32626;", head)  # 部署
+        self.assertIn("&amp;", head)
+        self.assertIn('<meta property="og:type" content="article">', head)
+        self.assertIn(f'<meta property="og:url" content="http://localhost:18080/articles/{article}/">', head)
+        # Every attribute value stays inside its quotes.
+        self.assertEqual(head.count('"'), 2 * head.count('content="') + 2 * head.count('name="') + 2 * head.count('property="'))
+
+        home = self.visitor.get("/articles/")
+        self.assertIn('<meta property="og:type" content="website">', home["X-Hub-Head"])
+        self.assertTrue(home["X-Hub-Head"].startswith("<title>"))
+
+        self.assertEqual(self.client.delete(f"/api/documents/{article}/publication/").status_code, 204)
+        withdrawn = self.visitor.get(page)
+        self.assertEqual(withdrawn.status_code, 404)
+        self.assertFalse(withdrawn.has_header("X-Hub-Head"))
+
+    def test_head_text_is_bounded(self):
+        from .publication import head_value
+        value = head_value("長" * 500)
+        self.assertTrue(value.endswith("&#8230;"))
+        self.assertEqual(value.count("&#38263;"), 120)

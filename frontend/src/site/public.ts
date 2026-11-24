@@ -13,6 +13,15 @@ export type PublicCard = {
   collection: PublicCollection | null
 }
 export type PublicCardPage = { results: PublicCard[]; page: number; pages: number; count: number }
+export type PublicArticle = {
+  title: string
+  format: Format
+  body: string
+  published_at: string
+  reading_minutes: number
+  collection: PublicCollection | null
+  siblings: { document_id: string; title: string }[]
+}
 
 const publishedDate = new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
 export const publicDate = (value: string) => publishedDate.format(new Date(value))
