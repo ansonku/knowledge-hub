@@ -8,9 +8,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, ApiError } from '../../api'
 import { useSession } from '../../stores/session'
+import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
+import { maintenanceLines, type MaintenanceRun } from './maintenance'
 import { useSite, type NoticeLevel, type NoticeSettings } from '../../stores/site'
 
 const site = useSite()
@@ -28,6 +30,7 @@ type Report = {
   }
   config: { https: boolean; google_login: boolean; smtp: boolean; mfa_key: boolean; html_preview: boolean; max_upload_bytes: number; max_batch: number }
   warnings: { level: 'info' | 'warning' | 'danger'; key: string; text: string }[]
+  maintenance: MaintenanceRun | null
 }
 
 const session = useSession()
@@ -118,6 +121,36 @@ function resetNotice() {
 
 const loading = ref(true)
 const error = ref('')
+
+// ---- Maintenance on demand -----------------------------------------------------
+const confirm = useConfirm()
+const maintaining = ref(false)
+const lastRun = computed(() => report.value?.maintenance ?? null)
+const lastLines = computed(() => lastRun.value ? maintenanceLines(lastRun.value.results) : [])
+function confirmMaintenance() {
+  confirm.require({
+    header: '立即執行維護',
+    message: '會依序執行：重試未完成的檔案清理、補建缺少的搜尋索引、刪除超過 24 小時且沒有任何版本使用的圖片，'
+      + '以及檢查檔案和資料庫是否一致（只檢查，不移動檔案）。執行期間會短暫暫停儲存版本和上傳圖片。',
+    acceptProps: { label: '執行' },
+    rejectProps: { label: '取消', severity: 'secondary', text: true },
+    accept: () => { void runMaintenance() },
+  })
+}
+async function runMaintenance() {
+  maintaining.value = true
+  try {
+    await api('/api/admin/system/maintenance/', 'POST')
+    await load()
+    const alert = lastLines.value.some(line => line.alert)
+    toast.add({ severity: alert ? 'warn' : 'success', summary: alert ? '維護完成，有項目需要處理' : '維護完成', life: 4000 })
+  } catch (cause) {
+    const busy = cause instanceof ApiError && cause.status === 409
+    toast.add({ severity: busy ? 'warn' : 'error', summary: busy ? cause.message : '維護執行失敗，請稍後再試。', life: 5000 })
+  } finally {
+    maintaining.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -294,7 +327,24 @@ onMounted(() => {
             </div>
           </dl>
           <p class="note">沒有任何版本使用、且超過 24 小時的圖片會自動刪除：服務啟動時一次，之後有人上傳圖片時最多每小時一次。</p>
-          <p class="note">檔案與資料庫的一致性檢查較耗時，請在需要時執行 <code>check_document_storage</code>。</p>
+          <div class="maintenance">
+            <div class="maintenance-head">
+              <p class="note">
+                <template v-if="lastRun">
+                  上次手動維護：<time :datetime="lastRun.at" :title="longDateTime(lastRun.at)">{{ shortDate(lastRun.at) }}</time>
+                  <template v-if="lastRun.actor">・{{ lastRun.actor }}</template>
+                </template>
+                <template v-else>還沒有手動執行過維護。</template>
+              </p>
+              <Button label="立即執行維護" size="small" outlined :loading="maintaining" @click="confirmMaintenance" />
+            </div>
+            <dl v-if="lastLines.length" class="facts results" aria-label="上次維護結果">
+              <div v-for="line in lastLines" :key="line.label">
+                <dt>{{ line.label }}</dt><dd :class="{ alert: line.alert }">{{ line.value }}</dd>
+              </div>
+            </dl>
+          </div>
+          <p class="note">維護也會檢查檔案和資料庫是否一致，但只顯示數量。要知道是哪些檔案，或把多出的檔案移到隔離區，請在主機上執行 <code>check_document_storage</code>。</p>
         </section>
 
         <section class="card" aria-labelledby="config-title">
@@ -393,6 +443,9 @@ h2 { margin: 0; font-size: 1rem; }
 .meter span { display: block; height: 100%; border-radius: inherit; background: var(--ui-accent); }
 .meter span.high { background: var(--ui-danger); }
 .note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); line-height: 1.6; }
+.maintenance { display: grid; gap: var(--ui-space-3); padding-top: var(--ui-space-3); border-top: 1px solid var(--ui-border); }
+.maintenance-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ui-space-2); }
+.results { font-size: var(--ui-text-sm); }
 .more { display: inline-flex; align-items: center; gap: var(--ui-space-1); justify-self: start; color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
 .more:hover { text-decoration: underline; }
 .flags { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ui-space-3); }

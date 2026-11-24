@@ -20,6 +20,8 @@ from documents.models import ArticlePublication, Category, Document, DocumentIma
 from users.models import User
 from users.permissions import IsAdmin
 
+from .maintenance import last_run
+
 LOW_DISK_SHARE = 0.10
 
 
@@ -46,11 +48,16 @@ def warnings(report):
     if jobs["pending_deletions"]:
         notes.append({"level": "warning", "key": "pending_deletions",
                       "text": f"有 {jobs['pending_deletions']} 個永久刪除的檔案清理還沒完成。重新啟動服務時會自動重試，"
-                              "也可以執行 `docker compose exec backend python manage.py finish_document_deletions`。"})
+                              "也可以按「背景工作」的「立即執行維護」。"})
     if jobs["unindexed_documents"]:
         notes.append({"level": "warning", "key": "unindexed",
                       "text": f"有 {jobs['unindexed_documents']} 份文件的目前版本還沒有搜尋索引，搜尋時可能找不到內文。"
-                              "可以執行 `docker compose exec backend python manage.py index_document_search`。"})
+                              "可以按「背景工作」的「立即執行維護」補建。"})
+    checked = (report["maintenance"] or {}).get("results", {}).get("storage", {})
+    if checked.get("missing"):
+        notes.append({"level": "danger", "key": "missing_files",
+                      "text": f"上次維護檢查發現 {checked['missing']} 個文件或圖片檔案遺失，請從備份還原，"
+                              "並在主機上執行 `check_document_storage` 查看是哪些檔案。"})
     if storage["disk"] and storage["disk"]["free_bytes"] < storage["disk"]["total_bytes"] * LOW_DISK_SHARE:
         notes.append({"level": "danger", "key": "low_disk", "text": "文件儲存空間所在的磁碟剩餘不到 10%。"})
     if members["active_admins"] < 2:
@@ -121,5 +128,6 @@ def system_status(request):
             "max_batch": settings.DOCUMENT_MAX_BATCH,
         },
     }
+    report["maintenance"] = last_run()
     report["warnings"] = warnings(report)
     return Response(report)

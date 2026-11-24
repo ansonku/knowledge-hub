@@ -4,6 +4,7 @@ from documents.preview import html_preview
 from documents.publication import public_article_page, public_site_page
 
 from .audit import audit_feed
+from .maintenance import run_maintenance
 from .system import system_status
 from .views import health, site_root
 
@@ -12,6 +13,7 @@ urlpatterns = [
     path("api/health", health, name="health"),
     path("api/admin/audit/", audit_feed, name="audit_feed"),
     path("api/admin/system/", system_status, name="system_status"),
+    path("api/admin/system/maintenance/", run_maintenance, name="run_maintenance"),
     path("articles/", public_site_page),
     path("articles/<uuid:document_id>/", public_article_page),
     path("", include("users.urls")),

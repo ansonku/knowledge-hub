@@ -1,9 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection, transaction
 
-from documents.models import DocumentImage, PendingDocumentDeletion, Version
-from documents.services import STORAGE_LOCK_KEY
-from documents.storage import root, sync_directory
+from documents.consistency import QuarantineConflict, inspect_storage
 
 
 class Command(BaseCommand):
@@ -12,31 +9,15 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--quarantine", action="store_true")
 
-    @transaction.atomic
     def handle(self, *args, **options):
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
-        base = root()
-        expected = set(Version.objects.values_list("path", flat=True))
-        expected |= {image.path for image in DocumentImage.objects.only("pk", "document_id", "format")}
-        pending = {str(item) for item in PendingDocumentDeletion.objects.values_list("pk", flat=True)}
-        present = {
-            str(path.relative_to(base)) for folder in ("versions", "images") for path in (base / folder).glob("*/*")
-            if path.is_file() and path.parent.name not in pending
-        }
-        for path in sorted(present - expected):
+        try:
+            checked, missing, unreferenced = inspect_storage(quarantine=options["quarantine"])
+        except QuarantineConflict as conflict:
+            raise CommandError(f"Quarantine destination already exists: {conflict}") from None
+        for path in unreferenced:
             self.stdout.write(f"Unreferenced: {path}")
-            if options["quarantine"]:
-                source = base / path
-                destination = base / "quarantine" / path
-                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                if destination.exists():
-                    raise CommandError(f"Quarantine destination already exists: {path}")
-                source.rename(destination)
-                sync_directory(source.parent)
-                sync_directory(destination.parent)
-        for path in sorted(expected - present):
+        for path in missing:
             self.stderr.write(f"Missing: {path}")
-        if expected - present:
+        if missing:
             raise CommandError("Restore missing files from backup.")
-        self.stdout.write(f"Checked {len(expected)} committed version and image files.")
+        self.stdout.write(f"Checked {checked} committed version and image files.")
