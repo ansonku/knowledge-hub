@@ -13,8 +13,8 @@ from .models import ArticleViewDaily, Document
 from .popularity import ViewThrottle
 
 
-class PopularityTests(TransactionTestCase):
-    """P5e: anonymous view counting, popular articles and the Admin trend."""
+class PopularityFixture(TransactionTestCase):
+    """An Admin, an Editor and an anonymous client; helpers to publish articles and count views."""
 
     def setUp(self):
         cache.clear()
@@ -39,6 +39,11 @@ class PopularityTests(TransactionTestCase):
 
     def view(self, document_id, address="198.51.100.1"):
         return self.visitor.post(f"/api/public/articles/{document_id}/view/", headers={"X-Hub-Client-IP": address})
+
+
+
+class PopularityTests(PopularityFixture):
+    """P5e: anonymous view counting, popular articles and the Admin trend."""
 
     def test_counts_published_articles_only_and_stores_no_visitor_data(self):
         published, private = self.article("Published"), self.article("Private", publish=False)
@@ -90,3 +95,36 @@ class PopularityTests(TransactionTestCase):
         self.assertEqual(trend["total"], 5)
         self.assertEqual(len(trend["daily"]), 30)
         self.assertEqual(trend["daily"][-1], {"day": today.isoformat(), "count": 4})
+
+
+class PublicOverviewTests(PopularityFixture):
+    """P6a: the Admin overview aggregates existing counts and version lag."""
+
+    def test_overview_is_admin_only(self):
+        editor = Client()
+        editor.force_login(self.editor)
+        self.assertEqual(editor.get("/api/admin/public-overview/").status_code, 403)
+        self.assertEqual(self.visitor.get("/api/admin/public-overview/").status_code, 403)
+
+    def test_overview_totals_lag_and_window(self):
+        busy, quiet, private = self.article("Busy"), self.article("Quiet"), self.article("Private", publish=False)
+        today = timezone.localdate()
+        ArticleViewDaily.objects.create(document_id=busy, day=today, count=6)
+        ArticleViewDaily.objects.create(document_id=busy, day=today - timedelta(days=10), count=4)
+        ArticleViewDaily.objects.create(document_id=busy, day=today - timedelta(days=40), count=99)
+        ArticleViewDaily.objects.create(document_id=private, day=today, count=50)
+        # A newer internal version leaves the public one behind.
+        self.client.post(f"/api/documents/{quiet}/versions/", {"file": SimpleUploadedFile("a.md", b"Quiet v2"), "note": "v2"})
+
+        month = self.client.get("/api/admin/public-overview/").json()
+        self.assertEqual((month["days"], month["total"], len(month["daily"])), (30, 10, 30))
+        self.assertEqual(month["daily"][-1], {"day": today.isoformat(), "count": 6})
+        self.assertEqual([item["title"] for item in month["articles"]], ["Busy", "Quiet"])
+        busy_row, quiet_row = month["articles"]
+        self.assertEqual((busy_row["total"], len(busy_row["spark"]), busy_row["spark"][-1], busy_row["spark"][4]), (10, 15, 6, 4))
+        self.assertEqual((quiet_row["published_version"], quiet_row["latest_version"], quiet_row["behind"]), (1, 2, 1))
+        self.assertEqual((month["lagging"], month["idle"]), (1, 1))
+
+        week = self.client.get("/api/admin/public-overview/?days=7").json()
+        self.assertEqual((week["days"], week["total"], len(week["daily"])), (7, 6, 7))
+        self.assertEqual(self.client.get("/api/admin/public-overview/?days=365").json()["days"], 30)

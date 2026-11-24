@@ -228,8 +228,11 @@ const narrow = window.matchMedia('(max-width: 1100px)')
 function storedInspector() {
   try { return localStorage.getItem(inspectorKey) !== 'closed' } catch { return true }
 }
-const inspectorOpen = ref(route.query.panel === 'versions' || (!narrow.matches && storedInspector()))
-const tab = ref<Tab>(route.query.panel === 'versions' ? 'versions' : 'info')
+// ?panel=versions (anyone) or ?panel=publish (Admins) opens the inspector on that tab.
+const requestedTab: Tab | undefined = route.query.panel === 'versions' ? 'versions'
+  : route.query.panel === 'publish' && session.isAdmin ? 'publish' : undefined
+const inspectorOpen = ref(Boolean(requestedTab) || (!narrow.matches && storedInspector()))
+const tab = ref<Tab>(requestedTab ?? 'info')
 const tabs = computed(() => [
   { value: 'info' as const, label: '資訊' },
   { value: 'versions' as const, label: '版本' },

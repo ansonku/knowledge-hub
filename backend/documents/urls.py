@@ -15,6 +15,7 @@ urlpatterns = [
     path("public/popular/", popularity.popular_articles),
     path("public/articles/<uuid:document_id>/view/", popularity.record_public_view),
     path("documents/<uuid:document_id>/public-views/", popularity.document_public_views),
+    path("admin/public-overview/", popularity.public_overview),
     path("read/nav/", reading.read_nav),
     path("read/articles/", reading.read_articles),
     path("read/articles/<uuid:document_id>/", reading.read_article),
