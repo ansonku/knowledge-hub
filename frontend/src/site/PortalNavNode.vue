@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
-import { colorClass, markOf, usePublicNav, type PublicNode } from './public'
+import { colorClass, markOf, portalMode, portals, usePublicNav, type PublicNode } from './public'
 
 /** One collection in the public navigation: its own articles, then its sub-collections (recursively). */
 const props = defineProps<{ node: PublicNode; open: Set<string>; currentArticle: string; currentCollection: string | null }>()
 const emit = defineEmits<{ toggle: [node: PublicNode]; navigate: [] }>()
-const { childrenOf, articlesOf } = usePublicNav()
+const mode = portalMode(useRoute())
+const names = portals[mode]
+const { childrenOf, articlesOf } = usePublicNav(mode)
 
 const expanded = computed(() => props.open.has(props.node.id))
 const children = computed(() => childrenOf(props.node.id))
@@ -25,7 +27,7 @@ const leafStyle = computed(() => ({
         @click="emit('toggle', node)">
         <UiIcon :name="expanded ? 'chevronDown' : 'chevronRight'" :size="14" />
       </button>
-      <RouterLink :to="{ name: 'site-home', query: { collection: node.id } }" class="node-link"
+      <RouterLink :to="{ name: names.home, query: { collection: node.id } }" class="node-link"
         :aria-current="isCurrent ? 'page' : undefined" @click="emit('navigate')">
         <span class="ui-col-mark mark" :class="colorClass(node)" aria-hidden="true">{{ markOf(node.name) }}</span>
         <span class="node-name">{{ node.name }}</span>
@@ -34,7 +36,7 @@ const leafStyle = computed(() => ({
     </div>
     <ul v-if="expanded" class="leaves">
       <li v-for="article in articles" :key="article.document_id">
-        <RouterLink :to="{ name: 'public-article', params: { id: article.document_id } }" class="leaf"
+        <RouterLink :to="{ name: names.articleRoute, params: { id: article.document_id } }" class="leaf"
           :class="{ on: article.document_id === currentArticle }" :style="leafStyle"
           :aria-current="article.document_id === currentArticle ? 'page' : undefined" @click="emit('navigate')">{{ article.title }}</RouterLink>
       </li>

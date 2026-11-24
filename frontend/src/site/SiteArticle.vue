@@ -6,7 +6,7 @@ import UiIcon from '../app/components/UiIcon.vue'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import { jumpToHeading } from '../headings'
-import { collectionStyle, colorClass, publicApi, publicDate, usePublicNav, type PublicArticle } from './public'
+import { cardDate, collectionStyle, colorClass, portalMode, portals, publicApi, publicDate, usePublicNav, type PublicArticle } from './public'
 import { useSite } from '../stores/site'
 
 const site = useSite()
@@ -16,7 +16,10 @@ const article = ref<PublicArticle>()
 const loading = ref(true)
 const error = ref('')
 const content = ref<HTMLElement>()
-const portal = usePublicNav()
+const mode = portalMode(route)
+const names = portals[mode]
+const member = mode === 'member'
+const portal = usePublicNav(mode)
 
 let controller: AbortController | undefined
 async function load() {
@@ -26,7 +29,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await publicApi<PublicArticle>(`/api/public/articles/${encodeURIComponent(id.value)}/`, request.signal)
+    const result = await publicApi<PublicArticle>(names.article(id.value), request.signal)
     if (request.signal.aborted) return
     article.value = result
     site.setTitle(result.title)
@@ -37,7 +40,14 @@ async function load() {
   } catch (cause) {
     if (request.signal.aborted) return
     article.value = undefined
-    error.value = (cause as { status?: number }).status === 404 ? '找不到這篇公開文章，可能已經下架。' : '暫時無法載入文章，請稍後再試。'
+    const status = (cause as { status?: number }).status
+    if (member && (status === 401 || status === 403)) {
+      window.location.assign(`/accounts/login/?next=${encodeURIComponent(route.fullPath)}`)
+      return
+    }
+    error.value = status === 404
+      ? (member ? '找不到這份文件，可能已經移入回收桶。' : '找不到這篇公開文章，可能已經下架。')
+      : '暫時無法載入文章，請稍後再試。'
     site.setTitle()
   } finally {
     if (!request.signal.aborted) loading.value = false
@@ -77,7 +87,7 @@ const older = computed(() => position.value >= 0 ? portal.ordered.value[position
 // ---- Copy link -------------------------------------------------------------------------
 const copied = ref(false)
 async function copyLink() {
-  const url = `${window.location.origin}/articles/${id.value}/`
+  const url = `${window.location.origin}${member ? '/read' : '/articles'}/${id.value}/`
   try {
     await navigator.clipboard.writeText(url)
     copied.value = true
@@ -98,7 +108,7 @@ async function copyLink() {
       <p class="state-title">{{ error }}</p>
       <div class="state-actions">
         <button type="button" class="text-button" @click="load">重試</button>
-        <RouterLink :to="{ name: 'site-home' }" class="text-button">回到首頁</RouterLink>
+        <RouterLink :to="{ name: names.home }" class="text-button">回到首頁</RouterLink>
       </div>
     </div>
 
@@ -107,23 +117,28 @@ async function copyLink() {
       <header class="band" :style="collectionStyle(article.collection)">
         <div class="band-inner">
           <nav class="crumbs" aria-label="目前位置">
-            <RouterLink :to="{ name: 'site-home' }">首頁</RouterLink>
+            <RouterLink :to="{ name: names.home }">首頁</RouterLink>
             <template v-for="node in article.path" :key="node.id">
               <span aria-hidden="true">/</span>
-              <RouterLink :to="{ name: 'site-home', query: { collection: node.id } }">{{ node.name }}</RouterLink>
+              <RouterLink :to="{ name: names.home, query: { collection: node.id } }">{{ node.name }}</RouterLink>
             </template>
           </nav>
           <h1>{{ article.title }}</h1>
           <div class="meta">
             <template v-for="(node, index) in article.path" :key="node.id">
               <span v-if="index" class="sep" aria-hidden="true">›</span>
-              <RouterLink :to="{ name: 'site-home', query: { collection: node.id } }" class="tag" :class="colorClass(node)">{{ node.name }}</RouterLink>
+              <RouterLink :to="{ name: names.home, query: { collection: node.id } }" class="tag" :class="colorClass(node)">{{ node.name }}</RouterLink>
             </template>
-            <span>發布於 <time :datetime="article.published_at">{{ publicDate(article.published_at) }}</time></span>
+            <span v-if="member" class="visibility" :class="{ public: article.public }">{{ article.public ? '公開' : '內部' }}</span>
+            <span v-if="member && article.version_number">v{{ article.version_number }}</span>
+            <span>{{ member ? '更新於' : '發布於' }} <time :datetime="cardDate(article)">{{ publicDate(cardDate(article)) }}</time></span>
             <span aria-hidden="true">·</span>
             <span>約 {{ article.reading_minutes }} 分鐘閱讀</span>
             <span class="spacer" />
-            <button type="button" class="copy" @click="copyLink">
+            <a v-if="member" :href="`/app/docs/${id}/`" class="copy">
+              <UiIcon name="edit" :size="15" />在工作區開啟
+            </a>
+            <button v-else type="button" class="copy" @click="copyLink">
               <UiIcon :name="copied ? 'check' : 'files'" :size="15" />{{ copied ? '已複製連結' : '複製連結' }}
             </button>
           </div>
@@ -138,12 +153,12 @@ async function copyLink() {
           <iframe v-else :srcdoc="htmlDocument" sandbox="" referrerpolicy="no-referrer" title="HTML 文章正文" class="html-frame" />
 
           <nav v-if="newer || older" class="neighbours" aria-label="上一篇與下一篇">
-            <RouterLink v-if="newer" :to="{ name: 'public-article', params: { id: newer.document_id } }" class="neighbour">
+            <RouterLink v-if="newer" :to="{ name: names.articleRoute, params: { id: newer.document_id } }" class="neighbour">
               <span class="neighbour-label"><UiIcon name="chevronLeft" :size="14" />上一篇</span>
               <span class="neighbour-title">{{ newer.title }}</span>
             </RouterLink>
             <span v-else />
-            <RouterLink v-if="older" :to="{ name: 'public-article', params: { id: older.document_id } }" class="neighbour next">
+            <RouterLink v-if="older" :to="{ name: names.articleRoute, params: { id: older.document_id } }" class="neighbour next">
               <span class="neighbour-label">下一篇<UiIcon name="chevronRight" :size="14" /></span>
               <span class="neighbour-title">{{ older.title }}</span>
             </RouterLink>
@@ -154,7 +169,7 @@ async function copyLink() {
           <span class="toc-title">本頁目錄</span>
           <a v-for="heading in headings" :key="heading.id" :href="`#${heading.id}`" class="toc-link"
             :style="{ paddingLeft: `${(heading.level - topLevel) * .875 + .75}rem` }" @click.prevent="jump(heading.id)">{{ heading.text }}</a>
-          <p class="toc-foot">更新於 {{ publicDate(article.published_at) }}<br>由團隊成員發布</p>
+          <p class="toc-foot">更新於 {{ publicDate(cardDate(article)) }}<br>{{ member ? '團隊內部文件庫' : '由團隊成員發布' }}</p>
         </aside>
       </div>
     </template>
@@ -172,6 +187,9 @@ async function copyLink() {
 h1 { margin: 0; font-size: clamp(1.75rem, 1.3rem + 1.5vw, 2.375rem); line-height: 1.22; font-weight: 700; letter-spacing: -.015em; overflow-wrap: anywhere; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; color: var(--ui-text-secondary); font-size: var(--ui-text-sm); }
 .tag { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-sm); font-weight: 600; text-decoration: none; }
+.visibility { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-sm); background: var(--ui-private-bg); color: var(--ui-private-text); font-weight: 600; }
+.visibility.public { background: var(--ui-public-bg); color: var(--ui-public-text); }
+a.copy { text-decoration: none; }
 .tag:hover { text-decoration: underline; }
 .sep { margin: 0 -.375rem; color: var(--ui-text-muted); }
 .spacer { flex: 1; }

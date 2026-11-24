@@ -3,13 +3,15 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
 import PortalNavNode from './PortalNavNode.vue'
-import { usePublicNav, type PublicNode } from './public'
+import { portalMode, portals, usePublicNav, type PublicNode } from './public'
 
 const emit = defineEmits<{ navigate: [] }>()
 const route = useRoute()
-const { nav, navLoaded, childrenOf, articlesOf, pathIds } = usePublicNav()
+const mode = portalMode(route)
+const names = portals[mode]
+const { nav, navLoaded, childrenOf, articlesOf, pathIds } = usePublicNav(mode)
 
-const currentArticle = computed(() => route.name === 'public-article' ? String(route.params.id) : '')
+const currentArticle = computed(() => route.name === names.articleRoute ? String(route.params.id) : '')
 const currentCollection = computed(() => {
   if (currentArticle.value) return nav.value.articles.find(article => article.document_id === currentArticle.value)?.collection_id ?? null
   return typeof route.query.collection === 'string' ? route.query.collection : null
@@ -32,18 +34,18 @@ function toggle(node: PublicNode) {
 }
 const roots = computed(() => childrenOf(null))
 const loose = computed(() => articlesOf(null))
-const isHome = computed(() => route.name === 'site-home' && !route.query.collection && !route.query.q && !route.query.view)
-const isAll = computed(() => route.name === 'site-home' && route.query.view === 'all')
+const isHome = computed(() => route.name === names.home && !route.query.collection && !route.query.q && !route.query.view)
+const isAll = computed(() => route.name === names.home && route.query.view === 'all')
 </script>
 
 <template>
   <nav class="portal-nav" aria-label="公開文章導覽">
     <div class="group">
-      <RouterLink :to="{ name: 'site-home' }" class="item" :class="{ on: isHome }" :aria-current="isHome ? 'page' : undefined" @click="emit('navigate')">
+      <RouterLink :to="{ name: names.home }" class="item" :class="{ on: isHome }" :aria-current="isHome ? 'page' : undefined" @click="emit('navigate')">
         <UiIcon name="home" :size="17" /><span>首頁</span>
       </RouterLink>
-      <RouterLink :to="{ name: 'site-home', query: { view: 'all' } }" class="item" :class="{ on: isAll }" :aria-current="isAll ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="clock" :size="17" /><span>最新文章</span>
+      <RouterLink :to="{ name: names.home, query: { view: 'all' } }" class="item" :class="{ on: isAll }" :aria-current="isAll ? 'page' : undefined" @click="emit('navigate')">
+        <UiIcon name="clock" :size="17" /><span>{{ mode === 'member' ? '最近更新' : '最新文章' }}</span>
       </RouterLink>
     </div>
 
@@ -63,7 +65,7 @@ const isAll = computed(() => route.name === 'site-home' && route.query.view === 
           </div>
           <ul class="leaves">
             <li v-for="article in loose" :key="article.document_id">
-              <RouterLink :to="{ name: 'public-article', params: { id: article.document_id } }" class="leaf"
+              <RouterLink :to="{ name: names.articleRoute, params: { id: article.document_id } }" class="leaf"
                 :class="{ on: article.document_id === currentArticle }" :aria-current="article.document_id === currentArticle ? 'page' : undefined"
                 @click="emit('navigate')">{{ article.title }}</RouterLink>
             </li>

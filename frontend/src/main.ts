@@ -24,6 +24,16 @@ const router = createRouter({
         { path: ':id/', name: 'public-article', component: () => import('./site/SiteArticle.vue') },
       ],
     },
+    // Member reading portal: the public portal's layout over every readable document (login required).
+    {
+      path: '/read/',
+      component: () => import('./site/PublicLayout.vue'),
+      meta: { portal: 'member' },
+      children: [
+        { path: '', name: 'read-home', component: () => import('./site/SiteHome.vue') },
+        { path: ':id/', name: 'read-article', component: () => import('./site/SiteArticle.vue') },
+      ],
+    },
     // Django sends admins back here after re-authentication; member management lives in the workspace.
     {
       path: '/accounts/manage/:id?',

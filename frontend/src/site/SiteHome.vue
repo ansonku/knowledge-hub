@@ -5,14 +5,17 @@ import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-rout
 import UiIcon from '../app/components/UiIcon.vue'
 import { useSite } from '../stores/site'
 import {
-  collectionStyle, colorClass, markOf, publicApi, publicDate, shortPublicDate, usePublicNav,
+  cardDate, collectionStyle, colorClass, markOf, portalMode, portals, publicApi, publicDate, shortPublicDate, usePublicNav,
   type PublicCard, type PublicCardPage, type PublicNode,
 } from './public'
 
 const route = useRoute()
 const router = useRouter()
 const site = useSite()
-const portal = usePublicNav()
+const mode = portalMode(route)
+const names = portals[mode]
+const member = mode === 'member'
+const portal = usePublicNav(mode)
 
 const queryText = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
 const keywords = computed(() => queryText('q').trim())
@@ -43,7 +46,7 @@ async function loadArticles() {
   if (keywords.value) params.set('q', keywords.value)
   if (collection.value) params.set('collection', collection.value)
   try {
-    const result = await publicApi<PublicCardPage>(`/api/public/articles/?${params}`, request.signal)
+    const result = await publicApi<PublicCardPage>(`${names.list}?${params}`, request.signal)
     if (request.signal.aborted) return
     data.value = result
     if (listing.value && result.page !== page.value) setQuery({ page: result.page })
@@ -87,7 +90,7 @@ const activePath = computed(() => portal.pathIds(collection.value).map(id => por
 const listHeading = computed(() => {
   if (keywords.value) return `搜尋「${keywords.value}」`
   if (collection.value) return activeNode.value?.name ?? '集合'
-  return '全部文章'
+  return member ? '全部文件' : '全部文章'
 })
 const cardPath = (card: PublicCard) => card.path.map(item => item.name).join(' › ')
 
@@ -101,12 +104,13 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
       <section class="hero" aria-labelledby="hero-title">
         <div class="inner hero-inner">
           <div class="hero-text">
-            <span class="eyebrow">公開知識庫</span>
+            <span class="eyebrow">{{ member ? '成員閱讀入口' : '公開知識庫' }}</span>
             <h1 id="hero-title">{{ site.name }}</h1>
-            <p v-if="site.tagline" class="lead">{{ site.tagline }}</p>
+            <p v-if="member" class="lead">團隊所有文件的閱讀入口，包含內部文件。標示「公開」的文件也會出現在公開知識站。</p>
+            <p v-else-if="site.tagline" class="lead">{{ site.tagline }}</p>
           </div>
           <dl class="stats">
-            <div><dt>公開文章</dt><dd>{{ stats.articles }}</dd></div>
+            <div><dt>{{ member ? '文件' : '公開文章' }}</dt><dd>{{ stats.articles }}</dd></div>
             <div><dt>集合</dt><dd>{{ stats.collections }}</dd></div>
             <div><dt>最近更新</dt><dd>{{ stats.updated }}</dd></div>
           </dl>
@@ -129,25 +133,25 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
                 <div class="tile-head">
                   <span class="ui-col-mark tile-mark" :class="colorClass(item.node)" aria-hidden="true">{{ markOf(item.node.name) }}</span>
                   <div class="tile-title">
-                    <RouterLink :to="{ name: 'site-home', query: { collection: item.node.id } }" class="tile-name">{{ item.node.name }}</RouterLink>
+                    <RouterLink :to="{ name: names.home, query: { collection: item.node.id } }" class="tile-name">{{ item.node.name }}</RouterLink>
                     <span class="tile-count">{{ item.countLabel }}</span>
                   </div>
                 </div>
                 <div v-if="item.children.length" class="chips">
                   <span class="chips-label">子集合</span>
-                  <RouterLink v-for="child in item.children" :key="child.id" :to="{ name: 'site-home', query: { collection: child.id } }" class="chip">
+                  <RouterLink v-for="child in item.children" :key="child.id" :to="{ name: names.home, query: { collection: child.id } }" class="chip">
                     <span class="ui-col-mark chip-mark" :class="colorClass(child)" aria-hidden="true">{{ markOf(child.name) }}</span>{{ child.name }}<span class="chip-count">{{ child.total_count }}</span>
                   </RouterLink>
                 </div>
                 <ul class="tile-list">
                   <li v-for="article in item.articles" :key="article.document_id">
-                    <RouterLink :to="{ name: 'public-article', params: { id: article.document_id } }" class="tile-link">
+                    <RouterLink :to="{ name: names.articleRoute, params: { id: article.document_id } }" class="tile-link">
                       <span class="tile-link-title">{{ article.title }}<span v-if="article.sub" class="sub">{{ article.sub }}</span></span>
-                      <time :datetime="article.published_at">{{ shortPublicDate(article.published_at) }}</time>
+                      <time :datetime="article.date">{{ shortPublicDate(article.date) }}</time>
                     </RouterLink>
                   </li>
                 </ul>
-                <RouterLink :to="{ name: 'site-home', query: { collection: item.node.id } }" class="more">查看全部 <UiIcon name="arrowRight" :size="14" /></RouterLink>
+                <RouterLink :to="{ name: names.home, query: { collection: item.node.id } }" class="more">查看全部 <UiIcon name="arrowRight" :size="14" /></RouterLink>
               </div>
             </article>
           </div>
@@ -156,25 +160,26 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
 
         <section class="block" aria-labelledby="latest-title">
           <div class="block-head">
-            <h2 id="latest-title">最新文章</h2>
-            <RouterLink :to="{ name: 'site-home', query: { view: 'all' } }" class="more">全部文章 <UiIcon name="arrowRight" :size="14" /></RouterLink>
+            <h2 id="latest-title">{{ member ? '最近更新' : '最新文章' }}</h2>
+            <RouterLink :to="{ name: names.home, query: { view: 'all' } }" class="more">{{ member ? '全部文件' : '全部文章' }} <UiIcon name="arrowRight" :size="14" /></RouterLink>
           </div>
           <p v-if="error" class="state" role="alert">{{ error }} <button type="button" class="link" @click="loadArticles">重試</button></p>
           <div v-else class="cards">
             <template v-if="loading && !data">
               <Skeleton v-for="index in 6" :key="index" height="10rem" border-radius="14px" />
             </template>
-            <RouterLink v-for="card in latest" v-else :key="card.document_id" :to="{ name: 'public-article', params: { id: card.document_id } }"
+            <RouterLink v-for="card in latest" v-else :key="card.document_id" :to="{ name: names.articleRoute, params: { id: card.document_id } }"
               class="card" :style="collectionStyle(card.collection)">
               <span class="card-meta">
                 <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
-                <time :datetime="card.published_at">{{ publicDate(card.published_at) }}</time>
+                <span v-if="member" class="visibility" :class="{ public: card.public }">{{ card.public ? '公開' : '內部' }}</span>
+                <time :datetime="cardDate(card)">{{ publicDate(cardDate(card)) }}</time>
                 <span aria-hidden="true">·</span><span>約 {{ card.reading_minutes }} 分鐘</span>
               </span>
               <span class="card-title">{{ card.title }}</span>
               <span v-if="card.excerpt" class="card-excerpt">{{ card.excerpt }}</span>
             </RouterLink>
-            <p v-if="!loading && !latest.length" class="state">這裡還沒有公開文章。</p>
+            <p v-if="!loading && !latest.length" class="state">{{ member ? '這裡還沒有文件。' : '這裡還沒有公開文章。' }}</p>
           </div>
         </section>
       </div>
@@ -184,10 +189,10 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
     <div v-else class="inner content listing">
       <header class="list-head" :style="activeNode ? collectionStyle(activeNode) : undefined">
         <nav v-if="activePath.length > 1" class="crumbs" aria-label="上層集合">
-          <RouterLink :to="{ name: 'site-home' }">首頁</RouterLink>
+          <RouterLink :to="{ name: names.home }">首頁</RouterLink>
           <template v-for="node in activePath.slice(0, -1)" :key="node.id">
             <span aria-hidden="true">/</span>
-            <RouterLink :to="{ name: 'site-home', query: { collection: node.id } }">{{ node.name }}</RouterLink>
+            <RouterLink :to="{ name: names.home, query: { collection: node.id } }">{{ node.name }}</RouterLink>
           </template>
         </nav>
         <div class="list-title">
@@ -197,7 +202,7 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
         <p class="result-line" aria-live="polite">{{ loading && !data ? '正在載入…' : `${data?.count ?? 0} 篇文章` }}</p>
         <div v-if="activeNode && portal.childrenOf(activeNode.id).length" class="chips">
           <span class="chips-label">子集合</span>
-          <RouterLink v-for="child in portal.childrenOf(activeNode.id)" :key="child.id" :to="{ name: 'site-home', query: { collection: child.id } }" class="chip">
+          <RouterLink v-for="child in portal.childrenOf(activeNode.id)" :key="child.id" :to="{ name: names.home, query: { collection: child.id } }" class="chip">
             <span class="ui-col-mark chip-mark" :class="colorClass(child)" aria-hidden="true">{{ markOf(child.name) }}</span>{{ child.name }}<span class="chip-count">{{ child.total_count }}</span>
           </RouterLink>
         </div>
@@ -206,11 +211,12 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
       <p v-if="error" class="state" role="alert">{{ error }} <button type="button" class="link" @click="loadArticles">重試</button></p>
       <div v-else-if="loading && !data" class="cards"><Skeleton v-for="index in 6" :key="index" height="10rem" border-radius="14px" /></div>
       <div v-else-if="data?.results.length" class="cards" :class="{ stale: loading }">
-        <RouterLink v-for="card in data.results" :key="card.document_id" :to="{ name: 'public-article', params: { id: card.document_id } }"
+        <RouterLink v-for="card in data.results" :key="card.document_id" :to="{ name: names.articleRoute, params: { id: card.document_id } }"
           class="card" :style="collectionStyle(card.collection)">
           <span class="card-meta">
             <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
-            <time :datetime="card.published_at">{{ publicDate(card.published_at) }}</time>
+            <span v-if="member" class="visibility" :class="{ public: card.public }">{{ card.public ? '公開' : '內部' }}</span>
+                <time :datetime="cardDate(card)">{{ publicDate(cardDate(card)) }}</time>
             <span aria-hidden="true">·</span><span>約 {{ card.reading_minutes }} 分鐘</span>
           </span>
           <span class="card-title">{{ card.title }}</span>
@@ -220,7 +226,7 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
       <div v-else class="empty">
         <UiIcon name="search" :size="28" />
         <p class="empty-title">{{ keywords ? `找不到符合「${keywords}」的文章` : '這裡還沒有公開文章' }}</p>
-        <RouterLink :to="{ name: 'site-home' }" class="more">回到首頁</RouterLink>
+        <RouterLink :to="{ name: names.home }" class="more">回到首頁</RouterLink>
       </div>
 
       <nav v-if="data && data.pages > 1" class="pager" aria-label="分頁">
@@ -284,6 +290,8 @@ h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .card:hover .card-title { color: var(--ui-accent); }
 .card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .tag { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-sm); font-weight: 600; }
+.visibility { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-sm); background: var(--ui-private-bg); color: var(--ui-private-text); font-weight: 600; }
+.visibility.public { background: var(--ui-public-bg); color: var(--ui-public-text); }
 .card-title { font-size: 1.0625rem; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
 .card-excerpt { color: var(--ui-text-secondary); font-size: .90625rem; line-height: 1.7; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 

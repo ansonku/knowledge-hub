@@ -859,3 +859,37 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 統一成「雙因素驗證」「驗證器」「復原碼」：原本是「二階段認證」「二階驗證」，「恢復碼」和「復原碼」混用，還有「authenticator 驗證器應用程式」這種中英夾雜。
   - 容器裡沒有 GNU gettext，所以 `.mo` 由 `backend/locale/compile.py` 產生（只用 Python 標準函式庫），`.po` 和 `.mo` 都納入版本控制。
   - 後端新增 2 項測試：雙因素驗證頁使用新用語；重新編譯 `.po` 的結果和 repo 裡的 `.mo` 完全一致，避免只改了 `.po` 卻忘了重新編譯。後端共 73 項通過。
+
+### P5d 成員閱讀入口（2026-11-24）
+
+- 網址是 `/read/`，路由名稱 `read-home`、`read-article`，`meta.portal = 'member'`。用的是和公開站相同的外框、左側導覽、首頁和文章頁元件，以模式切換。
+- 後端新增 `documents/reading.py`，三支 API 都要求 `CanReadLibrary`、`never_cache`：
+  - `GET /api/read/nav/`：所有不在回收桶的文件的集合樹和標題（最多 2000 篇）。
+  - `GET /api/read/articles/?q&collection&page`：文件卡片，回傳格式和公開 API 相同，另外多 `public`、`updated_at`。搜尋沿用工作區的 `search.filter_documents`；用集合篩選時包含子集合。
+  - `GET /api/read/articles/<id>/`：目前版本的內容。Markdown 回傳原文；HTML 回傳和公開站相同的淨化閱讀版（`readable_html`），前端放在 `sandbox=""` 的 iframe 裡，絕不回傳原始上傳的檔案。另外回傳 `public`、`version_number`。
+  - 集合樹的建立邏輯抽成 `publication.collection_tree()`，公開站和成員入口共用。
+  - 公開 API 完全沒有修改。
+- 前端：
+  - `site/public.ts` 新增 `portals`（每種模式的 API 位址和路由名稱）和 `portalMode(route)`。`usePublicNav(mode)` 依模式各自快取。導覽文章的日期統一成 `date` 欄位：公開站是發布日期，成員入口是最後更新日期。
+  - `PublicLayout`、`PortalNav`、`PortalNavNode`、`SiteHome`、`SiteArticle` 都依模式切換。成員模式的差異：
+    - 沒登入會被導向登入頁。
+    - 品牌旁邊有「閱讀入口」標籤，頂列右側是「公開知識站」和「工作區」；640 px 以下只保留「工作區」。
+    - 首屏改成「成員閱讀入口」並附說明，統計數字是「文件」。
+    - 卡片和文章頁都標示「公開」或「內部」；文章頁顯示版本號和「更新於」，並提供「在工作區開啟」。
+    - 文字改成「最近更新」「全部文件」，頁尾提醒「包含內部文件，請勿外流」。
+  - 品牌區塊的寬度從固定 `width` 改成 `min-width`，否則加上「閱讀入口」標籤後會被截斷；窄螢幕會重設。
+  - 工作區側欄新增「閱讀入口」連結，並新增 `book` 圖示。
+- 測試：
+  - 後端新增 `documents/test_reading.py`，共 3 項：
+    - 訪客會收到 403，Viewer 可以讀取。
+    - 私人和公開文件都會列出並正確標示，回收桶文件會排除；集合樹、子集合篩選、搜尋、單篇內容都正確。
+    - HTML 回傳淨化版，不含 `<script>`、事件屬性。
+  - 後端共 76 項通過。
+  - Playwright 新增 `read.py`，共 54 項：
+    - 訪客會被導向登入。
+    - 首頁和文章頁：1920／1280／500 px，1920 和 500 另測深色。檢查成員首屏、統計數字等於文件總數、公開／內部標示、私人 Markdown 文件、「在工作區開啟」、沒有溢出。
+    - 導覽連結都留在 `/read/` 底下；HTML 文件在 `sandbox=""` 的 iframe 裡；搜尋留在入口內，而且找得到私人文件。
+    - 公開站搜尋同一個關鍵字時，依然看不到私人文件。
+    - 工作區側欄有連到入口的連結。
+    - 沒有 console 錯誤。
+  - 回歸：公開站 81 項、文章頁 86 項都通過；`smoke.sh` 通過。

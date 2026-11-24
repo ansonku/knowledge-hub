@@ -178,14 +178,19 @@ def subtree_ids(category_id, index):
 
 
 def public_tree(index):
-    """Collections holding published articles plus their ancestors, depth first by name.
-
-    Each node: id, name, color, parent, article_count (its own) and total_count (its subtree).
-    """
+    """Collections holding published articles plus their ancestors, depth first by name."""
     direct = dict(
         published_articles().filter(document__category__isnull=False)
         .values_list("document__category_id").annotate(count=Count("pk"))
     )
+    return collection_tree(direct, index)
+
+
+def collection_tree(direct, index):
+    """Collections with articles ({id: count}) plus their ancestors, depth first by name.
+
+    Each node: id, name, color, parent, depth, article_count (its own) and total_count (its subtree).
+    """
     visible = set()
     for category_id in direct:
         visible.update(node["id"] for node in path_of(category_id, index))

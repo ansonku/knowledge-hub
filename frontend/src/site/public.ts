@@ -1,17 +1,22 @@
-import { computed, ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
+import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import type { CollectionColor, Format } from '../app/types'
 
 /** Shapes returned by the public (visitor) API; see backend/documents/publication.py. */
 export type PublicCollection = { id: string; name: string; color: CollectionColor | '' }
 /** A collection on the path to a published article (decision 6, revised in P5b). */
 export type PublicNode = PublicCollection & { parent: string | null; depth: number; article_count: number; total_count: number }
-export type PublicNavArticle = { document_id: string; title: string; collection_id: string | null; published_at: string }
+/** `date` is the publication date on the public site and the last update in the member portal. */
+export type PublicNavArticle = { document_id: string; title: string; collection_id: string | null; date: string }
 export type PublicNav = { collections: PublicNode[]; articles: PublicNavArticle[] }
 export type PublicCard = {
   document_id: string
   title: string
   format: Format
-  published_at: string
+  /** Public site: publication date. Member portal: `updated_at` instead, plus `public`. */
+  published_at?: string
+  updated_at?: string
+  public?: boolean
   excerpt: string
   reading_minutes: number
   collection: PublicCollection | null
@@ -22,7 +27,10 @@ export type PublicArticle = {
   title: string
   format: Format
   body: string
-  published_at: string
+  published_at?: string
+  updated_at?: string
+  public?: boolean
+  version_number?: number
   reading_minutes: number
   collection: PublicCollection | null
   path: PublicCollection[]
@@ -48,18 +56,45 @@ export async function publicApi<T>(path: string, signal?: AbortSignal): Promise<
   return response.json() as Promise<T>
 }
 
-// ---- Shared navigation data (one request for the whole public site) ----------------------------------
-const nav = ref<PublicNav>({ collections: [], articles: [] })
-const navLoaded = ref(false)
-let pending: Promise<void> | undefined
+// ---- Portal modes -------------------------------------------------------------------------------------
+/**
+ * The same portal renders two sites: the public knowledge site (/articles/, published articles only,
+ * no login) and the member reading portal (/read/, every readable document, login required).
+ */
+export type PortalMode = 'public' | 'member'
+export const portals = {
+  public: {
+    nav: '/api/public/nav/', list: '/api/public/articles/', article: (id: string) => `/api/public/articles/${encodeURIComponent(id)}/`,
+    home: 'site-home', articleRoute: 'public-article',
+  },
+  member: {
+    nav: '/api/read/nav/', list: '/api/read/articles/', article: (id: string) => `/api/read/articles/${encodeURIComponent(id)}/`,
+    home: 'read-home', articleRoute: 'read-article',
+  },
+} as const
+export const portalMode = (route: RouteLocationNormalizedLoaded): PortalMode => route.meta.portal === 'member' ? 'member' : 'public'
+export const cardDate = (item: { published_at?: string; updated_at?: string }) => item.published_at ?? item.updated_at ?? ''
 
-export function usePublicNav() {
+// ---- Shared navigation data (one request per portal) -------------------------------------------------------
+type RawNav = { collections: PublicNode[]; articles: (Omit<PublicNavArticle, 'date'> & { published_at?: string; updated_at?: string })[] }
+const caches: Record<PortalMode, { nav: Ref<PublicNav>; loaded: Ref<boolean>; pending?: Promise<void> }> = {
+  public: { nav: ref({ collections: [], articles: [] }), loaded: ref(false) },
+  member: { nav: ref({ collections: [], articles: [] }), loaded: ref(false) },
+}
+
+export function usePublicNav(mode: PortalMode = 'public') {
+  const cache = caches[mode]
+  const nav = cache.nav
+  const navLoaded = cache.loaded
   function load(force = false) {
-    if (pending && !force) return pending
-    pending = publicApi<PublicNav>('/api/public/nav/')
-      .then(data => { nav.value = data; navLoaded.value = true })
-      .catch(() => { pending = undefined })
-    return pending
+    if (cache.pending && !force) return cache.pending
+    cache.pending = publicApi<RawNav>(portals[mode].nav)
+      .then(data => {
+        nav.value = { collections: data.collections, articles: data.articles.map(article => ({ ...article, date: cardDate(article) })) }
+        navLoaded.value = true
+      })
+      .catch(() => { cache.pending = undefined })
+    return cache.pending
   }
   const byId = (id: string | null | undefined) => nav.value.collections.find(node => node.id === id)
   const childrenOf = (id: string | null) => nav.value.collections.filter(node => node.parent === id)
@@ -91,7 +126,7 @@ export function usePublicNav() {
     return result
   })
   const lastUpdated = computed(() => nav.value.articles.reduce<string | null>((latest, article) =>
-    !latest || article.published_at > latest ? article.published_at : latest, null))
+    !latest || article.date > latest ? article.date : latest, null))
   void load()
   return { nav, navLoaded, load, byId, childrenOf, articlesOf, pathIds, subtree, ordered, lastUpdated }
 }

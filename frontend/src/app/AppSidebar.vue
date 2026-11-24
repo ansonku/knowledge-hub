@@ -145,6 +145,9 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
         <UiIcon :name="item.icon" :size="17" /><span class="label">{{ item.label }}</span>
         <span v-if="item.badge" class="badge" :class="item.tone">{{ item.badge }}</span>
       </RouterLink>
+      <a href="/read/" class="item">
+        <UiIcon name="book" :size="17" /><span class="label">閱讀入口</span>
+      </a>
       <RouterLink v-if="session.canEdit" :to="{ name: 'app-taxonomy' }" class="item" :class="{ active: route.name === 'app-taxonomy' }"
         :aria-current="route.name === 'app-taxonomy' ? 'page' : undefined" @click="emit('navigate')">
         <UiIcon name="sliders" :size="17" /><span class="label">集合與標籤</span>

@@ -6,6 +6,7 @@ import { useSession } from '../stores/session'
 import { useSite } from '../stores/site'
 import { useTheme } from '../stores/theme'
 import PortalNav from './PortalNav.vue'
+import { portalMode, portals } from './public'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,8 +16,20 @@ const theme = useTheme()
 const detachTheme = theme.attach()
 onBeforeUnmount(detachTheme)
 
-// Members get a shortcut into the workspace; visitors get the login link. Purely presentational.
-void session.load()
+const mode = portalMode(route)
+const names = portals[mode]
+const member = mode === 'member'
+
+// Public site: members get a shortcut into the workspace, visitors the login link (presentational only).
+// Member portal: sign-in is required; the APIs refuse visitors anyway, this just sends them to log in.
+const ready = ref(!member)
+void session.load().then(() => {
+  if (member && session.status === 'guest') {
+    window.location.assign(`/accounts/login/?next=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  ready.value = true
+})
 const loginHref = computed(() => `/accounts/login/?next=${encodeURIComponent('/app/')}`)
 
 // ---- Search (the home page shows the results) -----------------------------------------------------
@@ -25,7 +38,7 @@ watch(() => route.query.q, value => { search.value = typeof value === 'string' ?
 const searchInput = ref<HTMLInputElement>()
 function submitSearch() {
   const q = search.value.trim()
-  void router.push({ name: 'site-home', query: q ? { q } : {} })
+  void router.push({ name: names.home, query: q ? { q } : {} })
   drawerOpen.value = false
 }
 function onKeydown(event: KeyboardEvent) {
@@ -51,27 +64,33 @@ watch(() => route.fullPath, () => { drawerOpen.value = false })
       <button type="button" class="icon-button menu" aria-label="開啟導覽" aria-controls="portal-nav" :aria-expanded="drawerOpen" @click="drawerOpen = true">
         <UiIcon name="menu" :size="20" />
       </button>
-      <RouterLink :to="{ name: 'site-home' }" class="brand">
+      <RouterLink :to="{ name: names.home }" class="brand">
         <span class="brand-mark" aria-hidden="true">
           <svg width="28" height="28" viewBox="0 0 28 28"><rect width="28" height="28" rx="7" fill="currentColor" /><path d="M8 9h7a5 5 0 0 1 0 10H8zM8 14h6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </span>
         <span class="brand-name">{{ site.name }}</span>
+        <span v-if="member" class="portal-tag">閱讀入口</span>
       </RouterLink>
       <form class="search" role="search" @submit.prevent="submitSearch">
         <UiIcon name="search" :size="16" />
         <label for="portal-search" class="ui-visually-hidden">搜尋公開文章</label>
-        <input id="portal-search" ref="searchInput" v-model="search" type="search" maxlength="240" placeholder="搜尋文章標題或內文" enterkeyhint="search">
+        <input id="portal-search" ref="searchInput" v-model="search" type="search" maxlength="240"
+          :placeholder="member ? '搜尋所有文件的標題或內文' : '搜尋文章標題或內文'" enterkeyhint="search">
         <kbd aria-hidden="true">Ctrl K</kbd>
       </form>
       <span class="spacer" />
       <button type="button" class="icon-button" :aria-label="theme.isDark ? '切換為淺色' : '切換為深色'" @click="theme.cycle()">
         <UiIcon :name="theme.isDark ? 'sun' : 'moon'" :size="18" />
       </button>
-      <a v-if="session.status === 'member'" href="/app/" class="member-link primary">進入工作區</a>
+      <template v-if="member">
+        <a href="/articles/" class="member-link secondary">公開知識站</a>
+        <a href="/app/" class="member-link primary">工作區</a>
+      </template>
+      <a v-else-if="session.status === 'member'" href="/app/" class="member-link primary">進入工作區</a>
       <a v-else :href="loginHref" class="member-link">成員登入</a>
     </header>
 
-    <div class="body">
+    <div v-if="ready" class="body">
       <div v-if="drawerOpen" class="scrim" aria-hidden="true" @click="drawerOpen = false" />
       <aside id="portal-nav" class="side">
         <PortalNav @navigate="drawerOpen = false" />
@@ -80,7 +99,7 @@ watch(() => route.fullPath, () => { drawerOpen.value = false })
         <RouterView />
         <footer class="foot">
           <span>© {{ new Date().getFullYear() }} {{ site.name }} · 內容由成員發布</span>
-          <span>本站只收錄經審核公開的文章</span>
+          <span>{{ member ? '成員閱讀入口：包含內部文件，請勿外流' : '本站只收錄經審核公開的文章' }}</span>
         </footer>
       </main>
     </div>
@@ -101,8 +120,9 @@ watch(() => route.fullPath, () => { drawerOpen.value = false })
   min-height: 4rem; padding: 0 var(--ui-space-5); box-sizing: border-box; border-bottom: 1px solid var(--ui-border);
   background: var(--ui-bg-surface);
 }
-.brand { flex: none; display: flex; align-items: center; gap: .625rem; width: calc(var(--portal-nav) - var(--ui-space-5) - var(--ui-space-5)); min-width: 0; color: var(--ui-text); text-decoration: none; }
+.brand { flex: none; display: flex; align-items: center; gap: .625rem; min-width: calc(var(--portal-nav) - var(--ui-space-5) - var(--ui-space-5)); color: var(--ui-text); text-decoration: none; }
 .brand-mark { display: grid; color: var(--ui-accent); }
+.portal-tag { flex: none; padding: 1px .5rem; border-radius: var(--ui-radius-pill); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); font-size: var(--ui-text-xs); font-weight: 600; }
 .brand-name { font-weight: 700; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search {
   flex: 1 1 20rem; max-width: 35rem; display: flex; align-items: center; gap: var(--ui-space-2); height: 2.5rem; padding: 0 var(--ui-space-3);
@@ -139,7 +159,7 @@ kbd { padding: 1px 6px; border: 1px solid var(--ui-border-strong); border-radius
 
 @media (max-width: 1000px) {
   .menu { display: grid; }
-  .brand { width: auto; }
+  .brand { width: auto; min-width: 0; }
   .search kbd { display: none; }
   .side {
     position: fixed; z-index: 50; top: 0; left: 0; width: min(85vw, 20rem); height: 100%;
@@ -153,6 +173,8 @@ kbd { padding: 1px 6px; border: 1px solid var(--ui-border-strong); border-radius
   .search { order: 10; flex: 1 1 100%; max-width: none; }
   .brand-name { max-width: 10rem; }
   .member-link { padding: 0 .75rem; }
+  /* Phones: keep one action in the member portal's top bar. */
+  .member-link.secondary { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .side { transition: none; } }
 </style>
