@@ -165,7 +165,7 @@ Django 範本頁面（登入、密碼重設、MFA、Google 綁定）維持由後
 |---|---|---|
 | P1 | 設計 token 與字型、`AppLayout`／`PublicLayout`、`/app/` 巢狀路由、Toast 與 ConfirmDialog、文件頁與 Inspector | 無 |
 | P2 | 工作區首頁、⌘K、上傳匣、清單排序與批次操作、集合頁、收藏與最近閱讀、活動紀錄、回收桶、深色模式（細項見 10.1） | 新 model 與 API |
-| P3 | 公開知識站首頁與文章頁、SEO meta | 小幅 |
+| P3 | 公開知識站首頁與文章頁、SEO meta（細項見 10.2） | 小幅 |
 | P4 | 管理主控台各頁、切換預設路由並移除舊頁面 | 新 API |
 
 ### 10.1 P2 細項
@@ -180,6 +180,75 @@ Django 範本頁面（登入、密碼重設、MFA、Google 綁定）維持由後
 不納入 P2：批次下載 ZIP（與 M7 的部署限制一併評估）、集合拖拉排序（P4 集合管理）。
 
 每個階段開始前提出檔案異動計畫；完成後列出異動檔案、測試結果與殘餘風險，並在 Firefox 以 500、768、1280 px 驗證 Visitor、Viewer、Editor 與 Admin。
+
+### 10.2 P3 細項
+
+P3 的範圍：公開知識站首頁、文章頁、SEO meta。只動公開的部分，成員介面 `/app/` 和舊頁面都不受影響。
+
+| 子階段 | 內容 |
+|---|---|
+| P3a 後端 | 見下方「P3a 後端」 |
+| P3b 公開首頁 | 見下方「P3b 公開首頁」 |
+| P3c 文章頁與 SEO | 見下方「P3c 文章頁與 SEO」 |
+
+**P3a 後端**
+
+- 公開文章清單 `GET /api/public/articles/`：
+  - 每篇文章新增 `excerpt`、`reading_minutes`、`published_at`、`collection` 四個欄位：
+    - `excerpt`：取自 `search_text` 的前 120 字。
+    - `reading_minutes`：中文以每分鐘 400 字估算。
+    - `collection`：只有 `{id, name, color}`。
+  - 新增 `collection=<id>` 參數，用來依集合篩選。
+- 新增 `GET /api/public/collections/`：只列出有公開文章的集合，包含名稱、色標和公開文章數。
+- 單篇 `GET /api/public/articles/:id/`：
+  - 新增 `published_at`、`reading_minutes`、`collection` 三個欄位。
+  - 新增 `siblings`：同一集合裡的公開文章，只回傳 id 和標題，依發布時間排序，前端用來做上一篇／下一篇和左側目錄。
+- Django 新增 `/articles/`，跟現有的 `/articles/<id>/` 一樣，用 X-Accel 送出 SPA。
+- 不需要資料遷移。所有新欄位都在查詢時計算，從既有的 `ArticlePublication` 和文件目前所在的集合取得。
+- 每個端點都要測：
+  - 訪客可以讀取。
+  - 未公開、已下架、在回收桶的文件，以及沒有公開文章的集合，都不能出現在回應中。
+  - 回應不可以包含內部欄位：集合說明、內部文件數、子集合、作者、標籤。
+
+**P3b 公開首頁**
+
+- 網址是 `/articles/`，使用 `PublicLayout`。
+- 頁首：品牌、「成員登入」；已登入的人則顯示「進入工作區」。
+- 首屏：標題、說明、大搜尋框。
+- 「依集合瀏覽」卡片：顯示名稱、色標、公開文章數。
+- 「最新文章」：可依集合篩選，每篇顯示集合、發布日期、閱讀時間、標題、摘要，並且可以分頁。
+- 支援深色模式、手機版，以及搜尋結果為空的狀態。
+
+**P3c 文章頁與 SEO**
+
+- 文章頁 `/articles/<id>/`：
+  - 左側是同一集合的文章目錄。
+  - 正文使用單一閱讀版型，拿掉現在的「標準／寬版／全頁」選單。
+  - 右側是本頁目錄。
+  - 底部有上一篇／下一篇、複製連結、更新日期。
+- 公開的 HTML 文章維持靜態閱讀版，iframe 用 `sandbox=""`。
+- SEO：後端在 `/articles/` 和 `/articles/<id>/` 的 HTML 輸出 `<title>`、`description`、Open Graph（`og:title`、`og:description`、`og:type`、`og:url`）。
+  - 優先嘗試的做法：Django 在 X-Accel 回應的 header 裡帶 meta，非 ASCII 字元先轉成 HTML 實體，再由 Nginx `sub_filter` 插入 `index.html`。
+  - 如果 Nginx 在內部轉址後讀不到 upstream header，改用備案：讓後端讀取建置出來的 `index.html`，自己插入 meta。
+  - 不論哪種做法，插入的內容都要經過 HTML escape，並且要測試惡意標題（例如含 `<script>`）。
+- 舊的 `PublicArticle.vue` 等到 P4 切換路由時才移除。P3 完成後，`/articles/<id>/` 會直接改用新頁面。
+
+**不納入 P3**
+
+- sitemap 和 RSS。
+- 集合的「公開顯示」開關，也就是第 12 節第 5 點的選項 B。
+- `/` 的導向。這要在 P4 決定。
+- 文章留言和瀏覽統計。
+
+**驗證**
+
+- 後端：權限測試，以及上面列的資料外露測試。
+- Playwright：
+  - 角色：訪客、Viewer、Admin。
+  - 寬度：500、768、1280、1920 px。
+  - 外觀：淺色、深色。
+  - 檢查項目：首頁、集合篩選、搜尋、文章頁（Markdown 和 HTML 各一篇）、上一篇／下一篇、SEO meta。
+  - 這些都只讀取「UI 測試」集合和使用者已公開的文章，不做任何發布或下架。
 
 ## 11. Mockup 對照
 
@@ -199,6 +268,9 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
 2. 「分類」在介面上一律改稱「集合」；後端 model 與 API 欄位維持 `category`，避免遷移與舊頁面中斷。
 3. M7 NAS 部署延後，先完成介面改版。
 4. HTML 預覽改為開啟文件時自動載入，並提供「自動載入」開關讓使用者關閉，關閉後回到按鈕載入。設定記在各自的瀏覽器（`localStorage`，key `knowledge-hub.app.html-autopreview`），預設為開啟。iframe 沙箱、一次性預覽網址和只限本機的限制都不變（2026-11-24）。
+5. P3 公開首頁放在 `/articles/`，`/` 暫時不動，P4 再決定訪客和成員各自導向哪裡（2026-11-24）。
+6. 公開站顯示集合，採選項 A：只顯示有公開文章的集合，而且只顯示集合本身的名稱、色標和公開文章數。不顯示集合說明、內部文件數、上層路徑，以及沒有公開文章的子集合（2026-11-24）。
+7. SEO 只做基本 meta 和 Open Graph，不做 sitemap（2026-11-24）。
 
 **名詞對照**
 
