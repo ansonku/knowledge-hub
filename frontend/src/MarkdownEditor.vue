@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { editor, KeyCode, KeyMod } from './monaco'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { editor, KeyCode, KeyMod, Range, Selection } from './monaco'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import UiIcon, { type IconName } from './app/components/UiIcon.vue'
 import {
   continueList, countWords, indentList, insertBlockStyle, insertLink, pasteAsLink, toggleInline, toggleLines,
@@ -8,8 +8,14 @@ import {
 } from './markdownCommands'
 
 const value = defineModel<string>({ required: true })
-const props = defineProps<{ readonly: boolean }>()
+const props = defineProps<{
+  readonly: boolean
+  /** Uploads one image and resolves with its address; without it the editor takes no images. */
+  uploadImage?: (file: File) => Promise<{ url: string }>
+}>()
 const emit = defineEmits<{
+  /** A message for the writer, such as a refused or failed image upload. */
+  notify: [message: string]
   /** Ctrl+S: the page moves focus to the version note, where Enter saves. */
   save: []
   /** The source line (1-based, fractional) at the top of the editor, or Infinity at the very bottom. */
@@ -28,7 +34,8 @@ type Tool = Look & (
   | { kind: 'inline'; style: InlineStyle }
   | { kind: 'line'; style: LineStyle }
   | { kind: 'block'; style: BlockStyle }
-  | { kind: 'link' })
+  | { kind: 'link' }
+  | { kind: 'image' })
 const groups: Tool[][] = [
   [
     { kind: 'line', style: 'h2', text: 'H2', label: '標題 2' },
@@ -40,6 +47,7 @@ const groups: Tool[][] = [
     { kind: 'inline', style: 'strike', icon: 'strike', label: '刪除線' },
     { kind: 'inline', style: 'code', icon: 'code', label: '行內程式碼' },
     { kind: 'link', icon: 'link', label: '連結', keys: 'K' },
+    { kind: 'image', icon: 'image', label: '插入圖片' },
   ],
   [
     { kind: 'line', style: 'quote', icon: 'quote', label: '引用' },
@@ -61,7 +69,90 @@ function apply(tool: Tool) {
   if (tool.kind === 'inline') toggleInline(instance, tool.style)
   else if (tool.kind === 'line') toggleLines(instance, tool.style)
   else if (tool.kind === 'block') insertBlockStyle(instance, tool.style)
+  else if (tool.kind === 'image') picker.value?.click()
   else insertLink(instance)
+}
+const visibleGroups = computed(() => props.uploadImage ? groups : groups.map(group => group.filter(tool => tool.kind !== 'image')))
+
+// ---- Images: paste, drop or pick; each gets a placeholder until its upload finishes ----
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const PLACEHOLDER = '![上傳中…]()'
+const picker = ref<HTMLInputElement>()
+const uploading = ref(0)
+
+function altText(file: File) {
+  const stem = file.name.replace(/\.[^.]*$/, '').replace(/[[\]()\\\r\n]+/g, ' ').trim().slice(0, 100)
+  return !stem || /^image$/i.test(stem) ? '圖片' : stem
+}
+
+function imagesFrom(list: FileList | null | undefined) {
+  return Array.from(list ?? []).filter(file => file.type.startsWith('image/'))
+}
+
+async function insertImages(files: File[]) {
+  const ed = instance, upload = props.uploadImage
+  if (!ed || !upload || props.readonly || !files.length) return
+  const accepted = files.filter(file => {
+    if (!IMAGE_TYPES.includes(file.type)) emit('notify', `「${file.name}」不是 PNG、JPEG、GIF 或 WebP 圖片。`)
+    else if (file.size > MAX_IMAGE_BYTES) emit('notify', `「${file.name}」超過 10 MB。`)
+    else return true
+    return false
+  })
+  if (!accepted.length) return
+  const start = ed.getSelection() ?? new Selection(1, 1, 1, 1)
+  ed.pushUndoStop()
+  ed.executeEdits('image', [{ range: start, text: accepted.map(() => PLACEHOLDER).join('\n'), forceMoveMarkers: true }])
+  ed.pushUndoStop()
+  // Decorations follow the placeholders while the writer keeps typing elsewhere.
+  const marks = ed.createDecorationsCollection(accepted.map((_, index) => {
+    const line = start.startLineNumber + index
+    const column = index ? 1 : start.startColumn
+    return {
+      range: new Range(line, column, line, column + PLACEHOLDER.length),
+      options: { stickiness: editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges, inlineClassName: 'md-uploading' },
+    }
+  }))
+  uploading.value += accepted.length
+  for (const [index, file] of accepted.entries()) {
+    let replacement = ''
+    try {
+      const { url } = await upload(file)
+      replacement = `![${altText(file)}](${url})`
+    } catch (cause) {
+      emit('notify', `「${file.name}」上傳失敗：${cause instanceof Error ? cause.message : '請稍後再試。'}`)
+    }
+    uploading.value--
+    const range = marks.getRange(index)
+    const current = ed.getModel()
+    // If the writer deleted the placeholder meanwhile, leave the text alone (the unused upload is cleaned up later).
+    if (!range || !current || current.getValueInRange(range) !== PLACEHOLDER) continue
+    ed.executeEdits('image', [{ range, text: replacement }])
+  }
+  marks.clear()
+}
+
+function onPicked() {
+  void insertImages(imagesFrom(picker.value?.files))
+  if (picker.value) picker.value.value = ''
+}
+
+function hasFiles(event: DragEvent) {
+  return [...(event.dataTransfer?.types ?? [])].includes('Files')
+}
+function onDragOver(event: DragEvent) {
+  if (!props.uploadImage || props.readonly || !hasFiles(event)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+function onDrop(event: DragEvent) {
+  if (!props.uploadImage || props.readonly || !hasFiles(event) || !instance) return
+  event.preventDefault()
+  event.stopPropagation()
+  const target = instance.getTargetAtClientPoint(event.clientX, event.clientY)?.position
+  if (target) instance.setPosition(target)
+  instance.focus()
+  void insertImages(imagesFrom(event.dataTransfer?.files))
 }
 
 // Status bar
@@ -88,10 +179,20 @@ function reportScroll() {
   emit('scrollLine', first + Math.min(1, Math.max(0, (top - start) / span)))
 }
 
-/** Pasting an address over selected text makes a link; everything else pastes as usual. */
+/**
+ * Pasting an address over selected text makes a link; pasting a picture (with no text alongside it,
+ * unlike copied spreadsheet cells) uploads it; everything else pastes as usual.
+ */
 function onPaste(event: ClipboardEvent) {
   if (!instance || props.readonly || !instance.hasTextFocus()) return
   const text = event.clipboardData?.getData('text/plain') ?? ''
+  const images = imagesFrom(event.clipboardData?.files)
+  if (!text && images.length && props.uploadImage) {
+    event.preventDefault()
+    event.stopPropagation()
+    void insertImages(images)
+    return
+  }
   if (pasteAsLink(instance, text)) {
     event.preventDefault()
     event.stopPropagation()
@@ -116,6 +217,8 @@ onMounted(() => {
     quickSuggestions: false,
     wordBasedSuggestions: 'off',
     suggestOnTriggerCharacters: false,
+    // Dropped files are images to upload (handled below), never file paths to type in.
+    dropIntoEditor: { enabled: false },
   })
   const ed = instance
   const unlessReadonly = (action: () => void) => () => { if (!props.readonly) action() }
@@ -140,6 +243,8 @@ onMounted(() => {
   ed.onDidChangeCursorPosition(event => { cursor.value = { line: event.position.lineNumber, column: event.position.column } })
   ed.onDidScrollChange(event => { if (event.scrollTopChanged) reportScroll() })
   root.value?.addEventListener('paste', onPaste, true)
+  root.value?.addEventListener('dragover', onDragOver, true)
+  root.value?.addEventListener('drop', onDrop, true)
   updateCounts()
 })
 
@@ -150,6 +255,8 @@ watch(() => props.readonly, readOnly => instance?.updateOptions({ readOnly }))
 
 onBeforeUnmount(() => {
   root.value?.removeEventListener('paste', onPaste, true)
+  root.value?.removeEventListener('dragover', onDragOver, true)
+  root.value?.removeEventListener('drop', onDrop, true)
   instance?.dispose()
   model?.dispose()
 })
@@ -158,7 +265,7 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" class="md-editor">
     <div class="toolbar" role="toolbar" aria-label="Markdown 格式">
-      <template v-for="(group, index) in groups" :key="index">
+      <template v-for="(group, index) in visibleGroups" :key="index">
         <span v-if="index" class="sep" aria-hidden="true" />
         <!-- mousedown.prevent keeps the selection in the editor while the button is pressed. -->
         <button v-for="tool in group" :key="tool.label" type="button" class="tool" :class="{ text: !tool.icon }"
@@ -168,8 +275,11 @@ onBeforeUnmount(() => {
         </button>
       </template>
     </div>
+    <input ref="picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
+      aria-hidden="true" tabindex="-1" @change="onPicked">
     <div ref="host" class="editor-host" />
     <div class="status" aria-live="off">
+      <span v-if="uploading" class="uploading" role="status">正在上傳 {{ uploading }} 張圖片…</span>
       <span>{{ words.toLocaleString() }} 字</span>
       <span>{{ lines.toLocaleString() }} 行</span>
       <span>第 {{ cursor.line }} 行，第 {{ cursor.column }} 欄</span>
@@ -195,6 +305,8 @@ onBeforeUnmount(() => {
 .tool:disabled { opacity: .45; cursor: default; }
 .sep { width: 1px; height: 1.25rem; margin: 0 .25rem; background: var(--ui-border-strong); }
 .editor-host { flex: 1; min-height: 0; }
+.editor-host :deep(.md-uploading) { color: var(--ui-text-muted); font-style: italic; }
+.uploading { margin-right: auto; color: var(--ui-accent); font-weight: 600; }
 .status {
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem 1rem; padding: .25rem .75rem;
   border-top: 1px solid var(--ui-border); background: var(--ui-bg-subtle); color: var(--ui-text-muted);

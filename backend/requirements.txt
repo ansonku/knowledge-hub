@@ -6,3 +6,4 @@ ruff==0.14.10
 django-allauth[mfa,socialaccount]==65.22.1
 nh3==0.3.8
 tinycss2==1.5.1
+pillow==12.3.0

@@ -48,6 +48,7 @@ const paths = {
   codeBlock: 'M4 4h16v16H4zM9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5',
   table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
   rule: 'M4 12h16M4 6h.01M20 6h.01M4 18h.01M20 18h.01',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9.5h.01',
 } as const
 
 export type IconName = keyof typeof paths

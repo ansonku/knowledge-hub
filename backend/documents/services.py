@@ -151,6 +151,10 @@ def publish_version(document, actor, temporary, sha256, size, number, filename, 
     )
     document.current_version = version
     document.save(update_fields=["current_version", "updated_at"])
+    if document.format == Document.Format.MARKDOWN:
+        from .images import record_references
+
+        record_references(version, temporary.read_text(encoding="utf-8"))
     activity.record_version(version)
     return version
 

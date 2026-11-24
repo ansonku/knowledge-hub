@@ -11,7 +11,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute, useRouter } from 'vue-router'
-import { api } from '../api'
+import { api, upload } from '../api'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import { jumpToHeading } from '../headings'
@@ -74,6 +74,16 @@ watch(draft, (value, _, onCleanup) => {
 }, { immediate: true })
 const article = ref<HTMLElement>()
 const previewPane = ref<HTMLElement>()
+
+/** Images pasted, dropped or picked in the editor go to this document. */
+function uploadImage(image: File) {
+  const form = new FormData()
+  form.append('file', image)
+  return upload<{ url: string }>(`/api/documents/${encodeURIComponent(documentId.value)}/images/`, form)
+}
+function notify(message: string) {
+  toast.add({ severity: 'error', summary: message, life: 6000 })
+}
 
 /** Ctrl+S in the editor: go to the version note, where Enter saves. Saving is never a single keystroke. */
 function focusNote() {
@@ -473,7 +483,8 @@ onBeforeUnmount(() => {
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" @save="focusNote" @scroll-line="syncPreview" />
+              <Monaco v-model="draft" :readonly="saving" :upload-image="uploadImage" @notify="notify"
+                @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
                 <span class="preview-label">即時預覽</span>
                 <MarkdownBody :rendered="preview" />

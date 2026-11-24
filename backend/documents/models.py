@@ -242,3 +242,42 @@ class FeaturedArticle(models.Model):
     class Meta:
         ordering = ["position"]
 
+
+
+class DocumentImage(models.Model):
+    """An image pasted into a Markdown document. It belongs to that one document and follows its access rules."""
+
+    class Format(models.TextChoices):
+        PNG = "png", "PNG"
+        JPEG = "jpeg", "JPEG"
+        GIF = "gif", "GIF"
+        WEBP = "webp", "WebP"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="images")
+    # Digest of the re-encoded bytes that are stored and served.
+    sha256 = models.CharField(max_length=64)
+    format = models.CharField(max_length=8, choices=Format.choices)
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    size = models.PositiveBigIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["document", "sha256"], name="unique_document_image")]
+
+    @property
+    def path(self):
+        return f"images/{self.document_id}/{self.pk}.{self.format}"
+
+
+class VersionImage(models.Model):
+    """A version's Markdown refers to this image. An image is removable only once no version refers to it."""
+
+    version = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="image_references")
+    # RESTRICT: a referenced image can only go away together with the versions that use it.
+    image = models.ForeignKey(DocumentImage, on_delete=models.RESTRICT, related_name="references")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["version", "image"], name="unique_version_image")]

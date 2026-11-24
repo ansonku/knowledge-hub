@@ -45,7 +45,7 @@ export function isAuthError(error: unknown) {
   return error instanceof ApiError && (error.status === 401 || error.status === 403)
 }
 
-/** Multipart upload with progress; resolves with the JSON body of a 201 response. */
+/** Multipart upload with progress; resolves with the JSON body of a 200 or 201 response. */
 export function upload<T = unknown>(url: string, data: FormData, onProgress?: (percent: number) => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const request = new XMLHttpRequest()
@@ -57,7 +57,7 @@ export function upload<T = unknown>(url: string, data: FormData, onProgress?: (p
       if (event.lengthComputable) onProgress?.(Math.round(event.loaded * 100 / event.total))
     }
     request.onload = () => {
-      if (request.status === 201) resolve(request.response as T)
+      if (request.status === 201 || request.status === 200) resolve(request.response as T)
       else reject(new ApiError(request.status, errorMessage(request.response) || '上傳失敗，請重新整理後再試。', request.response))
     }
     request.onerror = request.ontimeout = () => reject(new Error('連線中斷，請先確認文件清單再重試。'))
