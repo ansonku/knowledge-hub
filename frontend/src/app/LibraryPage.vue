@@ -7,7 +7,7 @@ import Select from 'primevue/select'
 import Skeleton from 'primevue/skeleton'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { api, getCsrfToken } from '../api'
 import PublicationDialog from '../PublicationDialog.vue'
@@ -34,8 +34,13 @@ const category = computed(() => route.name === 'app-collection' ? String(route.p
 const keywords = computed(() => queryText('q'))
 const format = computed(() => queryText('format') as Format | '')
 const tag = computed(() => queryText('tag'))
-/** Fixed views reached from the sidebar: favourites and published articles. */
-const preset = computed(() => route.meta.preset as 'favorites' | 'published' | undefined)
+/**
+ * Fixed views reached from the sidebar. "recent" lists the viewer's own reading history
+ * (newest first, at most 50) and has no search, filters, sorting or paging.
+ */
+const preset = computed(() => route.meta.preset as 'favorites' | 'published' | 'recent' | undefined)
+const isRecent = computed(() => preset.value === 'recent')
+type Row = DocumentRow & { viewed_at?: string }
 const visibility = computed<Visibility | ''>(() => {
   const value = queryText('visibility')
   if (preset.value === 'published') return value === 'lagging' ? 'lagging' : 'public'
@@ -63,17 +68,17 @@ watch(searchText, (text, _, onCleanup) => {
 })
 
 const formatOptions = [{ id: 'md', name: 'Markdown' }, { id: 'html', name: 'HTML' }]
-const hasFilters = computed(() => Boolean(keywords.value || format.value || tag.value || (!preset.value && visibility.value)))
+const hasFilters = computed(() => !isRecent.value && Boolean(keywords.value || format.value || tag.value || (!preset.value && visibility.value)))
 function clearFilters() {
   searchText.value = ''
   setQuery({ q: '', format: '', tag: '', ...(preset.value ? {} : { visibility: '' }) })
 }
 
 // ---- Data ----------------------------------------------------------------
-const rows = ref<DocumentRow[]>([])
+const rows = ref<Row[]>([])
 const count = ref(0)
 const pageSize = ref(25)
-const limits = ref({ bytes: 50 * 1024 * 1024, batch: 20 })
+const limits = ref({ ...session.limits })
 const loading = ref(true)
 const error = ref('')
 let request = 0
@@ -82,6 +87,7 @@ async function load() {
   const current = ++request
   loading.value = true
   error.value = ''
+  if (isRecent.value) return loadRecent(current)
   const params = new URLSearchParams({ page: String(page.value) })
   if (keywords.value) params.set('q', keywords.value)
   if (category.value) params.set('category', category.value)
@@ -107,6 +113,21 @@ async function load() {
   }
 }
 
+async function loadRecent(current: number) {
+  try {
+    const data = await api<{ results: Row[] }>('/api/me/recent/?limit=50')
+    if (current !== request) return
+    rows.value = data.results
+    selected.value = selected.value.filter(id => data.results.some(row => row.id === id))
+    count.value = data.results.length
+    pageSize.value = Math.max(1, data.results.length)
+  } catch (cause) {
+    if (current === request) error.value = cause instanceof Error ? cause.message : '無法載入最近閱讀。'
+  } finally {
+    if (current === request) loading.value = false
+  }
+}
+
 const selected = ref<string[]>([])
 watch([category, keywords, format, tag, preset, visibility, ordering], () => { selected.value = [] })
 watch([category, keywords, format, tag, page, preset, visibility, ordering], load, { immediate: true })
@@ -121,12 +142,16 @@ watch(() => taxonomy.categories, () => {
 
 // ---- Heading ---------------------------------------------------------------
 const heading = computed(() => {
+  if (preset.value === 'recent') return '最近閱讀'
   if (preset.value === 'favorites') return '收藏'
   if (preset.value === 'published') return '已公開文章'
   if (!category.value) return '全部文件'
   if (category.value === UNCATEGORIZED) return '未分類'
   return taxonomy.byId(category.value)?.name ?? '集合'
 })
+watch(heading, value => { document.title = `${value} · Knowledge Hub` })
+// The layout sets a generic title when it mounts (after this page), so apply ours on the next tick.
+onMounted(() => { void nextTick(() => { document.title = `${heading.value} · Knowledge Hub` }) })
 const breadcrumb = computed(() => taxonomy.pathOf(category.value).slice(0, -1))
 const collection = computed(() => category.value && category.value !== UNCATEGORIZED ? taxonomy.byId(category.value) : undefined)
 const editingCollection = ref<Category>()
@@ -278,7 +303,7 @@ function onSaved() {
           </button>
         </div>
         <p v-if="collection?.description" class="description">{{ collection.description }}</p>
-        <p class="subtitle" aria-live="polite">{{ loading ? '正在載入…' : `${count} 份文件` }}</p>
+        <p class="subtitle" aria-live="polite">{{ loading ? '正在載入…' : `${count} 份文件` }}<template v-if="isRecent"> · 只有你看得到這份清單，最多保留最近 50 份文件。</template></p>
         <div v-if="preset === 'published'" class="segments" role="group" aria-label="公開狀態">
           <button type="button" class="segment" :class="{ on: visibility === 'public' }" :aria-pressed="visibility === 'public'"
             @click="setQuery({ visibility: '' })">全部公開</button>
@@ -291,7 +316,7 @@ function onSaved() {
       </Button>
     </header>
 
-    <div class="toolbar" role="search">
+    <div v-if="!isRecent" class="toolbar" role="search">
       <label class="search-box">
         <span class="ui-visually-hidden">搜尋文件</span>
         <UiIcon name="search" :size="16" />
@@ -334,7 +359,7 @@ function onSaved() {
             <th scope="col" class="col-tags">標籤</th>
             <th scope="col" class="col-status">可見性</th>
             <th scope="col" class="col-version">版本</th>
-            <th scope="col" class="col-date">更新</th>
+            <th scope="col" class="col-date">{{ isRecent ? '閱讀' : '更新' }}</th>
             <th scope="col" class="col-actions"><span class="ui-visually-hidden">操作</span></th>
           </tr>
         </thead>
@@ -376,7 +401,9 @@ function onSaved() {
               </span>
             </td>
             <td class="num">v{{ row.current_version.number }}</td>
-            <td class="date"><time :datetime="row.updated_at" :title="longDateTime(row.updated_at)">{{ shortDate(row.updated_at) }}</time></td>
+            <td class="date">
+              <time :datetime="row.viewed_at ?? row.updated_at" :title="longDateTime(row.viewed_at ?? row.updated_at)">{{ shortDate(row.viewed_at ?? row.updated_at) }}</time>
+            </td>
             <td class="actions">
               <button type="button" class="row-menu star" :class="{ on: row.is_favorite }" :aria-pressed="Boolean(row.is_favorite)"
                 :aria-label="row.is_favorite ? `取消收藏 ${row.title}` : `收藏 ${row.title}`" @click="toggleFavorite(row)">
@@ -391,9 +418,9 @@ function onSaved() {
         </tbody>
       </table>
       <div v-if="!loading && !rows.length" class="empty">
-        <UiIcon name="folder" :size="28" />
-        <p class="empty-title">{{ hasFilters ? '找不到符合條件的文件' : preset === 'favorites' ? '還沒有收藏的文件' : preset === 'published' ? (visibility === 'lagging' ? '所有公開文章都是最新版本' : '還沒有公開文章') : '這裡還沒有文件' }}</p>
-        <p class="empty-text">{{ hasFilters ? '換個關鍵字，或清除篩選條件再試一次。' : preset === 'favorites' ? '在文件頁按下星號，就能把常用文件收進這裡。' : preset === 'published' ? 'Admin 可在文件頁的「公開」分頁發布文章。' : (session.canEdit ? '上傳 Markdown 或 HTML 檔案開始建立知識庫。' : '有文件加入後會顯示在這裡。') }}</p>
+        <UiIcon :name="isRecent ? 'clock' : 'folder'" :size="28" />
+        <p class="empty-title">{{ hasFilters ? '找不到符合條件的文件' : isRecent ? '還沒有閱讀紀錄' : preset === 'favorites' ? '還沒有收藏的文件' : preset === 'published' ? (visibility === 'lagging' ? '所有公開文章都是最新版本' : '還沒有公開文章') : '這裡還沒有文件' }}</p>
+        <p class="empty-text">{{ hasFilters ? '換個關鍵字，或清除篩選條件再試一次。' : isRecent ? '開啟任何文件後，就會出現在這裡。' : preset === 'favorites' ? '在文件頁按下星號，就能把常用文件收進這裡。' : preset === 'published' ? 'Admin 可在文件頁的「公開」分頁發布文章。' : (session.canEdit ? '上傳 Markdown 或 HTML 檔案開始建立知識庫。' : '有文件加入後會顯示在這裡。') }}</p>
         <Button v-if="hasFilters" label="清除篩選" outlined size="small" @click="clearFilters" />
         <Button v-else-if="session.canEdit && !preset" label="上傳文件" size="small" @click="emit('upload')" />
       </div>

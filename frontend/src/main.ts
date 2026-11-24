@@ -28,7 +28,7 @@ const router = createRouter({
       children: [
         { path: '', name: 'app-home', component: () => import('./app/HomePage.vue') },
         { path: 'library/', name: 'app-library', component: () => import('./app/LibraryPage.vue') },
-        { path: 'recent/', name: 'app-recent', component: () => import('./app/RecentPage.vue') },
+        { path: 'recent/', name: 'app-recent', component: () => import('./app/LibraryPage.vue'), meta: { preset: 'recent' } },
         { path: 'favorites/', name: 'app-favorites', component: () => import('./app/LibraryPage.vue'), meta: { preset: 'favorites' } },
         { path: 'published/', name: 'app-published', component: () => import('./app/LibraryPage.vue'), meta: { preset: 'published' } },
         { path: 'trash/', name: 'app-trash', component: () => import('./app/TrashPage.vue') },
