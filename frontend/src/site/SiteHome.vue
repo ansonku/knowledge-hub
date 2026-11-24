@@ -31,6 +31,13 @@ function setQuery(patch: Record<string, string | number | undefined>) {
   void router.replace({ query })
 }
 
+/** Page buttons: a history entry per page (Back returns to it) and the new page starts at the top. */
+function goToPage(target: number) {
+  const query: LocationQueryRaw = { ...route.query, page: target > 1 ? target : undefined }
+  if (query.page === undefined) delete query.page
+  void router.push({ query }).then(() => window.scrollTo({ top: 0 }))
+}
+
 // ---- Articles from the API (cards need excerpts) ----------------------------------------------------
 const data = ref<PublicCardPage>()
 const loading = ref(true)
@@ -283,9 +290,9 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
       </div>
 
       <nav v-if="data && data.pages > 1" class="pager" aria-label="分頁">
-        <button type="button" class="page-button" :disabled="page <= 1" @click="setQuery({ page: page - 1 })"><UiIcon name="chevronLeft" :size="16" />上一頁</button>
+        <button type="button" class="page-button" :disabled="page <= 1" @click="goToPage(page - 1)"><UiIcon name="chevronLeft" :size="16" />上一頁</button>
         <span>第 {{ data.page }} / {{ data.pages }} 頁</span>
-        <button type="button" class="page-button" :disabled="page >= data.pages" @click="setQuery({ page: page + 1 })">下一頁<UiIcon name="chevronRight" :size="16" /></button>
+        <button type="button" class="page-button" :disabled="page >= data.pages" @click="goToPage(page + 1)">下一頁<UiIcon name="chevronRight" :size="16" /></button>
       </nav>
     </div>
   </div>

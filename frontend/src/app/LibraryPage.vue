@@ -62,6 +62,13 @@ function setQuery(patch: Record<string, string | number | undefined>, resetPage 
   void router.replace({ query })
 }
 
+/** Page buttons: a history entry per page (Back returns to it) and the new page starts at the top. */
+function goToPage(target: number) {
+  const query: LocationQueryRaw = { ...route.query, page: target > 1 ? target : undefined }
+  if (query.page === undefined) delete query.page
+  void router.push({ query }).then(() => window.scrollTo({ top: 0 }))
+}
+
 const searchText = ref(keywords.value)
 watch(keywords, value => { if (value !== searchText.value.trim()) searchText.value = value })
 watch(searchText, (text, _, onCleanup) => {
@@ -429,15 +436,15 @@ function onSaved() {
     <nav v-if="pageCount > 1" class="pager" aria-label="分頁">
       <span>{{ rangeLabel }}</span>
       <div class="pages">
-        <button type="button" class="page-button" :disabled="page === 1" aria-label="上一頁" @click="setQuery({ page: page - 1 }, false)">
+        <button type="button" class="page-button" :disabled="page === 1" aria-label="上一頁" @click="goToPage(page - 1)">
           <UiIcon name="chevronLeft" :size="16" />
         </button>
         <template v-for="(item, index) in pages" :key="`${item}-${index}`">
           <span v-if="item === 'gap'" class="gap" aria-hidden="true">…</span>
           <button v-else type="button" class="page-button" :class="{ current: item === page }"
-            :aria-current="item === page ? 'page' : undefined" @click="setQuery({ page: item }, false)">{{ item }}</button>
+            :aria-current="item === page ? 'page' : undefined" @click="goToPage(item)">{{ item }}</button>
         </template>
-        <button type="button" class="page-button" :disabled="page === pageCount" aria-label="下一頁" @click="setQuery({ page: page + 1 }, false)">
+        <button type="button" class="page-button" :disabled="page === pageCount" aria-label="下一頁" @click="goToPage(page + 1)">
           <UiIcon name="chevronRight" :size="16" />
         </button>
       </div>
