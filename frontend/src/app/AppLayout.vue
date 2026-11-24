@@ -11,6 +11,7 @@ import { useTaxonomy } from '../stores/taxonomy'
 import { useTheme } from '../stores/theme'
 import { useWorkspace } from '../stores/workspace'
 import AppSidebar from './AppSidebar.vue'
+import SiteNotice from '../site/SiteNotice.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadTray from './components/UploadTray.vue'
@@ -149,6 +150,7 @@ onBeforeUnmount(() => {
         <AppSidebar @search="openSearch" @navigate="drawerOpen = false" />
       </aside>
       <main id="app-main" class="main" tabindex="-1">
+        <SiteNotice />
         <RouterView @upload="chooseFiles" />
       </main>
       <CommandPalette v-model:open="paletteOpen" @upload="chooseFiles" />

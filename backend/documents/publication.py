@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from users.permissions import IsAdmin
 
 from . import activity, search, storage
-from .models import ArticlePublication, ArticlePublicationAudit, Category, Document, SiteSettings
+from .models import ArticlePublication, ArticlePublicationAudit, Category, Document, FeaturedArticle, SiteSettings
 from .public_html import readable_html
 
 
@@ -48,6 +48,9 @@ def withdraw_publication(document, actor):
     if publication:
         record_action(publication, actor, "withdrawn")
         publication.delete()
+        # Withdrawn (or trashed) articles leave the public home's featured list for good (P6b).
+        if FeaturedArticle.objects.filter(document=document).delete()[0]:
+            activity.record(document.pk, actor, activity.Action.UNFEATURED, automatic=True)
 
 
 def publication_body(version, document_format):

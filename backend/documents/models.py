@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
 from django.db.models.functions import Lower, Upper
+from django.utils import timezone
 
 
 class Category(models.Model):
@@ -161,6 +162,8 @@ class DocumentActivity(models.Model):
         RESTORED = "restored", "Restored from trash"
         PUBLISHED = "published", "Published"
         WITHDRAWN = "withdrawn", "Withdrawn"
+        FEATURED = "featured", "Featured on the public home"
+        UNFEATURED = "unfeatured", "Removed from the public home"
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="activities")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
@@ -185,8 +188,34 @@ class SiteSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
+    # Announcement banner (P6c): plain text, shown on every page while switched on and inside its window.
+    class NoticeLevel(models.TextChoices):
+        INFO = "info", "資訊"
+        WARNING = "warning", "提醒"
+        URGENT = "urgent", "重要"
+
+    notice_enabled = models.BooleanField(default=False)
+    notice_text = models.CharField(max_length=120, blank=True)
+    notice_link = models.CharField(max_length=300, blank=True)
+    notice_level = models.CharField(max_length=8, choices=NoticeLevel.choices, default=NoticeLevel.INFO)
+    notice_starts_at = models.DateTimeField(null=True, blank=True)
+    notice_ends_at = models.DateTimeField(null=True, blank=True)
+    notice_updated_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]
+
+    def active_notice(self, now=None):
+        """The announcement to show right now, or None. Its id changes whenever it is edited."""
+        now = now or timezone.now()
+        if not (self.notice_enabled and self.notice_text):
+            return None
+        if (self.notice_starts_at and now < self.notice_starts_at) or (self.notice_ends_at and now >= self.notice_ends_at):
+            return None
+        return {
+            "id": f"{self.notice_updated_at.timestamp():.6f}" if self.notice_updated_at else "0",
+            "text": self.notice_text, "link": self.notice_link, "level": self.notice_level,
+        }
 
     @classmethod
     def current(cls):
@@ -202,4 +231,14 @@ class ArticleViewDaily(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint("document", "day", name="unique_article_view_day")]
         indexes = [models.Index(fields=["day"], name="article_view_day")]
+
+
+class FeaturedArticle(models.Model):
+    """P6b: published articles an Admin pins to the public home, in order (at most four)."""
+    document = models.OneToOneField(Document, primary_key=True, on_delete=models.CASCADE, related_name="+")
+    position = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["position"]
 

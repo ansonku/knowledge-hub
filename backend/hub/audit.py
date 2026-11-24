@@ -21,7 +21,10 @@ from users.permissions import IsAdmin
 PAGE_SIZE = 50
 MAX_PAGE = 200
 SIGNIN_ACTIONS = ("login", "logout")
-PUBLISH_ACTIONS = (DocumentActivity.Action.PUBLISHED, DocumentActivity.Action.WITHDRAWN)
+PUBLISH_ACTIONS = (
+    DocumentActivity.Action.PUBLISHED, DocumentActivity.Action.WITHDRAWN,
+    DocumentActivity.Action.FEATURED, DocumentActivity.Action.UNFEATURED,
+)
 TRASH_ACTIONS = (DocumentActivity.Action.TRASHED, DocumentActivity.Action.RESTORED)
 CATEGORIES = ("account", "signin", "document", "publish", "trash", "deletion")
 ACCOUNT_DETAIL_KEYS = ("reason", "role", "old_role", "identity_verified")

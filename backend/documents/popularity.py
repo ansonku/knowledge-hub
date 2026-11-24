@@ -18,10 +18,13 @@ from rest_framework.throttling import SimpleRateThrottle
 
 from users.permissions import IsAdmin
 
+from .featured import MAX_FEATURED, featured_ids
 from .models import ArticleViewDaily, Document
-from .publication import article_card, category_index, presented, published_articles
+from .publication import article_card, category_index, path_of, presented, published_articles
 
 WINDOW_DAYS = 30
+OVERVIEW_DAYS = (7, 30)
+SPARK_DAYS = 15
 POPULAR_LIMIT = 5
 POPULAR_MINIMUM = 3  # show the section only once this many articles have views
 
@@ -71,6 +74,7 @@ def popular_articles(request):
     totals = dict(
         ArticleViewDaily.objects.filter(day__gte=window_start(), document__articlepublication__isnull=False,
                                         document__is_trashed=False)
+        .exclude(document_id__in=featured_ids())  # featured articles have their own section (decision 18)
         .values_list("document_id").annotate(total=Sum("count"))
     )
     if len(totals) < POPULAR_MINIMUM:
@@ -92,3 +96,55 @@ def document_public_views(request, document_id):
     daily = [{"day": start + timedelta(days=offset), "count": counts.get(start + timedelta(days=offset), 0)}
              for offset in range(WINDOW_DAYS)]
     return Response({"days": WINDOW_DAYS, "total": sum(counts.values()), "daily": daily})
+
+
+@never_cache
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def public_overview(request):
+    """P6a: Admin overview of the public site. Aggregates existing counts only; records nothing."""
+    requested = request.query_params.get("days", "")
+    days = int(requested) if requested in {str(option) for option in OVERVIEW_DAYS} else WINDOW_DAYS
+    today = timezone.localdate()
+    start = today - timedelta(days=days - 1)
+    first = min(start, today - timedelta(days=SPARK_DAYS - 1))
+    publications = list(
+        published_articles().values(
+            "document_id", "title", "published_at", "version_id", "version__number",
+            "document__current_version_id", "document__current_version__number", "document__category_id",
+        )
+    )
+    ids = [row["document_id"] for row in publications]
+    counts = {}
+    for document_id, day, count in ArticleViewDaily.objects.filter(document_id__in=ids, day__gte=first).values_list(
+            "document_id", "day", "count"):
+        counts.setdefault(document_id, {})[day] = count
+    window = [start + timedelta(days=offset) for offset in range(days)]
+    spark_days = [today - timedelta(days=offset) for offset in range(SPARK_DAYS - 1, -1, -1)]
+    index = category_index()
+    featured = featured_ids()
+    articles = []
+    for row in publications:
+        daily = counts.get(row["document_id"], {})
+        published, latest = row["version__number"], row["document__current_version__number"] or row["version__number"]
+        articles.append({
+            "document_id": row["document_id"], "title": row["title"], "published_at": row["published_at"],
+            "path": path_of(row["document__category_id"], index),
+            "published_version": published, "latest_version": latest, "behind": max(0, latest - published),
+            "published_version_id": row["version_id"],
+            "latest_version_id": row["document__current_version_id"] or row["version_id"],
+            "total": sum(daily.get(day, 0) for day in window),
+            "spark": [daily.get(day, 0) for day in spark_days],
+            "featured": row["document_id"] in featured,
+        })
+    articles.sort(key=lambda item: (-item["total"], item["title"]))
+    totals = [{"day": day, "count": sum(counts.get(row["document_id"], {}).get(day, 0) for row in publications)} for day in window]
+    return Response({
+        "days": days,
+        "total": sum(item["count"] for item in totals),
+        "daily": totals,
+        "articles": articles,
+        "lagging": sum(1 for item in articles if item["behind"]),
+        "idle": sum(1 for item in articles if not item["total"]),
+        "featured": featured, "featured_max": MAX_FEATURED,
+    })

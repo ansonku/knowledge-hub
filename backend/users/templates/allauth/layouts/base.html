@@ -6,10 +6,20 @@
   <title>{% block head_title %}{{ site_name }}{% endblock %}</title>
   <script src="/assets/account-theme.js"></script>
   <link rel="stylesheet" href="/assets/account.css">
+  <script src="/assets/account-notice.js" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body class="account {% block body_class %}{% endblock %}">
 <a class="skip" href="#main-content">跳至內容</a>
+{% if site_notice %}{# P6c announcement: plain text, same look and dismissal key as the Vue pages #}
+<div class="notice notice-{{ site_notice.level }}" role="status" data-notice-id="{{ site_notice.id }}">
+  <svg class="notice-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% if site_notice.level == 'info' %}<path d="M12 8h.01M11 12h1v5h1M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/>{% else %}<path d="M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0"/>{% endif %}</svg>
+  <span class="notice-text">{{ site_notice.text }}{% if site_notice.link %} <a href="{{ site_notice.link }}" class="notice-link">查看詳情</a>{% endif %}</span>
+  <button type="button" class="notice-close" aria-label="關閉公告" hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
+</div>
+{% endif %}
 {% block site_header %}
 <header class="topbar">
   <a href="/" class="brand">

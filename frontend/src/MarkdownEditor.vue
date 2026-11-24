@@ -18,7 +18,9 @@ onMounted(() => {
     minimap: { enabled: false },
     readOnly: props.readonly,
     scrollBeyondLastLine: false,
-    wordWrap: 'on',
+    // Wrap at the editor edge, but never beyond 140 columns on very wide screens.
+    wordWrap: 'bounded',
+    wordWrapColumn: 140,
     fontSize: 15,
   })
   instance.onDidChangeModelContent(() => {
@@ -42,5 +44,5 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.editor-host { height: clamp(28rem, 65vh, 56rem); border-radius: .5rem; overflow: hidden; }
+.editor-host { height: clamp(28rem, calc(100vh - 23rem), 64rem); border-radius: .5rem; overflow: hidden; }
 </style>

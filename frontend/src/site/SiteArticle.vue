@@ -210,8 +210,8 @@ a.copy { text-decoration: none; }
 .copy:hover { color: var(--ui-text); }
 
 .columns { display: flex; align-items: flex-start; justify-content: space-between; gap: clamp(2rem, 4vw, 3rem); padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1rem, 3.5vw, 3.5rem) clamp(2.5rem, 5vw, 4rem); }
-.body { flex: 1 1 auto; min-width: 0; max-width: 58rem; }
-.is-html .body { max-width: none; }
+/* Markdown and HTML share the title band's 74rem column, here and on the workspace document page. */
+.body { flex: 1 1 auto; min-width: 0; max-width: 74rem; }
 .reading { color: var(--ui-text-reading-color); font-size: var(--ui-text-reading); line-height: var(--ui-leading-reading); overflow-wrap: anywhere; }
 .reading :deep(.markdown-body > div > *:first-child) { margin-top: 0; }
 .reading.skip-title :deep(.markdown-body > div > h1:first-child) { display: none; }

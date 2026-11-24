@@ -55,6 +55,7 @@ const router = createRouter({
         { path: 'docs/:id/compare/', name: 'app-compare', component: () => import('./app/ComparePage.vue') },
         { path: 'settings/', name: 'app-settings', component: () => import('./app/SettingsPage.vue') },
         { path: 'admin/taxonomy/', name: 'app-taxonomy', component: () => import('./app/admin/TaxonomyPage.vue') },
+        { path: 'admin/public/', name: 'app-public-overview', component: () => import('./app/admin/PublicOverviewPage.vue') },
         { path: 'admin/system/', name: 'app-system', component: () => import('./app/admin/SystemPage.vue') },
         { path: 'admin/audit/', name: 'app-audit', component: () => import('./app/admin/AuditPage.vue') },
         { path: 'admin/members/', name: 'app-members', component: () => import('./app/admin/MembersPage.vue') },

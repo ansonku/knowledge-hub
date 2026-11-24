@@ -14,6 +14,7 @@
   --focus: 0 0 0 3px rgb(29 78 216 / .35);
   --danger: #b42318; --danger-bg: #fef3f2; --danger-border: #f1b5ae;
   --success: #067647; --success-bg: #e7f6ee;
+  --warning: #8a4b00; --warning-bg: #fff1d6; --warning-border: #f7d9a0;
   --radius: .5rem; --radius-lg: .875rem;
   --shadow: 0 12px 32px rgb(16 24 40 / .08);
 }
@@ -25,6 +26,7 @@
   --focus: 0 0 0 3px rgb(111 150 255 / .45);
   --danger: #fda29b; --danger-bg: #2d1512; --danger-border: #7a271a;
   --success: #6ce9a6; --success-bg: #0f2e22;
+  --warning: #fdd88a; --warning-bg: #33240a; --warning-border: #5c430f;
   --shadow: 0 12px 32px rgb(0 0 0 / .35);
 }
 
@@ -123,3 +125,14 @@ body.entry main { max-width: 28rem; }
   .topbar { padding: 0 .75rem; }
   .topnav a { padding: .5rem; }
 }
+
+/* Announcement banner (P6c): same look as the Vue pages' SiteNotice */
+.notice { display: flex; align-items: center; justify-content: center; gap: .75rem; padding: .5rem 1rem .5rem 1.5rem; border-bottom: 1px solid var(--notice-border); background: var(--notice-bg); color: var(--notice-text); font-size: .875rem; line-height: 1.5; }
+.notice-info { --notice-bg: var(--accent-soft); --notice-text: var(--accent-on-soft); --notice-border: var(--border); }
+.notice-warning { --notice-bg: var(--warning-bg); --notice-text: var(--warning); --notice-border: var(--warning-border); }
+.notice-urgent { --notice-bg: var(--danger-bg); --notice-text: var(--danger); --notice-border: var(--danger-border); }
+.notice-icon { flex: none; }
+.notice-text { overflow-wrap: anywhere; }
+.account .notice-link { color: inherit; font-weight: 600; }
+.notice-close { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: var(--radius); background: transparent; color: inherit; cursor: pointer; }
+.notice-close:hover { background: rgb(0 0 0 / .06); }

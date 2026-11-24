@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Exists, F, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -12,6 +14,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from users.lifecycle import audit
 from users.models import User
 from users.permissions import CanReadLibrary, IsAdmin
 
@@ -459,8 +462,73 @@ class SiteSettingsInput(serializers.Serializer):
     tagline = serializers.CharField(max_length=160, allow_blank=True)
 
 
-def site_payload(site):
-    return {"name": site.name, "tagline": site.tagline}
+def site_payload(site, request=None):
+    payload = {"name": site.name, "tagline": site.tagline, "notice": site.active_notice()}
+    if request is not None and IsAdmin().has_permission(request, None):
+        # The editor needs the stored announcement even when it is off or outside its window.
+        payload["notice_settings"] = {
+            "enabled": site.notice_enabled, "text": site.notice_text, "link": site.notice_link,
+            "level": site.notice_level, "starts_at": site.notice_starts_at, "ends_at": site.notice_ends_at,
+        }
+    return payload
+
+
+def safe_notice_link(value):
+    """Plain http(s) URLs or same-site paths only: never javascript:, data: or protocol-relative links."""
+    value = value.strip()
+    if not value:
+        return ""
+    if value.startswith("/") and not value.startswith("//") and "\\" not in value:
+        return value
+    try:
+        URLValidator(schemes=["http", "https"])(value)
+    except DjangoValidationError:
+        raise serializers.ValidationError("連結必須是 http(s) 網址，或以 / 開頭的站內路徑。") from None
+    return value
+
+
+class NoticeInput(serializers.Serializer):
+    enabled = serializers.BooleanField()
+    text = serializers.CharField(max_length=120, allow_blank=True)
+    link = serializers.CharField(max_length=300, allow_blank=True, required=False, default="")
+    level = serializers.ChoiceField(SiteSettings.NoticeLevel.values)
+    starts_at = serializers.DateTimeField(allow_null=True, required=False, default=None)
+    ends_at = serializers.DateTimeField(allow_null=True, required=False, default=None)
+
+    def validate_text(self, value):
+        # Plain text on one line; the banner never renders markup.
+        return " ".join(value.split())
+
+    def validate_link(self, value):
+        return safe_notice_link(value)
+
+    def validate(self, data):
+        if data["enabled"] and not data["text"]:
+            raise serializers.ValidationError({"text": "開啟公告時必須填寫內容。"})
+        if data["starts_at"] and data["ends_at"] and data["ends_at"] <= data["starts_at"]:
+            raise serializers.ValidationError({"ends_at": "結束時間必須晚於開始時間。"})
+        return data
+
+
+@never_cache
+@api_view(["PUT"])
+@permission_classes([IsAdmin])
+def site_notice(request):
+    """P6c: Admins edit the announcement banner shown on every page."""
+    payload = NoticeInput(data=request.data)
+    payload.is_valid(raise_exception=True)
+    data = payload.validated_data
+    with transaction.atomic():
+        site, _ = SiteSettings.objects.select_for_update().get_or_create(pk=1)
+        was_enabled = site.notice_enabled
+        site.notice_enabled, site.notice_text, site.notice_link = data["enabled"], data["text"], data["link"]
+        site.notice_level, site.notice_starts_at, site.notice_ends_at = data["level"], data["starts_at"], data["ends_at"]
+        site.notice_updated_at = timezone.now()
+        site.updated_by = request.user
+        site.save()
+        action = ("site_notice_enabled" if data["enabled"] else "site_notice_disabled") if was_enabled != data["enabled"] else "site_notice_updated"
+        audit(action, request.user, actor=request.user)
+    return Response(site_payload(site, request))
 
 
 @never_cache
@@ -479,6 +547,6 @@ def site_settings(request):
             site.tagline = payload.validated_data["tagline"].strip()
             site.updated_by = request.user
             site.save()
-        return Response(site_payload(site))
-    return Response(site_payload(SiteSettings.current()))
+        return Response(site_payload(site, request))
+    return Response(site_payload(SiteSettings.current(), request))
 

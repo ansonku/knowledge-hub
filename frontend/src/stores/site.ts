@@ -2,7 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { api } from '../api'
 
-export type SiteSettings = { name: string; tagline: string }
+export type NoticeLevel = 'info' | 'warning' | 'urgent'
+/** The announcement currently shown (P6c); `id` changes whenever an Admin edits it. */
+export type SiteNotice = { id: string; text: string; link: string; level: NoticeLevel }
+/** The stored announcement, returned to Admins only. */
+export type NoticeSettings = { enabled: boolean; text: string; link: string; level: NoticeLevel; starts_at: string | null; ends_at: string | null }
+export type SiteSettings = { name: string; tagline: string; notice?: SiteNotice | null; notice_settings?: NoticeSettings }
 
 const DEFAULT_NAME = 'Knowledge Hub'
 
@@ -13,6 +18,8 @@ const DEFAULT_NAME = 'Knowledge Hub'
 export const useSite = defineStore('site', () => {
   const name = ref(DEFAULT_NAME)
   const tagline = ref('')
+  const notice = ref<SiteNotice | null>(null)
+  const noticeSettings = ref<NoticeSettings>()
   const loaded = ref(false)
   const page = ref<string | undefined>()
   let pending: Promise<void> | undefined
@@ -20,6 +27,8 @@ export const useSite = defineStore('site', () => {
   function apply(settings: SiteSettings) {
     name.value = settings.name || DEFAULT_NAME
     tagline.value = settings.tagline
+    notice.value = settings.notice ?? null
+    noticeSettings.value = settings.notice_settings
     loaded.value = true
   }
 
@@ -31,8 +40,18 @@ export const useSite = defineStore('site', () => {
     return pending
   }
 
-  async function save(settings: SiteSettings) {
+  async function save(settings: Pick<SiteSettings, 'name' | 'tagline'>) {
     apply(await api<SiteSettings>('/api/site/', 'PATCH', settings))
+  }
+
+  async function saveNotice(settings: NoticeSettings) {
+    apply(await api<SiteSettings>('/api/site/notice/', 'PUT', settings))
+  }
+
+  /** Reload, e.g. after signing in, so Admins receive the stored announcement settings. */
+  function refresh() {
+    pending = undefined
+    return load()
   }
 
   function setTitle(next?: string) {
@@ -44,5 +63,5 @@ export const useSite = defineStore('site', () => {
   })
 
   void load()
-  return { name, tagline, loaded, load, save, setTitle }
+  return { name, tagline, notice, noticeSettings, loaded, load, refresh, save, saveNotice, setTitle }
 })

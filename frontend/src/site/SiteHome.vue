@@ -31,6 +31,13 @@ function setQuery(patch: Record<string, string | number | undefined>) {
   void router.replace({ query })
 }
 
+/** Page buttons: a history entry per page (Back returns to it) and the new page starts at the top. */
+function goToPage(target: number) {
+  const query: LocationQueryRaw = { ...route.query, page: target > 1 ? target : undefined }
+  if (query.page === undefined) delete query.page
+  void router.push({ query }).then(() => window.scrollTo({ top: 0 }))
+}
+
 // ---- Articles from the API (cards need excerpts) ----------------------------------------------------
 const data = ref<PublicCardPage>()
 const loading = ref(true)
@@ -66,6 +73,12 @@ const latest = computed(() => data.value?.results.slice(0, 6) ?? [])
 const popular = ref<PublicCard[]>([])
 if (!member) {
   void publicApi<{ results: PublicCard[] }>('/api/public/popular/').then(result => { popular.value = result.results }).catch(() => { popular.value = [] })
+}
+
+// ---- Featured (public site only): picked by Admins, shown after popular (decisions 17–18) ----------
+const featured = ref<PublicCard[]>([])
+if (!member) {
+  void publicApi<{ results: PublicCard[] }>('/api/public/featured/').then(result => { featured.value = result.results }).catch(() => { featured.value = [] })
 }
 
 // ---- Overview tiles from the navigation data ---------------------------------------------------------------
@@ -170,6 +183,26 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
           </ol>
         </section>
 
+        <section v-if="featured.length" class="block" aria-labelledby="featured-title">
+          <div class="block-head">
+            <h2 id="featured-title">精選文章</h2>
+            <span class="block-note">管理員推薦的入門與重點文章</span>
+          </div>
+          <div class="featured">
+            <RouterLink v-for="card in featured" :key="card.document_id" :to="{ name: names.articleRoute, params: { id: card.document_id } }"
+              class="card featured-card" :style="collectionStyle(card.collection)">
+              <span class="card-meta">
+                <UiIcon name="star" :size="15" filled class="featured-star" />
+                <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
+                <span>約 {{ card.reading_minutes }} 分鐘</span>
+              </span>
+              <span class="card-title">{{ card.title }}</span>
+              <span v-if="card.excerpt" class="card-excerpt">{{ card.excerpt }}</span>
+              <span class="featured-more">閱讀 <UiIcon name="arrowRight" :size="14" /></span>
+            </RouterLink>
+          </div>
+        </section>
+
         <section v-if="tiles.length || !portal.navLoaded.value" class="block" aria-labelledby="browse-title">
           <div class="block-head">
             <h2 id="browse-title">依集合瀏覽</h2>
@@ -257,9 +290,9 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
       </div>
 
       <nav v-if="data && data.pages > 1" class="pager" aria-label="分頁">
-        <button type="button" class="page-button" :disabled="page <= 1" @click="setQuery({ page: page - 1 })"><UiIcon name="chevronLeft" :size="16" />上一頁</button>
+        <button type="button" class="page-button" :disabled="page <= 1" @click="goToPage(page - 1)"><UiIcon name="chevronLeft" :size="16" />上一頁</button>
         <span>第 {{ data.page }} / {{ data.pages }} 頁</span>
-        <button type="button" class="page-button" :disabled="page >= data.pages" @click="setQuery({ page: page + 1 })">下一頁<UiIcon name="chevronRight" :size="16" /></button>
+        <button type="button" class="page-button" :disabled="page >= data.pages" @click="goToPage(page + 1)">下一頁<UiIcon name="chevronRight" :size="16" /></button>
       </nav>
     </div>
   </div>
@@ -311,6 +344,12 @@ h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .tile-link time { flex: none; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 
 /* Up to five in one row (the list has at most five), wrapping evenly on narrower screens. */
+/* Up to four, in one row when there is room. */
+.featured { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: var(--ui-space-4); }
+.featured-card { background: var(--ui-accent-soft); border-color: color-mix(in srgb, var(--ui-accent) 25%, var(--ui-border)); }
+.featured-card .card-title { font-size: 1.1875rem; }
+.featured-star { color: #d99a00; }
+.featured-more { display: inline-flex; align-items: center; gap: var(--ui-space-1); margin-top: auto; color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; }
 .popular { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 14rem), calc((100% - 4 * var(--ui-space-3)) / 5)), 1fr)); gap: var(--ui-space-3); }
 .popular-item { display: flex; align-items: flex-start; gap: var(--ui-space-3); height: 100%; box-sizing: border-box; padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: .875rem; background: var(--ui-bg-surface); color: var(--ui-text); text-decoration: none; }
 .popular-item:hover { border-color: var(--ui-border-strong); box-shadow: var(--ui-shadow-sm); }
