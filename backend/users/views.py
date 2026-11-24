@@ -158,19 +158,7 @@ def user_api(request, user_id):
 @require_safe
 @never_cache
 def account_index(request):
-    return redirect("profile" if request.user.is_authenticated else "account_login")
-
-
-@login_required
-@require_http_methods(["GET", "POST", "HEAD"])
-@never_cache
-def profile(request):
-    form = ProfileForm(request.POST if request.method == "POST" else None, instance=request.user)
-    if request.method == "POST" and form.is_valid():
-        save_profile(request.user)
-        messages.success(request, "已更新顯示名稱。")
-        return redirect("profile")
-    return render(request, "users/profile.html", {"form": form})
+    return redirect(settings.LOGIN_REDIRECT_URL if request.user.is_authenticated else "account_login")
 
 
 @login_required

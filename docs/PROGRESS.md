@@ -13,7 +13,7 @@ HTML 可能引用外部 HTTPS 資源，原本的設計是保留「開啟 HTML �
 
 ## 恢復本機開發
 
-從專案根目錄執行 `docker compose up --build --wait`，然後登入並開啟知識總覽。開發帳號存在 PostgreSQL 的 `postgres_data`，文件原始檔存在 `document_data`。換電腦後，GitHub 可取得程式碼，原有帳號與文件則需要這兩個資料卷的備份。 [本機知識總覽](http://localhost:18080/library/) · [環境設定](../README.md)
+從專案根目錄執行 `docker compose up --build --wait`，然後登入，會進入工作區 `/app/`。開發帳號存在 PostgreSQL 的 `postgres_data`，文件原始檔存在 `document_data`。換電腦後，GitHub 可取得程式碼，原有帳號與文件則需要這兩個資料卷的備份。 [本機工作區](http://localhost:18080/app/) · [環境設定](../README.md)
 
 ## M4 版本歷史與還原
 

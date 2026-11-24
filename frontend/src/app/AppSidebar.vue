@@ -69,7 +69,6 @@ const userItems = computed<MenuItem[]>(() => [
   },
   { separator: true },
   { label: '個人設定', command: () => { void router.push({ name: 'app-settings' }); emit('navigate') } },
-  { label: '切換到舊版介面', url: '/library/' },
   { separator: true },
   { label: '登出', url: '/accounts/logout/' },
 ])
@@ -212,6 +211,9 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 .divider { height: 1px; margin: 0 var(--ui-space-2); background: var(--ui-border); }
 .spacer { flex: 1; }
 .account { display: flex; align-items: center; gap: .625rem; padding: var(--ui-space-2) .625rem; border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-muted); font: inherit; text-align: left; cursor: pointer; }
+/* Keep the account button fully visible when the sidebar scrolls (short windows): clicking a
+   half-hidden button scrolls the sidebar, and PrimeVue closes the popup menu on scroll. */
+.account { position: sticky; bottom: 0; z-index: 1; margin-inline: calc(-1 * var(--ui-space-3)); padding-inline: calc(.625rem + var(--ui-space-3)); border-radius: 0; background: var(--ui-bg-shell); box-shadow: 0 -1px 0 var(--ui-border-subtle); }
 .account:hover { background: var(--ui-bg-muted); }
 .avatar { flex: none; display: grid; place-items: center; width: 1.875rem; height: 1.875rem; border-radius: 50%; background: var(--ui-accent); color: #fff; font-size: var(--ui-text-sm); font-weight: 600; }
 .account-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }

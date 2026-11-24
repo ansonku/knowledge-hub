@@ -578,3 +578,32 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
     - Editor 和 Viewer 沒有側欄連結，直接開網址會看到權限說明。
     - 沒有 console 錯誤。
   - `smoke.sh` 通過。測試帳號最後都維持原本的角色和啟用狀態。
+
+### 移除舊版畫面（2026-11-24，P4f 的一部分提前執行）
+
+使用者在 P4b 後決定先移除舊版畫面。P4c～P4e 照原計畫繼續，P4f 只剩開 PR 合回 `main`。
+
+- 刪除的前端檔案：
+  - 頁面：`Library.vue`、`DocumentReader.vue`、`VersionHistory.vue`、`Trash.vue`、`PublicArticle.vue`、`ManageAccounts.vue`、`Profile.vue`。
+  - 只有舊頁面在用的：`ReaderContents.vue`、`reader.css`、`app.css`，以及 `reader-layout.ts` 裡的版型選單。只剩 `jumpToHeading`，檔案改名為 `headings.ts`。
+  - `index.html` 不再載入 `site-brand.css`、`account-entry.css`。這兩個檔案仍保留給 Django 帳號頁使用。
+- 移除新介面裡的舊版入口：頭像選單的「切換到舊版介面」、文件頁的「在舊版介面開啟」。`PublicationDialog` 的「檢視選定版本」改連到 `app-document`。
+- 路由：
+  - `/` 由 Django 的 `site_root` 判斷：已登入導到 `/app/`，訪客導到 `/articles/`。Nginx 新增 `location = /`。
+  - SPA 加上 catch-all：其他未知路徑一律導到 `/app/`，訪客會再被帶去登入頁。舊網址沒有逐一對應轉址（第 12 節第 9 點）。
+  - `/accounts/manage/...` 的 Vue 轉址保留，因為重新驗證身分後系統會導回這裡。
+- 後端：
+  - `LOGIN_REDIRECT_URL` 改成 `/app/`，`account_index` 改導到 `/app/`。
+  - 移除 Django 的 `profile` 頁面和網址，以及 `users/profile.html`、`manage.html`、`manage_detail.html` 三個範本。
+  - Django 帳號頁的頁首改成「工作區／個人設定／成員管理（Admin）／登出」，都指向新網址。
+- 順手修正的兩個問題：
+  - **頭像選單在矮視窗打不開**（P2 就存在的問題）：側欄內容比視窗高時（約 775 px 以下），點擊只露出一半的頭像按鈕，會讓側欄捲動，PrimeVue 偵測到捲動就把選單關掉。現在頭像按鈕用 `position: sticky` 固定在側欄底部。已在 720 和 650 px 高的視窗驗證。
+  - **彈出元件字型跑掉**（刪除 `app.css` 造成）：選單、對話框、Toast 掛在 `<body>` 底下，原本繼承 `app.css` 的 `body` 字型。現在 `tokens.css` 改設 `body { font-family: var(--ui-font-sans) }`。
+- `smoke.sh` 改成檢查 `/` 會 302 導到 `/articles/`，並改從 `/app/` 取得 SPA。
+- `README.md` 的使用說明改寫成新介面。`PROGRESS.md` 只更新了本機網址，各里程碑的紀錄保留原樣。
+- 測試：
+  - 後端新增 1 項，涵蓋 `/` 和 `/accounts/` 的導向、`/accounts/profile/` 回 404、Django 頁首的新連結。另外有 7 處斷言從 `reverse("profile")` 改成 `/app/`。後端共 56 項通過。
+  - Playwright：
+    - 新增 `cutover.py`，13 項：訪客和成員進入 `/` 的導向、舊網址進入 `/app/`、登入後落在 `/app/`、舊版入口已經不見、頭像選單可以進入個人設定、Django 頁首連結、`/accounts/profile/` 回 404。
+    - 其他回歸：公開首頁 51 項、文章頁 90 項、個人設定 49 項、成員管理 52 項、最近閱讀 28 項、回收桶 35 項、HTML 自動預覽 12 項，以及 P1 的 77 張和 P2 的 48 張截圖，全部通過。沒有溢出，也沒有預期以外的 console 錯誤。
+  - `smoke.sh` 通過。

@@ -65,7 +65,7 @@ onMounted(() => void update('GET'))
       <label for="publication-version">發布版本</label>
       <Select v-model="version" input-id="publication-version" :disabled="busy || Boolean(confirmation)"
         :options="status.versions" :option-label="item => `v${item.number}`" option-value="id" />
-      <RouterLink v-if="version" :to="{ name: 'document-reader', params: { id }, query: { version } }"
+      <RouterLink v-if="version" :to="{ name: 'app-document', params: { id }, query: { version } }"
         target="_blank" rel="noopener" class="review-link">檢視選定版本（另開分頁）</RouterLink>
       <p v-if="confirmation === 'POST'" role="status">
         確認發布「{{ status.title }}」v{{ status.versions.find(item => item.id === version)?.number }}？

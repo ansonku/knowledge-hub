@@ -57,7 +57,6 @@ urlpatterns = [
     path("api/auth/me", views.me, name="auth_me"),
     path("api/users/", views.users_api, name="users_api"),
     path("api/users/<uuid:user_id>/", views.user_api, name="user_api"),
-    path("accounts/profile/", views.profile, name="profile"),
     path("accounts/manage/", views.manage_users, name="manage_users"),
     path("accounts/manage/<uuid:user_id>/", views.manage_user, name="manage_user"),
     path("accounts/activate/<uuid:user_id>/", views.activation_form, name="activation_form"),

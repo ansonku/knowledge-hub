@@ -1,4 +1,7 @@
 from django.db import DatabaseError, connection
+from django.shortcuts import redirect
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_safe
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -14,3 +17,10 @@ def health(request):
     except DatabaseError:
         return Response({"status": "unavailable"}, status=503)
     return Response({"status": "ok"})
+
+
+@require_safe
+@never_cache
+def site_root(request):
+    """`/`: members go to the workspace, visitors to the public knowledge site."""
+    return redirect("/app/" if request.user.is_authenticated else "/articles/")

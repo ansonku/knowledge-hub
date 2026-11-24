@@ -14,7 +14,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute, useRoute
 import { api } from '../api'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
-import { jumpToHeading } from '../reader-layout'
+import { jumpToHeading } from '../headings'
 import { useSession } from '../stores/session'
 import { useTheme } from '../stores/theme'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
@@ -269,7 +269,6 @@ const menuItems = computed<MenuItem[]>(() => {
       { label: '上傳新版本', command: () => { uploadOpen.value = true } },
     )
   }
-  items.push({ label: '在舊版介面開啟', url: `/library/${file.value.id}/` })
   if (session.canEdit) items.push({ separator: true }, { label: '移入回收桶', class: 'danger-item', command: moveToTrash })
   return items
 })

@@ -8,8 +8,6 @@ import ToastService from 'primevue/toastservice'
 import { createApp, h } from 'vue'
 import { createRouter, createWebHistory, RouterView } from 'vue-router'
 import './styles/tokens.css'
-import './app.css'
-import Profile from './Profile.vue'
 import { themeOptions } from './theme'
 
 const router = createRouter({
@@ -18,7 +16,6 @@ const router = createRouter({
   // every other route keeps the browser's position, as before.
   scrollBehavior: to => (to.name === 'site-home' && to.hash ? { el: to.hash, top: 80, behavior: 'smooth' } : false),
   routes: [
-    { path: '/', alias: '/library/', name: 'library', component: () => import('./Library.vue') },
     {
       path: '/articles/',
       component: () => import('./site/PublicLayout.vue'),
@@ -27,10 +24,6 @@ const router = createRouter({
         { path: ':id/', name: 'public-article', component: () => import('./site/SiteArticle.vue') },
       ],
     },
-    { path: '/library/trash/', component: () => import('./Trash.vue') },
-    { path: '/library/:id/versions/', name: 'version-history', component: () => import('./VersionHistory.vue') },
-    { path: '/library/:id/', name: 'document-reader', component: () => import('./DocumentReader.vue') },
-    { path: '/accounts/profile/', component: Profile },
     // Django sends admins back here after re-authentication; member management lives in the workspace.
     {
       path: '/accounts/manage/:id?',
@@ -56,6 +49,9 @@ const router = createRouter({
         { path: ':pathMatch(.*)*', redirect: { name: 'app-home' } },
       ],
     },
+    // `/` is answered by Django (members → /app/, visitors → /articles/); any other unknown
+    // path that Nginx hands to the SPA lands in the workspace, which sends visitors to log in.
+    { path: '/:pathMatch(.*)*', redirect: '/app/' },
   ],
 })
 

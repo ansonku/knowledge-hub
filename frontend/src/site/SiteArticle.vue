@@ -5,7 +5,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
-import { jumpToHeading } from '../reader-layout'
+import { jumpToHeading } from '../headings'
 import { colorClass, markOf, publicApi, publicDate, type PublicArticle } from './public'
 
 const route = useRoute()

@@ -77,7 +77,7 @@ AUTH_PASSWORD_VALIDATORS = [
     )
 ]
 LOGIN_URL = "account_login"
-LOGIN_REDIRECT_URL = "profile"
+LOGIN_REDIRECT_URL = "/app/"
 LOGOUT_REDIRECT_URL = "/"
 ALLAUTH_TRUSTED_CLIENT_IP_HEADER = "X-Hub-Client-IP"
 ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"

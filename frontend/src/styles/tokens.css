@@ -1,7 +1,7 @@
 /*
  * Design tokens for the redesigned workspace and public site (docs/docs/UI_REDESIGN.md §7).
- * The `--ui-*` prefix keeps them separate from the legacy `--hub-*` variables in
- * public/assets/site-brand.css, so legacy pages render exactly as before.
+ * The `--ui-*` prefix keeps them separate from the `--hub-*` variables in
+ * public/assets/site-brand.css, which only the Django account pages (login, MFA) use.
  * Dark values are ready; the `.hub-dark` class is toggled from P2 onwards.
  */
 :root {
@@ -148,16 +148,8 @@
   background: var(--ui-bg-shell);
   -webkit-font-smoothing: antialiased;
 }
-/* Neutralise legacy element rules in app.css (main max-width, nav flex-wrap). */
-.hub-app main {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-.hub-app nav {
-  flex-wrap: nowrap;
-  gap: 0;
-}
+/* PrimeVue popups (menus, dialogs, toasts) are teleported to <body>; give them the UI font. */
+body { margin: 0; font-family: var(--ui-font-sans); }
 .hub-app :focus-visible {
   outline: none;
   box-shadow: var(--ui-focus-ring);

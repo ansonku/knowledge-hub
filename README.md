@@ -17,7 +17,7 @@ docker compose up --build --wait
 如果主機透過 sudo 使用 Docker，把下列各處的 `docker compose` 改成 `sudo docker compose`，
 並以 `sudo bash scripts/smoke.sh` 執行 smoke test。
 
-開啟 `http://localhost:18080` 進入知識總覽。Nginx 只在主機回環介面開放。
+開啟 `http://localhost:18080`：已登入的成員會進入工作區 `/app/`，訪客會看到公開知識站 `/articles/`。Nginx 只在主機回環介面開放。
 若需更換埠，請調整 `.env` 的 `HUB_PORT`。
 
 ## 測試
@@ -65,7 +65,7 @@ docker compose exec backend python manage.py create_hub_admin <帳號名稱> <�
 
 ## M2 文件庫
 
-登入後開啟 [知識總覽](http://localhost:18080/library/)。Admin 和 Editor 可管理分類與標籤、上傳 UTF-8 Markdown 或 HTML，以及更新指定文件的版本。Viewer 可讀取清單與下載原始檔。瀏覽器會逐檔上傳批次中的文件，因此其中一檔失敗時，其他檔案仍可成功儲存。批次中的每個成功項目各自建立一份文件和 v1。
+登入後開啟 [全部文件](http://localhost:18080/app/library/)。Admin 和 Editor 可管理集合與標籤、上傳 UTF-8 Markdown 或 HTML（可直接把檔案拖進視窗），以及從文件頁或清單列選單更新指定文件的版本。Viewer 可讀取清單與下載原始檔。上傳匣會逐檔上傳，因此其中一檔失敗時，其他檔案仍可成功儲存。每個成功上傳的檔案各自建立一份文件和 v1。
 
 開發環境預設每檔 50 MiB，每批最多 20 檔，可用 `DOCUMENT_MAX_BYTES` 和 `DOCUMENT_MAX_BATCH` 調整。提高單檔上限時，也要同步調整 Nginx 文件路徑的 `client_max_body_size`，並預留 multipart 表單額外大小。
 
@@ -79,13 +79,13 @@ docker compose exec backend python manage.py check_document_storage
 
 ## M3 Markdown 閱讀
 
-從知識總覽點選 Markdown 文件標題進入閱讀頁。標準版面包含分類與文章目錄，寬版維持閱讀寬度，全頁使用可用空間。版面偏好儲存在瀏覽器。Viewer 可以閱讀、點選目錄和下載目前版本的原始檔。
+從文件清單點選標題進入文件頁 `/app/docs/<id>/`。正文以適合閱讀的寬度顯示，右側資訊面板提供本頁目錄、版本、活動，以及 Admin 的公開設定。Viewer 可以閱讀、點選目錄和下載目前版本的原始檔。
 
 Admin 和 Editor 可在 Markdown 閱讀頁切換至 Monaco 編輯器，或以分割模式查看即時預覽。儲存會新增版本並保留舊稿。若另一位使用者已更新目前版本，系統會顯示版本衝突並保留編輯區中的草稿。
 
 ### 本機 HTML 預覽
 
-HTML 文件頁可開啟沙箱預覽，也可直接下載原始檔。預覽需要登入，並使用版本專屬的 60 秒一次性連結。iframe 和直接開啟連結收到的 HTML 都受沙箱限制。相容模式允許載入外部 HTTPS 資源，第三方服務可能收到連線資訊。
+HTML 文件頁預設會自動載入沙箱預覽，可用「自動載入」開關改成按鈕載入（設定記在各自的瀏覽器），也可直接下載原始檔。預覽需要登入，並使用版本專屬的 60 秒一次性連結。iframe 和直接開啟連結收到的 HTML 都受沙箱限制。相容模式允許載入外部 HTTPS 資源，第三方服務可能收到連線資訊。
 
 Compose 的 `LOCAL_HTML_PREVIEW` 預設供本機 HTTP 使用，可設為 `false` 關閉。只有 loopback 的 `PUBLIC_ORIGIN` 與請求主機可開啟預覽。HTTPS、對外主機和 Cloudflare 轉送的請求一律關閉。外部部署應使用實際的公開網址設定 `PUBLIC_ORIGIN`，保留附件下載。
 
@@ -93,25 +93,26 @@ Markdown 閱讀與分割預覽共用渲染器。支援表格、刪除線及唯�
 
 ## M4 版本歷史
 
-文件頁的「版本歷史」列出每個版本的作者、時間、更新說明和來源。可點選版本號閱讀舊版、下載原始檔，或勾選兩版使用 Monaco 比較。舊版 HTML 沿用本機手動開啟的沙箱預覽；公開站點可下載舊版附件。
+文件頁資訊面板的「版本」分頁列出每個版本的作者、時間、更新說明和來源。可開啟舊版、下載原始檔，或勾選兩版開啟比較頁 `/app/docs/<id>/compare/`。舊版 HTML 沿用本機手動開啟的沙箱預覽；公開站點可下載舊版附件。
 
 Admin 和 Editor 可從舊版選擇還原。系統會複製舊版內容，建立下一版並記錄來源及操作者。若確認期間已有其他人更新目前版本，系統會要求重新確認。
 
 ## M5 搜尋與回收桶
 
-知識總覽可搜尋標題、分類、標籤及目前版本正文。HTML 索引只擷取文字，略過腳本與樣式。PostgreSQL 全文搜尋處理詞彙比對，中文可用連續字串查詢。啟動後會補建舊文件目前版本的索引；若需手動重試，可執行 `docker compose exec backend python manage.py index_document_search`。
+文件清單與 Ctrl／⌘K 指令面板可搜尋標題、集合、標籤及目前版本正文。HTML 索引只擷取文字，略過腳本與樣式。PostgreSQL 全文搜尋處理詞彙比對，中文可用連續字串查詢。啟動後會補建舊文件目前版本的索引；若需手動重試，可執行 `docker compose exec backend python manage.py index_document_search`。
 
-Admin 和 Editor 可在回收桶還原文件及所有版本。只有 Admin 可以永久刪除，必須打開確認視窗並輸入完整文件標題。移入回收桶、還原及永久刪除都會留下稽核紀錄。若檔案清理暫時失敗，系統保留清理工作，可在重新啟動環境時重試，或執行 `docker compose exec backend python manage.py finish_document_deletions`。
+Admin 和 Editor 可在回收桶 `/app/trash/` 還原文件及所有版本，也可批次還原。只有 Admin 可以永久刪除（從每列的「⋯」選單），必須輸入完整文件標題。移入回收桶、還原及永久刪除都會留下稽核紀錄。若檔案清理暫時失敗，系統保留清理工作，可在重新啟動環境時重試，或執行 `docker compose exec backend python manage.py finish_document_deletions`。
 
-## 知識總覽與閱讀介面
+## 介面
 
-首頁與 `/library/` 使用相同的知識總覽。搜尋欄位於文件清單上方。登入後可依格式與標籤篩選，並從清單上方移除已套用的條件。窄螢幕請先展開「篩選」。登入後的清單以綠色「公開」和灰色「私人」文字標籤顯示可見性。
-
-公開與會員閱讀頁共用版型。Markdown 的標準版在桌面顯示側欄與目錄，在窄螢幕可展開「本頁目錄」。寬版限制閱讀寬度，全頁利用可用空間。寬表格和程式碼可在各自區塊內橫向捲動。知識總覽、閱讀頁、登入及管理頁共用頁首與主要操作樣式。鍵盤使用者可先選「跳至內容」。
+- **工作區 `/app/`**（登入後）：首頁、全部文件、最近閱讀、收藏、集合、已公開文章、回收桶、個人設定 `/app/settings/`，以及 Admin 的成員管理 `/app/admin/members/`。支援跟隨系統／淺色／深色外觀和 Ctrl／⌘K 指令面板。
+- **公開知識站 `/articles/`**（不需登入）：搜尋、依集合瀏覽與最新文章，文章頁為 `/articles/<id>/`。
+- 登入、密碼、雙因素驗證與 Google 綁定仍是 Django 頁面。
+- 改版的規劃與實作紀錄見 [UI_REDESIGN.md](docs/docs/UI_REDESIGN.md)。
 
 ## M6 公開文章
 
-既有及新上傳文章預設為 Private。Admin 可從「知識總覽 → 管理文件 → 公開設定」選擇版本、檢視原稿並確認發布。首頁與 `/library/` 共用知識總覽。未登入訪客可搜尋公開標題或正文，也可使用文章的固定網址閱讀。登入後可使用內部分類、標籤、檔案下載與版本歷史，管理操作依角色開放。
+既有及新上傳文章預設為 Private。Admin 可從文件頁資訊面板的「公開」分頁，或清單列選單的「公開設定」選擇版本、檢視原稿並確認發布。未登入訪客可在公開知識站搜尋公開標題或正文，也可使用文章的固定網址閱讀。登入後可使用內部分類、標籤、檔案下載與版本歷史，管理操作依角色開放。
 
 公開頁固定顯示確認發布時的標題和版本。內部改名、編輯、上傳及還原版本會保留原公開內容，直到 Admin 再次發布。下架或移入回收桶後，固定網址會回傳 HTTP 404。從回收桶還原的文章維持 Private。
 

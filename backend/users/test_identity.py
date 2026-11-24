@@ -53,7 +53,7 @@ class AccountTests(TestCase):
         return (client or self.client).post(reverse("account_login"), {"login": user.email, "password": password})
 
     def reauthenticate_admin(self):
-        self.assertRedirects(self.login(self.admin), reverse("profile"))
+        self.assertRedirects(self.login(self.admin), "/app/", fetch_redirect_response=False)
         self.client.post(reverse("account_reauthenticate"), {"password": PASSWORD})
 
     def invite(self):
@@ -86,7 +86,7 @@ class AccountTests(TestCase):
         response = visitor.post(form_url, {"new_password1": PASSWORD, "new_password2": PASSWORD})
         self.assertRedirects(response, reverse("account_login"))
         self.assertEqual(visitor.get(path).status_code, 400)
-        self.assertRedirects(self.login(user, visitor), reverse("profile"))
+        self.assertRedirects(self.login(user, visitor), "/app/", fetch_redirect_response=False)
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         self.assertFalse(user.pending_activation)
@@ -114,7 +114,7 @@ class AccountTests(TestCase):
         self.assertEqual(csrf_client.post(reverse("account_login"), {
             "login": self.admin.email, "password": PASSWORD, "csrfmiddlewaretoken": token,
         }).status_code, 302)
-        self.assertEqual(csrf_client.post(reverse("profile"), {"display_name": "Blocked"}).status_code, 403)
+        self.assertEqual(csrf_client.post(reverse("manage_users"), {"username": "blocked"}).status_code, 403)
 
     def test_vue_account_management_reads_and_submits_as_admin(self):
         browser = Client(enforce_csrf_checks=True)
@@ -187,6 +187,21 @@ class AccountTests(TestCase):
         self.client.force_login(self.viewer)
         self.assertEqual(self.client.get(api, {"q": "pat"}).status_code, 403)
 
+    def test_site_root_and_account_index_send_people_to_the_new_ui(self):
+        visitor = Client()
+        self.assertRedirects(visitor.get("/"), "/articles/", fetch_redirect_response=False)
+        self.assertIn("no-store", visitor.get("/")["Cache-Control"])
+        self.assertEqual(visitor.post("/").status_code, 405)
+        self.assertRedirects(visitor.get("/accounts/"), reverse("account_login"))
+        self.client.force_login(self.viewer)
+        self.assertRedirects(self.client.get("/"), "/app/", fetch_redirect_response=False)
+        self.assertRedirects(self.client.get("/accounts/"), "/app/", fetch_redirect_response=False)
+        # The Django profile page is gone; settings live at /app/settings/.
+        self.assertEqual(self.client.get("/accounts/profile/").status_code, 404)
+        page = self.client.get(reverse("account_change_password")).content.decode()
+        self.assertIn('href="/app/settings/"', page)
+        self.assertNotIn('href="/app/admin/members/"', page)
+
     def test_vue_profile_update_requires_session_and_csrf(self):
         browser = Client(enforce_csrf_checks=True)
         url = reverse("auth_me")
@@ -216,7 +231,7 @@ class AccountTests(TestCase):
         self.assertEqual(disabled_browser.get(reverse("auth_me")).status_code, 403)
         self.assertEqual(self.client.post(url, {"action": "enable"}).status_code, 302)
         self.assertEqual(browser.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(self.login(self.viewer, browser), reverse("profile"))
+        self.assertRedirects(self.login(self.viewer, browser), "/app/", fetch_redirect_response=False)
 
     def enable_mfa(self, user):
         secret = generate_totp_secret()
@@ -251,12 +266,12 @@ class AccountTests(TestCase):
         pending = Client()
         self.assertRedirects(self.login(self.viewer, pending), challenge)
         self.assertEqual(pending.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(pending.post(challenge, {"code": codes[0]}), reverse("profile"))
+        self.assertRedirects(pending.post(challenge, {"code": codes[0]}), "/app/", fetch_redirect_response=False)
         retry = Client()
         self.assertRedirects(self.login(self.viewer, retry), challenge)
         self.assertEqual(retry.post(challenge, {"code": codes[0]}).status_code, 200)
         self.assertEqual(retry.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(retry.post(challenge, {"code": current_totp(secret)}), reverse("profile"))
+        self.assertRedirects(retry.post(challenge, {"code": current_totp(secret)}), "/app/", fetch_redirect_response=False)
 
     def test_password_reset_does_not_grant_session_or_bypass_mfa(self):
         self.enable_mfa(self.viewer)
@@ -379,7 +394,7 @@ class GoogleTests(TestCase):
         self.assertRedirects(response, challenge)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 403)
         self.assertNotIn("fixture-oauth-token", str(dict(self.client.session)))
-        self.assertRedirects(self.client.post(challenge, {"code": current_totp(secret)}), reverse("profile"))
+        self.assertRedirects(self.client.post(challenge, {"code": current_totp(secret)}), "/app/", fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 200)
 
         self.user.is_active = False
