@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
-from . import preview, publication, reading, views
+from . import popularity, preview, publication, reading, views
 
 router = SimpleRouter()
 router.register("categories", views.CategoryViewSet)
@@ -12,6 +12,9 @@ urlpatterns = [
     path("site/", views.site_settings),
     path("public/collections/", publication.public_collections),
     path("public/nav/", publication.public_nav),
+    path("public/popular/", popularity.popular_articles),
+    path("public/articles/<uuid:document_id>/view/", popularity.record_public_view),
+    path("documents/<uuid:document_id>/public-views/", popularity.document_public_views),
     path("read/nav/", reading.read_nav),
     path("read/articles/", reading.read_articles),
     path("read/articles/<uuid:document_id>/", reading.read_article),

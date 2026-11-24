@@ -192,3 +192,14 @@ class SiteSettings(models.Model):
     def current(cls):
         return cls.objects.filter(pk=1).first() or cls()
 
+
+class ArticleViewDaily(models.Model):
+    """Public article views per day: a count only, never who viewed (decision 15)."""
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="+")
+    day = models.DateField()
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint("document", "day", name="unique_article_view_day")]
+        indexes = [models.Index(fields=["day"], name="article_view_day")]
+

@@ -31,6 +31,21 @@ const options = computed(() => (props.status?.versions ?? []).map(item => ({
 })))
 const publicUrl = computed(() => `${window.location.origin}/articles/${props.document.id}/`)
 
+// ---- Public views over the last 30 days (counts only; see documents/popularity.py) ----------------
+type Trend = { days: number; total: number; daily: { day: string; count: number }[] }
+const trend = ref<Trend>()
+const peak = computed(() => Math.max(1, ...(trend.value?.daily.map(item => item.count) ?? [1])))
+async function loadTrend() {
+  if (!published.value) { trend.value = undefined; return }
+  try {
+    trend.value = await api<Trend>(`/api/documents/${encodeURIComponent(props.document.id)}/public-views/`)
+  } catch {
+    trend.value = undefined
+  }
+}
+watch(() => [props.document.id, published.value?.version__number], loadTrend, { immediate: true })
+const dayLabel = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+
 watch(() => props.status, status => { version.value = status?.versions[0]?.id }, { immediate: true })
 
 function publish() {
@@ -122,6 +137,18 @@ function comparePublished() {
         </dd>
       </dl>
 
+      <section v-if="published && trend" class="views" aria-labelledby="views-title">
+        <div class="views-head">
+          <span id="views-title" class="views-title">公開瀏覽</span>
+          <span class="views-total">最近 {{ trend.days }} 天 <strong>{{ trend.total }}</strong> 次</span>
+        </div>
+        <div class="bars" role="img" :aria-label="`最近 ${trend.days} 天共 ${trend.total} 次公開瀏覽`">
+          <span v-for="item in trend.daily" :key="item.day" class="bar" :style="{ height: `${Math.max(2, (item.count / peak) * 100)}%` }"
+            :class="{ empty: !item.count }" :title="`${dayLabel(item.day)}：${item.count} 次`" />
+        </div>
+        <p class="views-note">同一個瀏覽器一天只算一次，不記錄訪客身分；數字僅供參考。</p>
+      </section>
+
       <div class="field">
         <label for="publish-version">要發布的版本</label>
         <Select input-id="publish-version" v-model="version" :options="options" option-label="label" option-value="id"
@@ -162,4 +189,13 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .buttons { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 .buttons > * { flex: 1 1 auto; }
 .danger { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding-top: var(--ui-space-4); border-top: 1px solid var(--ui-border); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.views { display: grid; gap: var(--ui-space-2); padding: var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); }
+.views-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ui-space-2); }
+.views-title { font-weight: 600; font-size: var(--ui-text-sm); }
+.views-total { color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
+.views-total strong { color: var(--ui-text); font-size: var(--ui-text-md); }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 3rem; }
+.bar { flex: 1; min-width: 2px; border-radius: 2px 2px 0 0; background: var(--ui-accent); opacity: .85; }
+.bar.empty { background: var(--ui-border); opacity: 1; }
+.views-note { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 </style>

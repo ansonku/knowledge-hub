@@ -32,6 +32,7 @@ async function load() {
     const result = await publicApi<PublicArticle>(names.article(id.value), request.signal)
     if (request.signal.aborted) return
     article.value = result
+    if (!member) recordView(id.value)
     site.setTitle(result.title)
     await nextTick()
     const anchor = window.location.hash.slice(1)
@@ -54,6 +55,18 @@ async function load() {
   }
 }
 watch(id, load, { immediate: true })
+
+// ---- Public view count: one per browser, per article, per local day (nothing about the visitor is sent) ----
+function recordView(documentId: string) {
+  const today = new Date()
+  const key = `knowledge-hub.viewed.${documentId}.${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`
+  try {
+    if (sessionStorage.getItem(key)) return
+    sessionStorage.setItem(key, '1')
+  } catch { /* storage disabled: still count once for this page load */ }
+  void fetch(`/api/public/articles/${encodeURIComponent(documentId)}/view/`, { method: 'POST', credentials: 'omit', keepalive: true })
+    .catch(() => { /* counting is best effort */ })
+}
 
 // ---- Markdown -------------------------------------------------------------------------
 const rendered = computed(() => article.value?.format === 'md' ? renderMarkdown(article.value.body) : undefined)
