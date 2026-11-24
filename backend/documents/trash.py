@@ -8,7 +8,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from users.models import User
 from users.permissions import has_role
 
-from . import storage
+from . import activity, storage
 from .models import Document, PendingDocumentDeletion, Version
 from .services import STORAGE_LOCK_KEY, record_trash_action, require_editor
 
@@ -23,6 +23,7 @@ def restore_document(actor, document_id):
     document.trashed_at = None
     document.save(update_fields=["is_trashed", "trashed_at", "updated_at"])
     record_trash_action(document, actor, "restored")
+    activity.record(document.pk, actor, activity.Action.RESTORED)
     return document
 
 

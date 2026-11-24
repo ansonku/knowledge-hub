@@ -26,7 +26,8 @@ wait_for_health() {
 }
 
 wait_for_health
-page=$(curl -fsS --max-time 5 "$origin/")
+[[ "$(curl -sS -o /dev/null -w "%{http_code} %{redirect_url}" --max-time 5 "$origin/")" == "302 $origin/articles/" ]]
+page=$(curl -fsS --max-time 5 "$origin/app/")
 [[ "$page" == *'<title>Knowledge Hub</title>'* ]]
 asset=$(sed -nE 's/.*src="(\/assets\/[^"]+\.js)".*/\1/p' <<< "$page")
 [[ -n "$asset" ]]

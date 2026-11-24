@@ -1,0 +1,125 @@
+/*
+ * Django account pages (login, password reset, MFA, re-authentication, Google linking, activation).
+ * Mirrors the workspace / public-site design tokens (frontend/src/styles/tokens.css) so these
+ * pages match the Vue UI. Fonts fall back to the platform UI fonts: the bundled web fonts are
+ * hashed Vite assets that Django templates cannot reference.
+ */
+:root {
+  --ui-font-sans: 'Inter Variable', 'Noto Sans TC Variable', system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  --ui-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --bg-shell: #f5f6f8; --bg-surface: #ffffff; --bg-subtle: #f9fafb; --bg-muted: #f2f4f7;
+  --text: #101828; --text-secondary: #344054; --text-muted: #5d6b82;
+  --border: #e4e7ec; --border-subtle: #eef0f3; --border-strong: #d0d5dd;
+  --accent: #1d4ed8; --accent-hover: #1a3fb0; --accent-soft: #eef3ff; --accent-on-soft: #1a3fb0;
+  --focus: 0 0 0 3px rgb(29 78 216 / .35);
+  --danger: #b42318; --danger-bg: #fef3f2; --danger-border: #f1b5ae;
+  --success: #067647; --success-bg: #e7f6ee;
+  --radius: .5rem; --radius-lg: .875rem;
+  --shadow: 0 12px 32px rgb(16 24 40 / .08);
+}
+.hub-dark {
+  --bg-shell: #0c111b; --bg-surface: #111827; --bg-subtle: #161e2e; --bg-muted: #1d2738;
+  --text: #f2f4f7; --text-secondary: #d0d5dd; --text-muted: #98a2b3;
+  --border: #273244; --border-subtle: #1f2939; --border-strong: #344054;
+  --accent: #6f96ff; --accent-hover: #8fadff; --accent-soft: #1a2747; --accent-on-soft: #b3c8ff;
+  --focus: 0 0 0 3px rgb(111 150 255 / .45);
+  --danger: #fda29b; --danger-bg: #2d1512; --danger-border: #7a271a;
+  --success: #6ce9a6; --success-bg: #0f2e22;
+  --shadow: 0 12px 32px rgb(0 0 0 / .35);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body.account {
+  margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+  background: var(--bg-shell); color: var(--text); font: 15px/1.6 var(--ui-font-sans); -webkit-font-smoothing: antialiased;
+}
+.account a { color: var(--accent); text-underline-offset: .18em; }
+.account a:hover { color: var(--accent-hover); }
+.account :focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
+.skip { position: fixed; z-index: 100; top: .5rem; left: .5rem; padding: .55rem .85rem; border-radius: var(--radius); background: var(--text); color: var(--bg-surface); transform: translateY(calc(-100% - 1rem)); }
+.skip:focus { transform: none; }
+
+/* Top bar: same shape as the public site */
+.topbar { display: flex; align-items: center; gap: .75rem 1.5rem; min-height: 4rem; padding: 0 1.5rem; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+.brand { display: flex; align-items: center; gap: .625rem; color: var(--text) !important; font-weight: 700; font-synthesis: weight; font-size: 1rem; text-decoration: none; }
+.brand svg { color: var(--accent); }
+.spacer { flex: 1; }
+.topnav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; font-size: .875rem; }
+.topnav a { padding: .5rem .75rem; border-radius: var(--radius); color: var(--text-secondary); text-decoration: none; }
+.topnav a:hover { background: var(--bg-muted); color: var(--text); }
+.topnav a.button { border: 1px solid var(--border-strong); font-weight: 600; }
+
+/* Main card */
+.account main { flex: 1; width: 100%; max-width: 40rem; margin: clamp(1.5rem, 6vh, 4rem) auto 2.5rem; padding: 0 1rem; outline: none; }
+body.entry main { max-width: 28rem; }
+.back { display: inline-flex; align-items: center; gap: .25rem; margin-bottom: .75rem; color: var(--text-muted) !important; font-size: .875rem; text-decoration: none; }
+.back:hover { color: var(--accent) !important; }
+.card { padding: clamp(1.5rem, 5vw, 2.25rem); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-surface); box-shadow: var(--shadow); }
+.card > section, .card > section > section { display: grid; gap: 1rem; }
+.card h1 { margin: 0 0 .5rem; font-size: 1.625rem; line-height: 1.25; font-weight: 700; letter-spacing: -.015em; }
+.card h2 { margin: 1.25rem 0 .25rem; font-size: 1.0625rem; font-weight: 700; }
+.card p { margin: 0 0 1rem; color: var(--text-secondary); }
+.card ul, .card ol { margin: 0 0 1rem; padding-left: 1.25rem; color: var(--text-secondary); }
+.card code { padding: .125rem .375rem; border-radius: .375rem; background: var(--bg-muted); font-family: var(--ui-font-mono); font-size: .875em; }
+.card hr { border: 0; border-top: 1px solid var(--border-subtle); margin: 1.25rem 0; }
+
+/* Forms (allauth elements render <form><p><label/><input/></p>…</form>) */
+.card form { display: grid; gap: 1rem; margin: 0 0 1rem; }
+.card form p { display: grid; gap: .375rem; margin: 0; }
+.card label { color: var(--text); font-weight: 600; font-size: .875rem; }
+.card input:not([type=checkbox]):not([type=radio]), .card select, .card textarea {
+  width: 100%; min-height: 2.75rem; padding: .625rem .75rem; border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text); font: inherit;
+}
+.card input:not([type=checkbox]):not([type=radio]):focus, .card select:focus, .card textarea:focus { border-color: var(--accent); box-shadow: var(--focus); outline: none; }
+.card input[type=checkbox], .card input[type=radio] { width: 1rem; height: 1rem; accent-color: var(--accent); vertical-align: -2px; }
+.card form p:has(> input[type=checkbox]), .card form p:has(> input[type=radio]) { display: flex; align-items: center; gap: .5rem; }
+.card form p:has(> input[type=checkbox]) label, .card form p:has(> input[type=radio]) label { font-weight: 500; }
+.card .helptext, .card form p > span, .card form ul:not(.errorlist) { color: var(--text-muted); font-size: .8125rem; font-weight: 400; }
+.card form ul:not(.errorlist) { margin: 0; }
+.errorlist { margin: 0; padding: .5rem .75rem; list-style: none; border: 1px solid var(--danger-border); border-radius: var(--radius); background: var(--danger-bg); color: var(--danger); font-size: .875rem; }
+.card button, .card a[role=button], .card .button {
+  display: inline-flex; align-items: center; justify-content: center; gap: .375rem; min-height: 2.75rem; padding: 0 1.125rem;
+  border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent); color: #fff; font: inherit; font-weight: 600;
+  text-decoration: none; cursor: pointer;
+}
+.hub-dark .card button, .hub-dark .card .button { color: #0c111b; }
+.card button:hover, .card .button:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+.hub-dark .card button:hover { color: #0c111b; }
+.card form > button, .card form > p + button { justify-self: stretch; }
+.card button[name=action_remove], .card button.danger { border-color: var(--danger-border); background: var(--bg-surface); color: var(--danger); }
+.card ul:has(> li > button), .card ul:has(> li > a[href]) { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; list-style: none; }
+/* Panel actions (allauth renders them as a list of links/buttons): secondary buttons. */
+.card ul:has(> li > a[href]) > li > a, .card ul:has(> li > button) > li > button {
+  display: inline-flex; align-items: center; min-height: 2.5rem; padding: 0 1rem; border: 1px solid var(--border-strong);
+  border-radius: var(--radius); background: var(--bg-surface); color: var(--text); font-weight: 600; text-decoration: none;
+}
+.card ul:has(> li > a[href]) > li > a:hover, .card ul:has(> li > button) > li > button:hover { background: var(--bg-muted); color: var(--text); border-color: var(--border-strong); }
+.card table { width: 100%; margin: 0 0 1rem; border-collapse: collapse; font-size: .875rem; }
+.card th, .card td { padding: .5rem .625rem; border-bottom: 1px solid var(--border-subtle); text-align: left; }
+.card th { color: var(--text-muted); font-weight: 600; }
+
+/* Django messages */
+.messages { margin: 0 0 1rem; padding: .75rem 1rem; list-style: none; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent-on-soft); font-size: .875rem; }
+
+/* Entrance pages (login and friends) keep their existing class names */
+.login-card h1 { margin-bottom: .375rem; }
+.login-description { color: var(--text-muted) !important; }
+.login-form { margin: 1.25rem 0 0 !important; }
+.login-field { display: grid; gap: .375rem; }
+.login-options { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .875rem; }
+.remember { display: inline-flex; align-items: center; gap: .5rem; font-weight: 500 !important; }
+.login-action { width: 100%; }
+.login-alternative { margin: .75rem 0 0 !important; }
+.login-alternative::before { content: '或'; display: block; margin-bottom: .75rem; color: var(--text-muted); font-size: .8125rem; text-align: center; }
+.card .google-action { border-color: var(--border-strong); background: var(--bg-surface); color: var(--text); }
+.card .google-action:hover { background: var(--bg-muted); border-color: var(--border-strong); color: var(--text); }
+.login-errors { padding: .5rem .75rem; border: 1px solid var(--danger-border); border-radius: var(--radius); background: var(--danger-bg); color: var(--danger); font-size: .875rem; }
+.login-errors .errorlist { padding: 0; border: 0; background: none; }
+.login-return { margin: 1.25rem 0 0 !important; font-size: .875rem; text-align: center; }
+
+.foot { padding: 1.25rem 1.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: .8125rem; text-align: center; }
+@media (max-width: 560px) {
+  .topbar { padding: 0 .75rem; }
+  .topnav a { padding: .5rem; }
+}

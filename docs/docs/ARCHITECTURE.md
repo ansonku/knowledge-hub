@@ -5,9 +5,12 @@
 Browser (Vue 3 + TS + Vite + PrimeVue + Pinia + Vue Router)
   | HTTPS hub.sharegram.cc (Cloudflare Tunnel, existing host cloudflared)
 NAS loopback :18080 -> Docker Nginx
-  |-- /             Vue SPA, knowledge library home
-  |-- /articles/     Vue SPA, public reader
-  |-- /api/public/   read-only published article list and body
+  |-- /             Django: signed in -> /app/, visitors -> /articles/
+  |-- /app/         Vue SPA, member workspace
+  |-- /articles/     Vue SPA, public portal (SEO head injected via X-Hub-Head + sub_filter)
+  |-- /read/        Vue SPA, member reading portal (same layout, all active documents)
+  |-- /api/public/   published article list, body, nav, popular; anonymous view counter
+  |-- /api/read/    member reading list, body, nav (CanReadLibrary)
   |-- /api/         Django REST Framework (session auth, CSRF, RBAC)
   |-- /accounts/    django-allauth password / Google OIDC / TOTP
   `-- /preview/...  authorized preview handler + HTTP CSP sandbox
@@ -49,6 +52,15 @@ Storage example (verify NAS mount first):
 - Publish and withdraw through Admin-only, CSRF-protected service operations. Lock the document and update the publication state and audit in one transaction. Keep the published pointer independent of internal version changes. Clear publication when trashing and restore from trash as Private.
 - Render public Markdown with the existing safe Markdown reader. Serve public HTML through a static, sanitized reading view that removes executable content and automatic external loads. Keep original uploads in protected storage. Set public list and reading responses to `Cache-Control: no-store` and configure the CDN to bypass caching.
 - Test public and member access separately. Include anonymous direct links, withheld draft versions, immediate withdrawal, trash and restore, unauthorized publication, and browser checks for public HTML.
+
+## Member reading portal (P5d)
+- `/api/read/` serves every active (non-trashed) document to readers with `CanReadLibrary`, reusing the public collection tree and card shapes plus a `public` flag and version number. Never cached.
+- HTML bodies use the same sanitized static reading view as the public site, mounted in a `sandbox=""` iframe; original uploads are never returned. Public endpoints are unchanged and still expose published snapshots only.
+
+## Popular public articles (P5e)
+- `ArticleViewDaily` stores only `(document, day, count)`. The browser posts at most one view per article per day (sessionStorage) with `credentials: 'omit'`; the member portal and workspace never post.
+- The anonymous counter accepts published articles only and is rate limited per client address taken from Nginx's `X-Hub-Client-IP`. Throttle cache keys are SHA-256 hashed and expire; no address is persisted.
+- `/api/public/popular/` ranks currently published articles by 30-day totals (top 5, hidden below 3) and never returns counts. The per-document 30-day trend is Admin-only.
 
 ## Preview security boundary: high-risk design
 - The same-origin preview choice is provisional for MVP only and requires a security gate before external use.

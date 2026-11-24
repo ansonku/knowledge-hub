@@ -1,0 +1,9 @@
+{% extends "allauth/layouts/credentials.html" %}
+{% block head_title %}找不到頁面 · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="login-card" aria-labelledby="missing-title">
+  <h1 id="missing-title">找不到這個頁面</h1>
+  <p class="login-description">網址可能已經失效，或是內容已經移除。</p>
+  <p class="login-return"><a href="/">回到首頁</a></p>
+</section>
+{% endblock %}

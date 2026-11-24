@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = False
@@ -64,10 +65,13 @@ TEMPLATES = [{
             "django.template.context_processors.request",
             "django.contrib.auth.context_processors.auth",
             "django.contrib.messages.context_processors.messages",
+            "hub.context_processors.site",
         ],
     },
 }]
 LANGUAGE_CODE = "zh-hant"
+# Project wording overrides for third-party catalogues (allauth), see locale/zh_Hant/LC_MESSAGES/django.po.
+LOCALE_PATHS = [Path(__file__).resolve().parent.parent / "locale"]
 AUTHENTICATION_BACKENDS = ["allauth.account.auth_backends.AuthenticationBackend"]
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": f"django.contrib.auth.password_validation.{validator}"}
@@ -77,7 +81,7 @@ AUTH_PASSWORD_VALIDATORS = [
     )
 ]
 LOGIN_URL = "account_login"
-LOGIN_REDIRECT_URL = "profile"
+LOGIN_REDIRECT_URL = "/app/"
 LOGOUT_REDIRECT_URL = "/"
 ALLAUTH_TRUSTED_CLIENT_IP_HEADER = "X-Hub-Client-IP"
 ACCOUNT_ADAPTER = "users.adapters.AccountAdapter"

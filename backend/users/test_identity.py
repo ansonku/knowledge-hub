@@ -53,7 +53,7 @@ class AccountTests(TestCase):
         return (client or self.client).post(reverse("account_login"), {"login": user.email, "password": password})
 
     def reauthenticate_admin(self):
-        self.assertRedirects(self.login(self.admin), reverse("profile"))
+        self.assertRedirects(self.login(self.admin), "/app/", fetch_redirect_response=False)
         self.client.post(reverse("account_reauthenticate"), {"password": PASSWORD})
 
     def invite(self):
@@ -61,7 +61,7 @@ class AccountTests(TestCase):
             response = self.client.post(reverse("manage_users"), {
                 "username": "invited", "email": "Invite@EXAMPLE.test", "role": User.Role.EDITOR,
             })
-        self.assertRedirects(response, reverse("manage_users"))
+        self.assertRedirects(response, "/app/admin/members/", fetch_redirect_response=False)
         return User.objects.get(username="invited"), path_from_last_email()
 
     def test_invitation_resend_expiry_activation_and_replay(self):
@@ -86,7 +86,7 @@ class AccountTests(TestCase):
         response = visitor.post(form_url, {"new_password1": PASSWORD, "new_password2": PASSWORD})
         self.assertRedirects(response, reverse("account_login"))
         self.assertEqual(visitor.get(path).status_code, 400)
-        self.assertRedirects(self.login(user, visitor), reverse("profile"))
+        self.assertRedirects(self.login(user, visitor), "/app/", fetch_redirect_response=False)
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         self.assertFalse(user.pending_activation)
@@ -114,7 +114,7 @@ class AccountTests(TestCase):
         self.assertEqual(csrf_client.post(reverse("account_login"), {
             "login": self.admin.email, "password": PASSWORD, "csrfmiddlewaretoken": token,
         }).status_code, 302)
-        self.assertEqual(csrf_client.post(reverse("profile"), {"display_name": "Blocked"}).status_code, 403)
+        self.assertEqual(csrf_client.post(reverse("manage_users"), {"username": "blocked"}).status_code, 403)
 
     def test_vue_account_management_reads_and_submits_as_admin(self):
         browser = Client(enforce_csrf_checks=True)
@@ -134,12 +134,111 @@ class AccountTests(TestCase):
                 "username": "new-reader", "email": "new-reader@example.test",
                 "role": User.Role.VIEWER, "csrfmiddlewaretoken": accounts["csrf_token"],
             })
-        self.assertRedirects(response, reverse("manage_users"), fetch_redirect_response=False)
+        self.assertRedirects(response, "/app/admin/members/", fetch_redirect_response=False)
         account = User.objects.get(username="new-reader")
         detail = browser.get(reverse("user_api", args=[account.pk])).json()
         self.assertTrue(detail["account"]["pending_activation"])
         self.assertEqual(detail["audit"][0]["action"], "invited")
         self.assertTrue(detail["notices"])
+
+    def test_member_list_filters_flags_and_flashed_errors(self):
+        self.reauthenticate_admin()
+        User.objects.create_user("pending-one", "pending@example.test", display_name="Pat Pending",
+                                           is_active=False, pending_activation=True)
+        User.objects.create_user("gone", "gone@example.test", is_active=False)
+        api = reverse("users_api")
+        # allauth's login message is not a member-management notice.
+        self.assertEqual(self.client.get(api).json()["notices"], [])
+
+        def names(**params):
+            return sorted(row["username"] for row in self.client.get(api, params).json()["results"])
+
+        self.assertEqual(names(q="pat"), ["pending-one"])
+        self.assertEqual(names(q="GONE@"), ["gone"])
+        self.assertEqual(names(role="admin"), [self.admin.username])
+        self.assertEqual(names(status="pending"), ["pending-one"])
+        self.assertEqual(names(status="disabled"), ["gone"])
+        self.assertNotIn("gone", names(status="active"))
+        self.assertNotIn("pending-one", names(status="active"))
+        self.assertEqual(len(names(role="nonsense")), User.objects.count())
+        row = self.client.get(api, {"q": "pat"}).json()["results"][0]
+        self.assertEqual(set(row), {"id", "username", "email", "display_name", "role", "is_active",
+                                    "pending_activation", "last_login", "date_joined"})
+
+        self.enable_mfa(self.viewer)
+        detail = self.client.get(reverse("user_api", args=[self.viewer.pk])).json()["account"]
+        self.assertTrue(detail["mfa_enabled"])
+        self.assertFalse(detail["google_linked"])
+        self.assertFalse(detail["is_self"])
+        self.assertTrue(self.client.get(reverse("user_api", args=[self.admin.pk])).json()["account"]["is_self"])
+        self.assertNotIn("secret", str(detail))
+
+        # Invalid submissions come back to the workspace page with the errors as notices.
+        response = self.client.post(reverse("manage_users"), {"username": "dup", "email": "GONE@example.test", "role": "viewer"})
+        self.assertRedirects(response, "/app/admin/members/", fetch_redirect_response=False)
+        self.assertFalse(User.objects.filter(username="dup").exists())
+        self.assertEqual(self.client.get(api).json()["notices"], [{"text": "此電子郵件已被使用。", "warning": True}])
+        response = self.client.post(reverse("manage_user", args=[self.admin.pk]), {"action": "disable"})
+        self.assertRedirects(response, f"/app/admin/members/{self.admin.pk}/", fetch_redirect_response=False)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+        self.assertIn("這項操作需要由另一位管理員執行。", str(self.client.get(api).json()["notices"]))
+        # Non-admins still get nothing.
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(api, {"q": "pat"}).status_code, 403)
+
+    def test_site_root_and_account_index_send_people_to_the_new_ui(self):
+        visitor = Client()
+        self.assertRedirects(visitor.get("/"), "/articles/", fetch_redirect_response=False)
+        self.assertIn("no-store", visitor.get("/")["Cache-Control"])
+        self.assertEqual(visitor.post("/").status_code, 405)
+        self.assertRedirects(visitor.get("/accounts/"), reverse("account_login"))
+        self.client.force_login(self.viewer)
+        self.assertRedirects(self.client.get("/"), "/app/", fetch_redirect_response=False)
+        self.assertRedirects(self.client.get("/accounts/"), "/app/", fetch_redirect_response=False)
+        # The Django profile page is gone; settings live at /app/settings/.
+        self.assertEqual(self.client.get("/accounts/profile/").status_code, 404)
+        page = self.client.get(reverse("account_change_password")).content.decode()
+        self.assertIn('href="/app/settings/"', page)
+        self.assertNotIn('href="/app/admin/members/"', page)
+
+    def test_account_pages_use_site_name_and_new_styles(self):
+        from documents.models import SiteSettings
+        SiteSettings.objects.create(name="研發<知識>庫")
+        page = Client().get(reverse("account_login")).content.decode()
+        self.assertIn("<title>登入 · 研發&lt;知識&gt;庫</title>", page)
+        self.assertIn('href="/assets/account.css"', page)
+        self.assertIn('src="/assets/account-theme.js"', page)
+        self.assertNotIn("site-brand.css", page)
+        self.assertIn('class="account entry"', page)
+        self.login(self.viewer)  # a real allauth sign-in, which would queue its notice
+        manage = self.client.get(reverse("account_change_password")).content.decode()
+        # allauth's sign-in notice is not shown on the next account page.
+        self.assertNotIn('class="messages"', manage)
+        self.assertIn('class="back"', manage)
+        self.assertNotIn('class="account entry"', manage)
+
+    def test_account_pages_use_project_mfa_wording(self):
+        self.client.force_login(self.viewer)
+        page = self.client.get(reverse("mfa_index")).content.decode()
+        self.assertIn("雙因素驗證", page)
+        self.assertIn("尚未啟用驗證器。", page)
+        for old in ("二階", "恢復碼", "authenticator 驗證器"):
+            self.assertNotIn(old, page)
+
+    def test_compiled_translations_match_the_catalogue(self):
+        import importlib.util
+        import tempfile
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent / "locale"
+        spec = importlib.util.spec_from_file_location("compile_locale", root / "compile.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        po = root / "zh_Hant" / "LC_MESSAGES" / "django.po"
+        with tempfile.TemporaryDirectory() as folder:
+            fresh = Path(folder) / "django.mo"
+            module.write_mo(module.parse(po), fresh)
+            self.assertEqual(fresh.read_bytes(), po.with_suffix(".mo").read_bytes(), "run: python locale/compile.py")
 
     def test_vue_profile_update_requires_session_and_csrf(self):
         browser = Client(enforce_csrf_checks=True)
@@ -170,7 +269,7 @@ class AccountTests(TestCase):
         self.assertEqual(disabled_browser.get(reverse("auth_me")).status_code, 403)
         self.assertEqual(self.client.post(url, {"action": "enable"}).status_code, 302)
         self.assertEqual(browser.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(self.login(self.viewer, browser), reverse("profile"))
+        self.assertRedirects(self.login(self.viewer, browser), "/app/", fetch_redirect_response=False)
 
     def enable_mfa(self, user):
         secret = generate_totp_secret()
@@ -205,12 +304,12 @@ class AccountTests(TestCase):
         pending = Client()
         self.assertRedirects(self.login(self.viewer, pending), challenge)
         self.assertEqual(pending.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(pending.post(challenge, {"code": codes[0]}), reverse("profile"))
+        self.assertRedirects(pending.post(challenge, {"code": codes[0]}), "/app/", fetch_redirect_response=False)
         retry = Client()
         self.assertRedirects(self.login(self.viewer, retry), challenge)
         self.assertEqual(retry.post(challenge, {"code": codes[0]}).status_code, 200)
         self.assertEqual(retry.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(retry.post(challenge, {"code": current_totp(secret)}), reverse("profile"))
+        self.assertRedirects(retry.post(challenge, {"code": current_totp(secret)}), "/app/", fetch_redirect_response=False)
 
     def test_password_reset_does_not_grant_session_or_bypass_mfa(self):
         self.enable_mfa(self.viewer)
@@ -247,12 +346,15 @@ class AccountTests(TestCase):
         self.login(self.viewer, pending)
         self.reauthenticate_admin()
         url = reverse("manage_user", args=[self.viewer.pk])
-        self.assertEqual(self.client.post(url, {"action": "mfa", "reason": "Help desk"}).status_code, 200)
+        refused = self.client.post(url, {"action": "mfa", "reason": "Help desk"})
+        self.assertRedirects(refused, f"/app/admin/members/{self.viewer.pk}/", fetch_redirect_response=False)
         self.assertTrue(Authenticator.objects.filter(user=self.viewer).exists())
+        notices = self.client.get(reverse("user_api", args=[self.viewer.pk])).json()["notices"]
+        self.assertEqual(notices, [{"text": "重設雙因素驗證需要填寫理由並確認已完成身分核對。", "warning": True}])
 
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(url, {"action": "mfa", "reason": "In-person check", "verified": "on"})
-        self.assertRedirects(response, url)
+        self.assertRedirects(response, f"/app/admin/members/{self.viewer.pk}/", fetch_redirect_response=False)
         self.assertFalse(Authenticator.objects.filter(user=self.viewer).exists())
         log = AuditLog.objects.get(target=self.viewer, action="mfa_admin_reset")
         self.assertEqual(log.actor_id, self.admin.pk)
@@ -330,7 +432,7 @@ class GoogleTests(TestCase):
         self.assertRedirects(response, challenge)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 403)
         self.assertNotIn("fixture-oauth-token", str(dict(self.client.session)))
-        self.assertRedirects(self.client.post(challenge, {"code": current_totp(secret)}), reverse("profile"))
+        self.assertRedirects(self.client.post(challenge, {"code": current_totp(secret)}), "/app/", fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 200)
 
         self.user.is_active = False

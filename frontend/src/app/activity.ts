@@ -1,0 +1,52 @@
+import type { Format } from './types'
+
+export type ActivityItem = {
+  id: number
+  action: 'created' | 'uploaded' | 'edited' | 'restored_version' | 'metadata' | 'trashed' | 'restored' | 'published' | 'withdrawn'
+  actor: string | null
+  version_number: number | null
+  detail: {
+    note?: string
+    restored_from?: number
+    republished?: boolean
+    title?: { from: string; to: string }
+    category?: { from: string | null; to: string | null }
+    tags?: { added: string[]; removed: string[] }
+  }
+  created_at: string
+  document: { id: string; title: string; format: Format }
+}
+
+export type ActivityPage = { page: number; has_more: boolean; results: ActivityItem[] }
+
+/** Verb phrase for an activity, e.g. "上傳了 v3". The document title is rendered separately. */
+export function activityVerb(item: ActivityItem) {
+  const version = item.version_number ? `v${item.version_number}` : ''
+  switch (item.action) {
+    case 'created': return '新增了文件'
+    case 'uploaded': return `上傳了 ${version}`
+    case 'edited': return `編輯並儲存為 ${version}`
+    case 'restored_version': return `從 v${item.detail.restored_from ?? '?'} 還原為 ${version}`
+    case 'metadata': return '更新了文件資料'
+    case 'trashed': return '移入回收桶'
+    case 'restored': return '從回收桶還原'
+    case 'published': return item.detail.republished ? `重新發布 ${version}` : `發布 ${version} 為公開文章`
+    case 'withdrawn': return '下架了公開文章'
+  }
+}
+
+/** Secondary line: the version note or a summary of metadata changes. */
+export function activityDetail(item: ActivityItem) {
+  const { detail } = item
+  if (detail.note) return detail.note
+  const parts: string[] = []
+  if (detail.title) parts.push(`標題改為「${detail.title.to}」`)
+  if (detail.category) parts.push(`集合改為「${detail.category.to ?? '未分類'}」`)
+  if (detail.tags?.added.length) parts.push(`加上標籤 ${detail.tags.added.join('、')}`)
+  if (detail.tags?.removed.length) parts.push(`移除標籤 ${detail.tags.removed.join('、')}`)
+  return parts.join('；')
+}
+
+export function initialOf(name: string | null) {
+  return Array.from(name ?? '系')[0]?.toUpperCase() ?? '?'
+}

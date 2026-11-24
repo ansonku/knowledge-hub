@@ -1,10 +1,10 @@
 {% extends "allauth/layouts/credentials.html" %}
-{% block head_title %}啟用帳號 · Knowledge Hub{% endblock %}
+{% block head_title %}啟用帳號 · {{ site_name }}{% endblock %}
 {% block content %}
 <section class="login-card" aria-labelledby="activate-title">
   <h1 id="activate-title">啟用帳號</h1>
   {% if form %}
-    <p class="login-description">設定密碼後即可登入 Knowledge Hub。</p>
+    <p class="login-description">設定密碼後即可登入 {{ site_name }}。</p>
     <form class="login-form" method="post">
       {% csrf_token %}
       {% if form.non_field_errors %}
