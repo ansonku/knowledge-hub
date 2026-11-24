@@ -86,7 +86,8 @@ class ActivitySerializer(serializers.ModelSerializer):
 
 class BulkChange(serializers.Serializer):
     ids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=100)
-    action = serializers.ChoiceField(["move", "add_tags", "remove_tags", "trash"])
+    # "organize": set the collection (when given) and add tags in one step, e.g. for a finished upload batch.
+    action = serializers.ChoiceField(["move", "add_tags", "remove_tags", "trash", "organize"])
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), allow_null=True, required=False)
     tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True, required=False)
 
@@ -95,6 +96,8 @@ class BulkChange(serializers.Serializer):
             raise serializers.ValidationError({"category": "請選擇要移動到的集合。"})
         if data["action"] in ("add_tags", "remove_tags") and not data.get("tags"):
             raise serializers.ValidationError({"tags": "請選擇標籤。"})
+        if data["action"] == "organize" and "category" not in data and not data.get("tags"):
+            raise serializers.ValidationError({"detail": "請選擇集合或標籤。"})
         return data
 
 

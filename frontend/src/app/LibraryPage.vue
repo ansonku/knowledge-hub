@@ -190,7 +190,7 @@ const publishing = ref<DocumentRow>()
 const rowMenu = ref<InstanceType<typeof Menu>>()
 const menuRow = ref<DocumentRow>()
 
-function openUpload(target?: DocumentRow) {
+function openUpload(target: DocumentRow) {
   versionTarget.value = target
   uploadOpen.value = true
 }
@@ -451,8 +451,7 @@ function onSaved() {
     </nav>
 
     <Menu id="row-menu" ref="rowMenu" :model="menuItems" popup />
-    <UploadDialog v-model:visible="uploadOpen" :target="versionTarget" :default-category="category"
-      :max-bytes="limits.bytes" :max-batch="limits.batch" @uploaded="load" />
+    <UploadDialog v-if="versionTarget" v-model:visible="uploadOpen" :target="versionTarget" :max-bytes="limits.bytes" @uploaded="load" />
     <BulkDialog :action="bulkAction" :ids="selected" @close="bulkAction = undefined" @done="bulkDone" />
     <CollectionDialog :collection="editingCollection" @close="editingCollection = undefined" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onSaved" />

@@ -108,7 +108,7 @@ BULK_LIMIT = 100
 
 
 @transaction.atomic
-def bulk_change(actor, document_ids, action, *, category=None, tags=()):
+def bulk_change(actor, document_ids, action, *, category=None, tags=(), set_category=True):
     """Apply one change to several documents atomically, each through change_document."""
     require_editor(actor)
     ids = list(dict.fromkeys(document_ids))
@@ -124,6 +124,17 @@ def bulk_change(actor, document_ids, action, *, category=None, tags=()):
             change_document(actor, document_id)
         elif action == "move":
             change_document(actor, document_id, {"category": category})
+        elif action == "organize":
+            # One change per document, so its activity shows the collection and the tags together.
+            document = Document.objects.get(pk=document_id)
+            changes = {}
+            if set_category and document.category_id != (category.pk if category else None):
+                changes["category"] = category
+            current = set(document.tags.values_list("pk", flat=True))
+            if tag_ids - current:
+                changes["tags"] = list(current | tag_ids)
+            if changes:
+                change_document(actor, document_id, changes)
         else:
             current = set(Document.objects.get(pk=document_id).tags.values_list("pk", flat=True))
             updated = current | tag_ids if action == "add_tags" else current - tag_ids

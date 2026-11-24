@@ -539,7 +539,7 @@ onBeforeUnmount(() => {
       </aside>
     </div>
 
-    <UploadDialog v-if="asRow" v-model:visible="uploadOpen" :target="asRow" :max-bytes="session.limits.bytes" :max-batch="1"
+    <UploadDialog v-if="asRow" v-model:visible="uploadOpen" :target="asRow" :max-bytes="session.limits.bytes"
       @uploaded="onUploaded" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onMetadataSaved" />
   </div>

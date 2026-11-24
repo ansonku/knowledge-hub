@@ -237,6 +237,8 @@ def bulk(request):
     data = form.validated_data
     count = services.bulk_change(
         request.user, data["ids"], data["action"], category=data.get("category"), tags=data.get("tags", []),
+        # A missing category leaves collections alone; an explicit null means "uncategorised".
+        set_category="category" in data,
     )
     return Response({"count": count})
 
