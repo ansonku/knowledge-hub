@@ -2,7 +2,7 @@
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
 import { computed, ref, watch } from 'vue'
-import { RouterLink, useRoute, type RouteLocationRaw } from 'vue-router'
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useSession } from '../stores/session'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import { useTheme, type ThemeMode } from '../stores/theme'
@@ -16,6 +16,7 @@ const taxonomy = useTaxonomy()
 const workspace = useWorkspace()
 const theme = useTheme()
 const route = useRoute()
+const router = useRouter()
 
 type NavItem = { name: string; label: string; icon: IconName; to: RouteLocationRaw; badge?: string; tone?: 'warn' }
 const primary = computed<NavItem[]>(() => [
@@ -67,7 +68,7 @@ const userItems = computed<MenuItem[]>(() => [
     })),
   },
   { separator: true },
-  { label: '個人設定', url: '/accounts/profile/' },
+  { label: '個人設定', command: () => { void router.push({ name: 'app-settings' }); emit('navigate') } },
   { label: '切換到舊版介面', url: '/library/' },
   { separator: true },
   { label: '登出', url: '/accounts/logout/' },

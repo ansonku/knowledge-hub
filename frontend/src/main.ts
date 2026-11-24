@@ -45,6 +45,7 @@ const router = createRouter({
         { path: 'collections/:id/', name: 'app-collection', component: () => import('./app/LibraryPage.vue') },
         { path: 'docs/:id/', name: 'app-document', component: () => import('./app/DocumentPage.vue') },
         { path: 'docs/:id/compare/', name: 'app-compare', component: () => import('./app/ComparePage.vue') },
+        { path: 'settings/', name: 'app-settings', component: () => import('./app/SettingsPage.vue') },
         { path: ':pathMatch(.*)*', redirect: { name: 'app-home' } },
       ],
     },

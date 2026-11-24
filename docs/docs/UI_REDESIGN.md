@@ -516,3 +516,23 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
     - 未分類文章、複製連結、首頁點進文章、找不到的文章、舊介面的路由。
     - 沒有溢出，也沒有預期以外的 console 錯誤。
   - `smoke.sh` 通過。
+
+### P4a 個人設定（2026-11-24）
+
+- `frontend/src/app/SettingsPage.vue`，網址 `/app/settings/`，路由名稱 `app-settings`。側欄頭像選單的「個人設定」改成開啟這一頁。
+  - **帳號資料**：頭像字首、電子郵件、帳號、角色和該角色能做什麼的說明。顯示名稱用 `PATCH /api/auth/me` 修改，帶 CSRF。儲存後側欄的名稱立即更新。
+  - **外觀**：跟隨系統／淺色／深色，跟頭像選單用同一個 `theme` store。
+  - **登入與安全**：變更密碼 `/accounts/password/change/`、雙因素驗證 `/accounts/2fa/`、Google 帳號 `/accounts/3rdparty/`，都連到既有的 Django／allauth 頁面，所以這些頁面原本的再次驗證機制不變。
+  - **登入狀態**：登出 `/accounts/logout/`。
+- 頁面上的說明文字都對照過後端行為：
+  - Editor 修改集合和標籤需要 `require_editor`。
+  - session 雜湊包含密碼，所以改密碼後其他裝置的登入會失效。
+  - Google 綁定需要 `reauthentication_required`。
+- 後端沒有修改。舊的 `Profile.vue` 和 `/accounts/profile/` 留到 P4f 處理。
+- Playwright 共 49 項通過：
+  - 角色和寬度：Admin 1920／1280／768／500 px（1280 和 500 另測深色）、Editor 1280 px、Viewer 1280／500 px。
+  - 用 Editor 修改顯示名稱，確認側欄即時更新、重新整理後仍保留，最後改回原本的名稱。
+  - 外觀切換。
+  - 安全頁面連結都存在，而且可以開啟（回應 200 或 302）。
+  - 訪客會被導向登入頁。
+  - 沒有溢出，也沒有 console 錯誤。
