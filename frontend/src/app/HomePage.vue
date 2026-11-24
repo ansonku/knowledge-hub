@@ -185,7 +185,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.home { box-sizing: border-box; max-width: 76rem; padding: var(--ui-space-6) var(--ui-gutter) var(--ui-space-7); display: grid; gap: var(--ui-space-6); }
+/* Grows with wide screens (keeping ~5rem of margin each side) between 76rem and 90rem. */
+.home { box-sizing: border-box; max-width: clamp(76rem, calc(100vw - var(--ui-sidebar-width) - 10rem), 90rem); margin-inline: auto; padding: var(--ui-space-6) var(--ui-gutter) var(--ui-space-7); display: grid; gap: var(--ui-space-6); }
 .head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--ui-space-4); }
 .date { margin: 0 0 var(--ui-space-1); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-tight); font-weight: 700; letter-spacing: -.01em; }
@@ -195,7 +196,8 @@ h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); }
 .more { color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
 .more:hover { text-decoration: underline; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--ui-space-3); }
+/* At most four columns; auto-fit drops empty tracks so however many recent documents there are fill the row. */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(13rem, calc((100% - 3 * var(--ui-space-3)) / 4)), 1fr)); gap: var(--ui-space-3); }
 .card {
   display: flex; flex-direction: column; gap: var(--ui-space-2); min-height: 7.5rem; padding: var(--ui-space-4);
   border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface);
@@ -248,12 +250,16 @@ h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
 .col-mark { width: 1.75rem; height: 1.75rem; font-size: var(--ui-text-sm); }
 .col-text { flex: 1; min-width: 0; display: grid; }
 .col-name { font-weight: 600; }
-.col-desc { color: var(--ui-text-muted); font-size: var(--ui-text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.45; }
 .col-count { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .muted-line { margin: 0; padding: var(--ui-space-4); color: var(--ui-text-muted); }
 /* On narrow screens show what needs attention before the long activity feed. */
 @media (max-width: 900px) {
   .side { order: -1; }
+}
+/* On wide screens give the side column room for collection descriptions; the feed keeps a readable measure. */
+@media (min-width: 1600px) {
+  .side { flex-basis: 22rem; }
 }
 @media (max-width: 640px) {
   .upload { width: 100%; justify-content: center; }
