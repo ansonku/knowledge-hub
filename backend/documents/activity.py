@@ -24,7 +24,7 @@ def record_version(version):
         action = VERSION_ACTIONS.get(version.source, Action.UPLOADED)
     record(
         version.document_id, version.created_by, action, version_number=version.number,
-        note=version.note, restored_from=version.restored_from.number if version.restored_from_id else None,
+        note=version.note, restored_from=version.restored_from_number,
     )
 
 

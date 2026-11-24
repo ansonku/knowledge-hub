@@ -40,6 +40,7 @@ urlpatterns = [
     path("documents/<uuid:document_id>/versions/<uuid:version_id>/download/", views.download_version),
     path("documents/<uuid:document_id>/versions/<uuid:version_id>/preview/", preview.issue_preview),
     path("documents/<uuid:document_id>/versions/<uuid:version_id>/restore/", views.restore_version),
+    path("documents/<uuid:document_id>/versions/<uuid:version_id>/delete/", views.delete_version),
     path("documents/<uuid:document_id>/images/", images.upload_image),
     path("images/<uuid:image_id>/", images.serve_image),
     path("documents/<uuid:document_id>/markdown/", views.new_version, {"edit": True}),

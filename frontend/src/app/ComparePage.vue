@@ -5,7 +5,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 import Select from 'primevue/select'
 import { computed, defineAsyncComponent, h, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { api } from '../api'
+import { api, ApiError } from '../api'
 import { useTheme } from '../stores/theme'
 import UiIcon from './components/UiIcon.vue'
 import { versionSource, type DocumentDetails, type VersionInfo } from './composables/useDocument'
@@ -52,7 +52,12 @@ async function loadMeta() {
   const known = new Map(history.results.map(version => [version.id, version]))
   // Selected versions may be older than the first page of history.
   for (const id of [fromId.value, toId.value]) {
-    if (id && !known.has(id)) known.set(id, await api<VersionInfo>(`${base.value}versions/${encodeURIComponent(id)}/`))
+    if (id && !known.has(id)) {
+      const version = await api<VersionInfo>(`${base.value}versions/${encodeURIComponent(id)}/`).catch(cause => {
+        throw cause instanceof ApiError && cause.status === 404 ? new Error('找不到要比較的版本，可能已被 Admin 刪除。') : cause
+      })
+      known.set(id, version)
+    }
   }
   versions.value = [...known.values()].sort((a, b) => b.number - a.number)
   site.setTitle(`比較版本 · ${details.title}`)

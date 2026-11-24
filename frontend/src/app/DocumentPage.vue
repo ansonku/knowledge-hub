@@ -531,6 +531,7 @@ onBeforeUnmount(() => {
           <InfoTab v-if="tab === 'info'" :document="file" :headings="file.format === 'md' ? tocHeadings : []"
             :editable="session.canEdit" @jump="jump" @updated="doc.applyMetadata" />
           <VersionsTab v-else-if="tab === 'versions'" :document="file" :shown-id="historical?.id" :can-restore="session.canEdit"
+            :can-delete="session.isAdmin"
             :published-number="publishedNumber" @restored="onRestored" />
           <ActivityTab v-else-if="tab === 'activity'" :document-id="file.id" :revision="`${file.current_version.id}-${file.updated_at}`" />
           <PublishTab v-else :document="file" :status="publication" :error="publicationError"
@@ -539,7 +540,7 @@ onBeforeUnmount(() => {
       </aside>
     </div>
 
-    <UploadDialog v-if="asRow" v-model:visible="uploadOpen" :target="asRow" :max-bytes="session.limits.bytes" :max-batch="1"
+    <UploadDialog v-if="asRow" v-model:visible="uploadOpen" :target="asRow" :max-bytes="session.limits.bytes"
       @uploaded="onUploaded" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onMetadataSaved" />
   </div>

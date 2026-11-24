@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useTaxonomy } from '../../stores/taxonomy'
 import { useUploads } from '../../stores/uploads'
+import OrganizeDialog, { type OrganizeTarget } from './OrganizeDialog.vue'
 import UiIcon from './UiIcon.vue'
 
 const uploads = useUploads()
@@ -16,6 +17,15 @@ const title = computed(() => {
   if (uploads.needsAttention) return '上傳完成，部分檔案需要處理'
   return `已上傳 ${uploads.finished} 份文件`
 })
+
+// ---- Collection and tags for the whole batch, once nothing is uploading any more ----
+const LIMIT = 100
+const organizing = ref(false)
+const batch = computed<OrganizeTarget[]>(() =>
+  uploads.created.map(item => ({ id: item.documentId!, title: item.title ?? item.file.name })))
+function onOrganized(category: string | null | undefined) {
+  if (category !== undefined) uploads.moved(category)
+}
 
 function sizeLabel(size: number) {
   return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`
@@ -59,6 +69,13 @@ function sizeLabel(size: number) {
           class="open">開啟文件</RouterLink>
       </li>
     </ul>
+    <footer v-if="!uploads.active.length && batch.length" class="foot">
+      <button type="button" class="organize" :disabled="batch.length > LIMIT" @click="organizing = true">
+        設定集合與標籤（{{ batch.length }} 份）
+      </button>
+      <p v-if="batch.length > LIMIT" class="error">一次最多 {{ LIMIT }} 份，請到「全部文件」用批次修改。</p>
+    </footer>
+    <OrganizeDialog v-model:visible="organizing" :documents="batch" @done="onOrganized" />
   </section>
 </template>
 
@@ -87,4 +104,11 @@ function sizeLabel(size: number) {
 .actions { display: flex; gap: var(--ui-space-2); }
 .small { min-height: 1.75rem; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg-surface); color: var(--ui-text-secondary); font: inherit; font-size: var(--ui-text-xs); cursor: pointer; }
 .open { color: var(--ui-accent); font-size: var(--ui-text-xs); font-weight: 600; }
+.foot { display: grid; gap: var(--ui-space-1); padding: var(--ui-space-3) var(--ui-space-4); border-top: 1px solid var(--ui-border); background: var(--ui-bg-subtle); }
+.organize {
+  min-height: 2.25rem; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-accent); border-radius: var(--ui-radius-md);
+  background: var(--ui-bg-surface); color: var(--ui-accent); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer;
+}
+.organize:hover:not(:disabled) { background: var(--ui-accent-soft); }
+.organize:disabled { opacity: .5; cursor: default; }
 </style>

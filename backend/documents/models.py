@@ -65,7 +65,9 @@ class Version(models.Model):
     size = models.PositiveBigIntegerField()
     note = models.CharField(max_length=500, blank=True)
     source = models.CharField(max_length=16, default="upload", editable=False)
-    restored_from = models.ForeignKey("self", null=True, on_delete=models.PROTECT, related_name="+")
+    # SET_NULL so an Admin can delete the source version; the number keeps "還原自 v3" readable afterwards.
+    restored_from = models.ForeignKey("self", null=True, on_delete=models.SET_NULL, related_name="+")
+    restored_from_number = models.PositiveIntegerField(null=True, editable=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -87,9 +89,13 @@ class PreviewTicket(models.Model):
 class VersionRestoreAudit(models.Model):
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="restore_audits")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
-    restored_from = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="+")
-    previous_version = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="+")
-    new_version = models.OneToOneField(Version, on_delete=models.CASCADE, related_name="restore_audit")
+    # Deleting a version must never delete this audit: the links go, the numbers stay.
+    restored_from = models.ForeignKey(Version, null=True, on_delete=models.SET_NULL, related_name="+")
+    previous_version = models.ForeignKey(Version, null=True, on_delete=models.SET_NULL, related_name="+")
+    new_version = models.OneToOneField(Version, null=True, on_delete=models.SET_NULL, related_name="restore_audit")
+    restored_from_number = models.PositiveIntegerField(null=True)
+    previous_number = models.PositiveIntegerField(null=True)
+    new_number = models.PositiveIntegerField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -164,6 +170,7 @@ class DocumentActivity(models.Model):
         WITHDRAWN = "withdrawn", "Withdrawn"
         FEATURED = "featured", "Featured on the public home"
         UNFEATURED = "unfeatured", "Removed from the public home"
+        VERSION_DELETED = "version_deleted", "Deleted a version"
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="activities")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")

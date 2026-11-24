@@ -14,6 +14,7 @@ export type UploadItem = {
   message: string
   force: boolean
   documentId?: string
+  title?: string
 }
 
 /**
@@ -87,6 +88,7 @@ export const useUploads = defineStore('uploads', () => {
           const saved = await upload<DocumentRow>('/api/documents/', data, percent => { current.progress = percent })
           current.state = 'complete'
           current.documentId = saved.id
+          current.title = saved.title
           current.message = '已新增 · v1'
           completed++
         } catch (cause) {
@@ -100,5 +102,13 @@ export const useUploads = defineStore('uploads', () => {
     if (completed) window.dispatchEvent(new CustomEvent('hub:documents-changed'))
   }
 
-  return { items, open, active, finished, needsAttention, add, retry, skip, clear }
+  /** Documents this tray has created, for setting their collection and tags afterwards. */
+  const created = computed(() => items.value.filter(item => item.state === 'complete' && item.documentId))
+
+  /** After the batch got a new collection, show it as each file's destination. */
+  function moved(category: string | null) {
+    for (const item of created.value) item.category = category
+  }
+
+  return { items, open, active, finished, needsAttention, created, add, retry, skip, clear, moved }
 })
