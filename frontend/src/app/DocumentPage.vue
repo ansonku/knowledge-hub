@@ -117,13 +117,24 @@ watch(mode, next => { if (next !== 'split') editorLine = 1 })
 
 watch([documentId, versionId], () => {
   mode.value = 'read'
+  focusEditor.value = false
   note.value = ''
   closePreview()
   previewError.value = ''
 })
+// ?mode=split (e.g. right after creating a document) opens the editor with the cursor ready to type.
+const focusEditor = ref(false)
 watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
   if (busy) return
   site.setTitle(file.value?.title)
+  if (route.query.mode === 'split') {
+    const { mode: _ignored, ...rest } = route.query
+    void router.replace({ query: rest })
+    if (canEdit.value) {
+      focusEditor.value = true
+      setMode('split')
+    }
+  }
   const anchor = window.location.hash.slice(1)
   if (/^section-\d+$/.test(anchor)) requestAnimationFrame(() => jumpToHeading(article.value, anchor, false))
 })
@@ -483,7 +494,7 @@ onBeforeUnmount(() => {
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" :upload-image="uploadImage" @notify="notify"
+              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage" @notify="notify"
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
                 <span class="preview-label">即時預覽</span>

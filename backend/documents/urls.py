@@ -25,6 +25,7 @@ urlpatterns = [
     path("public/articles/<uuid:document_id>/", publication.public_article),
     path("documents/<uuid:document_id>/publication/", publication.manage_publication),
     path("documents/", views.documents),
+    path("documents/new/", views.new_markdown),
     path("documents/bulk/", views.bulk),
     path("documents/<uuid:document_id>/favorite/", views.favorite),
     path("documents/<uuid:document_id>/view/", views.record_view),

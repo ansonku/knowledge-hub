@@ -10,6 +10,8 @@ import {
 const value = defineModel<string>({ required: true })
 const props = defineProps<{
   readonly: boolean
+  /** Focus the editor with the cursor at the end, e.g. in a document that was just created. */
+  autofocus?: boolean
   /** Uploads one image and resolves with its address; without it the editor takes no images. */
   uploadImage?: (file: File) => Promise<{ url: string }>
 }>()
@@ -242,6 +244,11 @@ onMounted(() => {
   })
   ed.onDidChangeCursorPosition(event => { cursor.value = { line: event.position.lineNumber, column: event.position.column } })
   ed.onDidScrollChange(event => { if (event.scrollTopChanged) reportScroll() })
+  if (props.autofocus) {
+    const last = model.getLineCount()
+    ed.setPosition({ lineNumber: last, column: model.getLineMaxColumn(last) })
+    ed.focus()
+  }
   root.value?.addEventListener('paste', onPaste, true)
   root.value?.addEventListener('dragover', onDragOver, true)
   root.value?.addEventListener('drop', onDrop, true)
