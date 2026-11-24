@@ -402,3 +402,24 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
     - Editor 沒有「⋯」選單，Viewer 看到權限說明。
     - 永久刪除對話框在輸入標題前，確認按鈕維持停用。驗證時按了取消，沒有刪除任何東西。
     - 舊版回收桶正常，沒有溢出，也沒有 console 錯誤。
+
+### P3a 後端（2026-11-24）
+
+- `documents/publication.py`：
+  - `GET /api/public/articles/`：每篇文章新增 `excerpt`、`reading_minutes`、`published_at`、`collection`、`format` 五個欄位，回應多了 `count`。新增 `collection=<uuid>` 參數篩選集合，不是合法 UUID 時回 400。
+  - 新增 `GET /api/public/collections/`：只列出有公開文章的集合，每個集合回傳 `{id, name, color, article_count}`。
+  - `GET /api/public/articles/:id/`：新增 `published_at`、`reading_minutes`、`collection`，以及 `siblings`（同一集合的公開文章，只有 `document_id` 和 `title`，依發布時間排序，最多 200 篇）。
+- 摘要與閱讀時間：
+  - 摘要取 `search_text` 的前 2000 字當樣本。Markdown 會先去掉圖片、連結網址、程式碼區塊、標題和清單符號、表格分隔線、強調符號，再去掉跟文章標題重複的開頭，最後截成 120 字。
+  - 閱讀時間依樣本裡中日韓文字的比例估算：中日韓文字每分鐘 400 字，拉丁字母每分鐘 1000 字，最少 1 分鐘。
+  - 這些都在查詢時計算，不需要資料遷移。
+- `hub/urls.py` 新增 `/articles/`，用 X-Accel 送出 SPA，只接受 GET 和 HEAD。
+- 原有欄位（`document_id`、`title`、`format`、`body`、`page`、`pages`）都保留，所以舊的 `Library.vue` 訪客清單和 `PublicArticle.vue` 不受影響。
+- 測試：
+  - 新增 `documents/test_public_site.py`，共 4 項。
+    - 訪客只拿得到白名單裡的欄位。
+    - 集合父層、集合說明、沒有公開文章的集合、作者、標籤、私人文件，都不會出現在任何公開回應裡。
+    - 已下架和在回收桶的文章，會從清單、集合、同集合清單裡消失，單篇也回 404。
+    - 驗證入口頁和 HTTP 方法限制，以及摘要和閱讀時間的計算。
+  - 原有的發布測試改成只比對既有欄位。
+  - 後端 52 項測試全部通過，`ruff` 和 `makemigrations --check` 也通過，`smoke.sh` 通過。

@@ -1,9 +1,12 @@
+import math
+import re
 from hashlib import sha256
 from io import BytesIO
 
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, F, Q
+from django.db.models.functions import Left, Length
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.cache import never_cache
@@ -96,6 +99,68 @@ def published_articles():
     return ArticlePublication.objects.filter(document__is_trashed=False)
 
 
+# ---- Public presentation -------------------------------------------------------------
+# Visitors only ever see the publication snapshot plus the name and colour of the article's
+# own collection (decision 6 in UI_REDESIGN.md): never descriptions, parents, internal counts,
+# authors or tags.
+
+EXCERPT_LENGTH = 120
+SAMPLE_LENGTH = 2000
+CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]")
+MARKDOWN_NOISE = [
+    (re.compile(r"!\[[^\]]*\]\([^)]*\)"), " "),        # images
+    (re.compile(r"\[([^\]]*)\]\([^)]*\)"), r"\1"),     # links keep their text
+    (re.compile(r"```[^`]*```|~~~.*?~~~"), " "),         # fenced code
+    (re.compile(r"(^|\s)#{1,6}\s+"), " "),               # heading markers
+    (re.compile(r"(^|\s)(?:>|[-*+]|\d+\.)\s+"), " "),    # quotes and list markers
+    (re.compile(r"\|"), " "),                           # table pipes
+    (re.compile(r"[*_`~]+"), ""),                       # emphasis and inline code marks
+    (re.compile(r"<[^>]+>"), " "),                      # inline HTML tags
+]
+
+
+def summarise(sample, title, document_format):
+    text = sample
+    if document_format == Document.Format.MARKDOWN:
+        for pattern, replacement in MARKDOWN_NOISE:
+            text = pattern.sub(replacement, text)
+    text = search.normalize(text)
+    # Many documents open by repeating their title; the card already shows it.
+    if title and text.startswith(title):
+        text = text[len(title):].lstrip(" :：-—")
+    return text if len(text) <= EXCERPT_LENGTH else text[:EXCERPT_LENGTH].rstrip() + "…"
+
+
+def reading_minutes(sample, total_length):
+    """Estimate from the share of CJK characters: ~400 CJK characters or ~1000 Latin characters a minute."""
+    if not total_length:
+        return 1
+    cjk_share = len(CJK.findall(sample)) / max(1, len(sample))
+    per_minute = 1 / (cjk_share / 400 + (1 - cjk_share) / 1000)
+    return max(1, math.ceil(total_length / per_minute))
+
+
+def presented(query):
+    return query.annotate(sample=Left("search_text", SAMPLE_LENGTH), text_length=Length("search_text")).values(
+        "document_id", "title", "format", "published_at", "sample", "text_length",
+        "document__category_id", "document__category__name", "document__category__color",
+    )
+
+
+def collection_of(row):
+    if not row["document__category_id"]:
+        return None
+    return {"id": row["document__category_id"], "name": row["document__category__name"], "color": row["document__category__color"]}
+
+
+def article_card(row):
+    return {
+        "document_id": row["document_id"], "title": row["title"], "format": row["format"],
+        "published_at": row["published_at"], "excerpt": summarise(row["sample"], row["title"], row["format"]),
+        "reading_minutes": reading_minutes(row["sample"], row["text_length"]), "collection": collection_of(row),
+    }
+
+
 @never_cache
 @api_view(["GET"])
 @authentication_classes([])
@@ -104,9 +169,28 @@ def public_articles(request):
     articles = published_articles()
     for term in search.normalize(request.query_params.get("q", "")[:240]).split():
         articles = articles.filter(Q(title__icontains=term) | Q(search_text__icontains=term))
-    paginator = Paginator(articles.order_by("-published_at", "document_id").values("document_id", "title"), 20)
+    if request.query_params.get("collection"):
+        collection = serializers.UUIDField().run_validation(request.query_params["collection"])
+        articles = articles.filter(document__category_id=collection)
+    paginator = Paginator(presented(articles.order_by("-published_at", "document_id")), 20)
     page = paginator.get_page(request.query_params.get("page"))
-    return Response({"results": list(page), "page": page.number, "pages": paginator.num_pages})
+    return Response({
+        "results": [article_card(row) for row in page], "page": page.number, "pages": paginator.num_pages,
+        "count": paginator.count,
+    })
+
+
+@never_cache
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def public_collections(request):
+    rows = (
+        published_articles().filter(document__category__isnull=False)
+        .values("document__category_id", "document__category__name", "document__category__color")
+        .annotate(article_count=Count("pk")).order_by("document__category__name", "document__category_id")
+    )
+    return Response({"results": [collection_of(row) | {"article_count": row["article_count"]} for row in rows]})
 
 
 @never_cache
@@ -114,8 +198,27 @@ def public_articles(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def public_article(request, document_id):
-    article = get_object_or_404(published_articles().values("title", "format", "body"), pk=document_id)
-    return Response(article)
+    row = get_object_or_404(presented(published_articles()).annotate(body_text=F("body")), pk=document_id)
+    siblings = []
+    if row["document__category_id"]:
+        siblings = list(
+            published_articles().filter(document__category_id=row["document__category_id"])
+            .order_by("-published_at", "document_id").values("document_id", "title")[:SIBLING_LIMIT]
+        )
+    return Response({
+        "title": row["title"], "format": row["format"], "body": row["body_text"],
+        "published_at": row["published_at"], "reading_minutes": reading_minutes(row["sample"], row["text_length"]),
+        "collection": collection_of(row), "siblings": siblings,
+    })
+
+
+SIBLING_LIMIT = 200
+
+
+@never_cache
+@require_safe
+def public_site_page(request):
+    return HttpResponse(headers={"X-Accel-Redirect": "/index.html"})
 
 
 @never_cache

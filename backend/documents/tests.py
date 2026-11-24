@@ -487,7 +487,10 @@ class DocumentTests(TransactionTestCase):
         self.assertEqual(visitor.get(page)["X-Accel-Redirect"], "/index.html")
         result = visitor.get(public)
         self.assertIn("no-store", result["Cache-Control"])
-        self.assertEqual(result.json(), {"title": "Public title", "body": "# Published content", "format": "md"})
+        self.assertEqual(
+            {key: result.json()[key] for key in ("title", "body", "format", "collection", "siblings")},
+            {"title": "Public title", "body": "# Published content", "format": "md", "collection": None, "siblings": []},
+        )
         self.assertEqual(visitor.get(internal + "download/").status_code, 403)
         self.assertEqual(visitor.get(internal + "versions/").status_code, 403)
         latest = self.post_file(b"Draft upload", url=internal + "versions/").json()["current_version"]["id"]
@@ -503,7 +506,7 @@ class DocumentTests(TransactionTestCase):
         matches = visitor.get(listing, {"q": "Published content"})
         self.assertEqual(visitor.get(listing, {"q": "Published\x00content"}).json(), matches.json())
         self.assertIn("no-store", matches["Cache-Control"])
-        self.assertEqual(matches.json()["results"], [{"document_id": document_id, "title": "Public title"}])
+        self.assertEqual([(row["document_id"], row["title"]) for row in matches.json()["results"]], [(document_id, "Public title")])
         replacement = {"version": latest, "title": "Internal title"}
         self.assertEqual(browser.post(manage, replacement, content_type="application/json", headers=headers).status_code, 200)
         self.assertEqual(visitor.get(public).json()["body"], "Draft upload")
