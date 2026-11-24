@@ -13,7 +13,7 @@ import { longDateTime, shortDate, type DocumentRow } from './types'
 import { useSite } from '../stores/site'
 
 const site = useSite()
-const emit = defineEmits<{ upload: [] }>()
+const emit = defineEmits<{ upload: []; create: [] }>()
 const session = useSession()
 const taxonomy = useTaxonomy()
 const workspace = useWorkspace()
@@ -83,9 +83,14 @@ onMounted(async () => {
         <p class="date">{{ today }}</p>
         <h1>{{ greeting }}</h1>
       </div>
-      <Button v-if="session.canEdit" class="upload" @click="emit('upload')">
-        <UiIcon name="upload" :size="16" /><span>上傳文件</span>
-      </Button>
+      <div v-if="session.canEdit" class="head-actions">
+        <Button class="create" @click="emit('create')">
+          <UiIcon name="edit" :size="16" /><span>新增 Markdown</span>
+        </Button>
+        <Button class="upload" @click="emit('upload')">
+          <UiIcon name="upload" :size="16" /><span>上傳文件</span>
+        </Button>
+      </div>
     </header>
 
     <section aria-labelledby="continue-heading" class="section">
@@ -193,7 +198,8 @@ onMounted(async () => {
 .date { margin: 0 0 var(--ui-space-1); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-tight); font-weight: 700; letter-spacing: -.01em; }
 h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
-.upload { gap: var(--ui-space-2); }
+.upload, .create { gap: var(--ui-space-2); }
+.head-actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 .section { display: grid; gap: var(--ui-space-3); }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); }
 .more { color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
@@ -264,7 +270,8 @@ h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
   .side { flex-basis: 22rem; }
 }
 @media (max-width: 640px) {
-  .upload { width: 100%; justify-content: center; }
+  .head-actions { width: 100%; }
+  .upload, .create { flex: 1; justify-content: center; }
   .event { flex-wrap: wrap; }
   .event-time { margin-left: 2.75rem; }
 }

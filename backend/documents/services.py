@@ -1,8 +1,10 @@
 import logging
+import re
 import uuid
 from pathlib import Path
 
 from django.core.files import File
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -81,6 +83,38 @@ def add_upload(actor, data, document_id=None):
             document, actor, temporary, sha256, size, number, filename,
             data.get("note", ""), "markdown_edit" if base_version else "upload",
         )
+    return document
+
+
+# Path separators, characters Windows refuses in file names, and control characters.
+UNSAFE_FILENAME = re.compile(r'[\x00-\x1f\x7f/\\:*?"<>|]+')
+
+
+def markdown_filename(title):
+    """The file name a written document downloads as."""
+    name = UNSAFE_FILENAME.sub(" ", title)
+    name = " ".join(name.split()).strip(" .")[:200]
+    return f"{name or 'document'}.md"
+
+
+def create_markdown(actor, data):
+    """Create a Markdown document whose v1 is just its title, ready to be written in the editor.
+
+    No duplicate-content check: new documents with the same title start out identical.
+    """
+    require_editor(actor)
+    title = " ".join(data["title"].split())
+    if not title:
+        raise ValidationError({"title": "請輸入標題。"})
+    filename = markdown_filename(title)
+    upload = SimpleUploadedFile(filename, f"# {title}\n\n".encode())
+    with storage.stage(upload) as (temporary, sha256, size), transaction.atomic():
+        lock_storage(sha256)
+        document = Document.objects.create(
+            title=title, format=Document.Format.MARKDOWN, category=data.get("category"), created_by=actor,
+        )
+        document.tags.set(data.get("tags", []))
+        publish_version(document, actor, temporary, sha256, size, 1, filename, "", "create")
     return document
 
 

@@ -33,6 +33,7 @@ from .serializers import (
     DocumentMetadata,
     DocumentSerializer,
     MarkdownEdit,
+    NewMarkdown,
     NewUpload,
     RestoreVersion,
     TagSerializer,
@@ -242,6 +243,17 @@ def bulk(request):
         set_category="category" in data,
     )
     return Response({"count": count})
+
+
+@never_cache
+@api_view(["POST"])
+@permission_classes([CanReadLibrary])
+def new_markdown(request):
+    services.require_editor(request.user)
+    form = NewMarkdown(data=request.data)
+    form.is_valid(raise_exception=True)
+    document = services.create_markdown(request.user, form.validated_data)
+    return Response(DocumentSerializer(document).data, status=201)
 
 
 @never_cache

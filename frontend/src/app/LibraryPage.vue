@@ -22,7 +22,7 @@ import { formatLabel, longDateTime, shortDate, visibilityOf, type Category, type
 import { useSite } from '../stores/site'
 
 const site = useSite()
-const emit = defineEmits<{ upload: [] }>()
+const emit = defineEmits<{ upload: []; create: [] }>()
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
@@ -318,9 +318,14 @@ function onSaved() {
             @click="setQuery({ visibility: 'lagging' })">落後內部版本</button>
         </div>
       </div>
-      <Button v-if="session.canEdit && !preset" class="upload-button" @click="emit('upload')">
-        <UiIcon name="upload" :size="16" /><span>上傳</span>
-      </Button>
+      <div v-if="session.canEdit && !preset" class="head-actions">
+        <Button class="create-button" @click="emit('create')">
+          <UiIcon name="edit" :size="16" /><span>新增 Markdown</span>
+        </Button>
+        <Button class="upload-button" @click="emit('upload')">
+          <UiIcon name="upload" :size="16" /><span>上傳</span>
+        </Button>
+      </div>
     </header>
 
     <div v-if="!isRecent" class="toolbar" role="search">
@@ -469,7 +474,8 @@ function onSaved() {
 .crumbs a:hover { color: var(--ui-accent); text-decoration: underline; }
 h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-tight); font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .subtitle { margin: var(--ui-space-1) 0 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
-.upload-button { gap: var(--ui-space-2); }
+.upload-button, .create-button { gap: var(--ui-space-2); }
+.head-actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); margin-bottom: var(--ui-space-4); }
 .search-box {
@@ -601,6 +607,7 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
   .facet { flex: 1 1 8rem; min-width: 0; }
   .toolbar-spacer { display: none; }
   .bulk-button.ghost { margin-left: 0; }
-  .upload-button { width: 100%; justify-content: center; }
+  .head-actions { width: 100%; }
+  .upload-button, .create-button { flex: 1; justify-content: center; }
 }
 </style>

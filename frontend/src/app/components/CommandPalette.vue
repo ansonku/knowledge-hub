@@ -9,7 +9,7 @@ import type { DocumentPage, DocumentRow } from '../types'
 import UiIcon, { type IconName } from './UiIcon.vue'
 
 const open = defineModel<boolean>('open', { required: true })
-const emit = defineEmits<{ upload: [] }>()
+const emit = defineEmits<{ upload: []; create: [] }>()
 
 const router = useRouter()
 const session = useSession()
@@ -43,6 +43,7 @@ const navigation = computed<Command[]>(() => [
 const actions = computed<Command[]>(() => [
   ...(session.canEdit ? [
     { id: 'act-upload', group: '動作', label: '上傳文件', icon: 'upload' as const, run: () => { open.value = false; emit('upload') } },
+    { id: 'act-create', group: '動作', label: '新增 Markdown 文件', icon: 'edit' as const, run: () => { open.value = false; emit('create') } },
     { id: 'act-taxonomy', group: '動作', label: '管理集合與標籤', icon: 'sliders' as const, run: () => go({ name: 'app-taxonomy' }) },
   ] : []),
   {
@@ -68,10 +69,12 @@ const results = computed<Command[]>(() => {
     id: `col-${node.id}`, group: '集合', label: node.name, hint: taxonomy.pathLabel(node.parent) === '未分類' ? undefined : taxonomy.pathLabel(node.parent),
     icon: 'folder', run: () => go({ name: 'app-collection', params: { id: node.id } }),
   }))
+  // Commands whose name matches come first: typing「上傳」or「新增」should run that command on Enter,
+  // not open a document that merely mentions the words.
   return [
+    ...[...actions.value, ...navigation.value].filter(command => matches(command.label)),
     ...documents.value.map(row => documentCommand(row, '文件')),
     ...collections,
-    ...[...navigation.value, ...actions.value].filter(command => matches(command.label)),
   ]
 })
 

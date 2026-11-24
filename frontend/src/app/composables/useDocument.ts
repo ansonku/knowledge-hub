@@ -39,6 +39,7 @@ export type PublicationStatus = {
 export function versionSource(version: VersionInfo) {
   if (version.source === 'restore') return `還原自 v${version.restored_from_number ?? '?'}`
   if (version.source === 'markdown_edit') return '線上編輯'
+  if (version.source === 'create') return '建立文件'
   return '上傳檔案'
 }
 

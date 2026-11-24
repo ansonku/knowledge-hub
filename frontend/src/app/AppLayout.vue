@@ -15,6 +15,7 @@ import SiteNotice from '../site/SiteNotice.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadTray from './components/UploadTray.vue'
+import NewMarkdownDialog from './components/NewMarkdownDialog.vue'
 import { useUploads } from '../stores/uploads'
 import { useSite } from '../stores/site'
 
@@ -62,6 +63,15 @@ function openSearch() {
 /** Collection the user is looking at, used as the default for new uploads. */
 const uploadCategory = () => route.name === 'app-collection' && route.params.id !== 'uncategorized' ? String(route.params.id) : null
 const dropTarget = () => taxonomy.pathLabel(uploadCategory())
+
+const creating = ref(false)
+const createCategory = ref<string | null>(null)
+/** Write a new Markdown document; on a collection page it goes into that collection. */
+function newMarkdown() {
+  if (!session.canEdit) return
+  createCategory.value = uploadCategory()
+  creating.value = true
+}
 
 function chooseFiles() {
   if (session.canEdit) chooser.value?.click()
@@ -151,9 +161,10 @@ onBeforeUnmount(() => {
       </aside>
       <main id="app-main" class="main" tabindex="-1">
         <SiteNotice />
-        <RouterView @upload="chooseFiles" />
+        <RouterView @upload="chooseFiles" @create="newMarkdown" />
       </main>
-      <CommandPalette v-model:open="paletteOpen" @upload="chooseFiles" />
+      <CommandPalette v-model:open="paletteOpen" @upload="chooseFiles" @create="newMarkdown" />
+      <NewMarkdownDialog v-model:visible="creating" :default-category="createCategory" />
       <input ref="chooser" type="file" accept=".md,.html" multiple hidden @change="onChosen">
       <UploadTray />
       <div v-if="dragDepth > 0" class="drop" aria-hidden="true">

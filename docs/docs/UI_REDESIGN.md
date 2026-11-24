@@ -1411,3 +1411,20 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - `?version=` 和比較頁指到已刪除的版本時，顯示「找不到這個版本，可能已被 Admin 刪除」。
   - 活動分頁和儀表板動態顯示「永久刪除了 v*n*」。
 - 驗證：後端新增 `test_version_deletion.py` 13 項（含遷移回填），全部 147 項通過；`ruff`、`makemigrations --check`、`smoke.sh` 通過。新增 `versions.py`（19 項，暫時文件結束時永久刪除）。回歸：`organize.py` 16 項、`images.py` 21 項、`shoot.py`、`autopreview.py` 通過。
+
+### P9 直接新增 Markdown 文件（2026-11-25）
+
+- 後端：
+  - `POST /api/documents/new/`（`NewMarkdown`：標題必填、最多 240 字；集合、標籤選填），Editor 以上可用。
+  - `services.create_markdown`：標題的空白和換行合併成一個空格，清理後是空的就拒絕；v1 內容是 `# 標題` 加一個空行；版本來源是 `create`；沿用暫存、建立搜尋索引、活動紀錄（「新增了文件」）的流程；不做內容重複檢查。
+  - `markdown_filename`：路徑字元、Windows 不允許的檔名字元、控制字元一律換成空白，去掉頭尾的空白和點，最多 200 字；清理後是空的就用 `document.md`。例如 `../etc/passwd` 會變成 `etc passwd.md`。
+- 前端：
+  - 新增 `NewMarkdownDialog.vue`：標題（開啟時自動聚焦，空白時不能建立）、集合（在集合頁開啟時預設為該集合，其他地方預設「未分類」）、標籤。建立後跳到文件頁並帶 `?mode=split`。
+  - 入口：「全部文件」和集合頁標題列、首頁標題列（「新增 Markdown」放在「上傳」左邊，兩個都是主要按鈕；窄螢幕時平分寬度）、指令面板「新增 Markdown 文件」。對話框掛在 `AppLayout`，和上傳共用「目前集合」的判斷。
+  - 文件頁：載入完成後，如果有 `?mode=split`，會先從網址移除這個參數；只有可以編輯的 Markdown 目前版本會進入分割預覽，並讓編輯器聚焦、游標放在最後一行（標題下一行）。其他人看到的是一般的閱讀畫面。
+  - 版本歷史中，`create` 來源顯示為「建立文件」。
+- 驗證：
+  - 後端新增 `test_new_markdown.py` 6 項，全部 153 項通過；`ruff`、`makemigrations --check`、`smoke.sh` 通過。
+  - 新增 `create.py`（24 項）：標題欄自動聚焦、空白標題不能建立、建立後進入分割預覽且網址不帶參數、v1 內容、游標在第 3 行、輸入內容、Ctrl+S 加 Enter 存成 v2、版本歷史「建立文件」、活動紀錄「新增了文件」、集合頁預設集合、首頁和指令面板入口、Viewer 看不到入口且 `?mode=split` 無效、500 px 深色模式；指令面板輸入「新增 Markdown」或「上傳」後按 Enter 會執行指令；「新增 Markdown」按鈕與「上傳」同色。暫時文件在結束時永久刪除。
+  - 回歸：`editor.py` 57 項、`organize.py` 16 項、`wide.py`、`shoot.py` 通過。
+- 指令面板排序（P9 之前就存在的問題，一併修正）：原本文件結果一律排在動作前面，輸入「新增 Markdown」時若有文件內文剛好符合，按 Enter 會開啟文件。現在名稱符合關鍵字的動作與前往項目排在最前面，接著是文件、集合。

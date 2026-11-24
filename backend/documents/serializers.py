@@ -117,6 +117,11 @@ class NewUpload(DocumentMetadata, VersionUpload):
     pass
 
 
+class NewMarkdown(DocumentMetadata):
+    """A Markdown document written in the editor rather than uploaded."""
+    title = serializers.CharField(max_length=240)
+
+
 class MarkdownEdit(VersionUpload):
     base_version = serializers.UUIDField()
 
