@@ -378,7 +378,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="layout">
-      <section class="content" :class="{ wide: mode !== 'read' || file?.format === 'html' }" aria-label="文件內容">
+      <section class="content" :class="{ editing: mode !== 'read' }" aria-label="文件內容">
         <div v-if="loading" class="skeleton" aria-busy="true">
           <Skeleton width="60%" height="2.25rem" />
           <Skeleton width="40%" />
@@ -522,9 +522,10 @@ onBeforeUnmount(() => {
 
 .layout { flex: 1; display: flex; align-items: stretch; min-height: 0; }
 .content { flex: 1; min-width: 0; padding: var(--ui-space-6) clamp(1rem, 4vw, 3.5rem) var(--ui-space-7); box-sizing: border-box; }
-/* Markdown reads at a 48rem measure; HTML previews and the editor use a wider column, title included. */
-.content > * { max-width: 48rem; margin-inline: auto; }
-.content.wide > * { max-width: 72rem; }
+/* Markdown and HTML read in the same 74rem column as the public article page, title included (Markdown was 48rem until 2026-11-24). */
+.content > * { max-width: 74rem; margin-inline: auto; }
+/* Writing Markdown uses all the room there is (the inspector is closed while editing). */
+.content.editing > * { max-width: 120rem; }
 .skeleton { display: grid; gap: var(--ui-space-3); }
 .skeleton .gap { margin-top: var(--ui-space-5); }
 .state { display: grid; justify-items: center; gap: var(--ui-space-3); padding: var(--ui-space-7) 0; color: var(--ui-text-muted); text-align: center; }
@@ -595,7 +596,7 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .panes.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .panes :deep(.editor-host) { border: 1px solid var(--ui-border); }
 .preview {
-  max-height: clamp(28rem, 65vh, 56rem); overflow: auto; padding: var(--ui-space-4) var(--ui-space-5);
+  max-height: clamp(28rem, calc(100vh - 23rem), 64rem); overflow: auto; padding: var(--ui-space-4) var(--ui-space-5);
   border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); box-sizing: border-box; font-size: 1rem;
 }
 .preview-label { display: block; margin-bottom: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; }
