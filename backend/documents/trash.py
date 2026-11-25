@@ -57,7 +57,8 @@ def finish_permanent_deletion(document_id):
     try:
         if not versions.is_dir():
             raise OSError("Version storage is unavailable.")
-        for directory in (versions, base / "quarantine" / "versions", base / "images", base / "quarantine" / "images"):
+        for directory in (versions, base / "quarantine" / "versions", base / "images", base / "quarantine" / "images",
+                          base / "videos", base / "quarantine" / "videos"):
             victim = directory / str(job.document_id)
             if victim.exists():
                 shutil.rmtree(victim)

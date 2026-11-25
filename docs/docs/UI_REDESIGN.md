@@ -1502,3 +1502,30 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 新增 `create.py`（24 項）：標題欄自動聚焦、空白標題不能建立、建立後進入分割預覽且網址不帶參數、v1 內容、游標在第 3 行、輸入內容、Ctrl+S 加 Enter 存成 v2、版本歷史「建立文件」、活動紀錄「新增了文件」、集合頁預設集合、首頁和指令面板入口、Viewer 看不到入口且 `?mode=split` 無效、500 px 深色模式；指令面板輸入「新增 Markdown」或「上傳」後按 Enter 會執行指令；「新增 Markdown」按鈕與「上傳」同色。暫時文件在結束時永久刪除。
   - 回歸：`editor.py` 57 項、`organize.py` 16 項、`wide.py`、`shoot.py` 通過。
 - 指令面板排序（P9 之前就存在的問題，一併修正）：原本文件結果一律排在動作前面，輸入「新增 Markdown」時若有文件內文剛好符合，按 Enter 會開啟文件。現在名稱符合關鍵字的動作與前往項目排在最前面，接著是文件、集合。
+
+### P10a 影片：上傳、播放、清除（後端）（2026-11-25）
+
+- 資料：新增 `DocumentVideo`（所屬文件、sha256、格式 `mp4`／`webm`、大小、上傳者、`uploaded_at`；同一文件同一 sha256 唯一）與 `VersionVideo`（`RESTRICT`），遷移 `0016_document_videos` 只新增資料表，不動圖片。
+- `documents/videos.py`：
+  - `POST /api/documents/<id>/videos/`：Editor 以上、未在回收桶的 Markdown 文件；每人每小時 30 支。
+  - 格式以檔頭判斷：MP4 要有 `ftyp` 且主品牌不是 `qt  `（擋下 `.mov`），WebM 要有 EBML 標頭且 DocType 為 `webm`（擋下其他 Matroska）。錯誤訊息提示轉成 MP4（H.264）。
+  - 上限 `VIDEO_MAX_BYTES`（預設 200 MB）；上傳後磁碟剩餘空間會低於 `VIDEO_MIN_FREE_BYTES`（2 GB）就拒絕，並寫錯誤記錄。
+  - 邊寫邊算 sha256，寫到同一目錄的 `.upload-*` 暫存檔、`fsync` 後在儲存區鎖（共用）內改名；重複上傳回傳既有影片並重新計算寬限期。
+  - `GET /api/videos/<id>/`：權限規則與圖片相同（成員可讀未在回收桶的文件；訪客只能讀公開版本引用的影片；只計算自己文件的引用；一律 404）。回應不含檔案內容，只帶 `X-Accel-Redirect: /_protected/videos/<文件>/<id>.<格式>`、`Content-Type`、`Content-Disposition: inline`、`Cache-Control: private, max-age=600`。
+  - 每次產生版本時記錄 `/api/videos/<id>/` 引用（與圖片共用 `publish_version` 的流程）。
+  - `collect_unused_videos`：規則同圖片（24 小時寬限、被任何版本引用就保留），另外移除超過 24 小時的 `.upload-*` 殘檔（程序中斷時留下）。`collect_unused_images` 指令、上傳時每小時一次的清理、手動維護（新增 `videos` 結果）都會一併處理影片。
+  - 文件永久刪除時連同 `videos/<文件>/` 刪除；`check_document_storage` 一併檢查 `videos/`（略過上傳中的暫存檔）。
+- 部署：
+  - Nginx 以**唯讀**方式只掛載 `document_data` 的 `videos/` 子目錄（Compose volume `subpath`），內部路徑 `/_protected/videos/` 設為 `internal`，加上 `nosniff`、`default-src 'none'; sandbox`、`Vary: Cookie`，由 Nginx 處理 Range。
+  - 影片上傳路徑 `client_max_body_size 201m`，其他文件路徑維持 51m。
+  - 後端使用者改為主要群組 `media`（gid 2101），並固定 uid 999（與既有資料卷的擁有者一致）；Nginx 使用者加入同一群組。影片目錄 `0750`、檔案 `0640`；其他文件檔案仍是 `0700`／`0600`，Nginx 讀不到。
+  - 啟動時新增 `prepare_video_storage`，在 Nginx 啟動前建立 `videos/`。README 補上說明。
+- 前端：系統資訊頁「儲存空間」新增「文件中的影片（n 支）」，「背景工作」新增「待清理的未使用影片」，手動維護結果新增「清理未使用影片」。
+- 驗證：
+  - 後端新增 `test_videos.py` 25 項，全部 178 項通過；`ruff`、`makemigrations --check`、`smoke.sh` 通過。
+  - 透過 Nginx 的實測 `videos_api.py`（16 項）：60 MB 影片可上傳、成員取得完整檔案與正確標頭、Range 回 206 且內容正確、訪客 404、直接存取 `/_protected/` 回 404、202 MB 被 Nginx 擋下（413）、`.mov` 被拒、一般文件上傳仍是 51 MB 上限；暫時文件結束時永久刪除。
+  - 回歸：`maintenance.py`（12 項，結果改為 5 行）、`system.py`、`images.py`（21 項）通過。
+- 拖放修正（P7b 就存在的問題，使用者把影片拖進編輯區時發現）：
+  - 原本拖曳檔案到頁面上時，全頁都會出現「放開即可上傳（建立新文件）」浮層，連編輯區上方也一樣；檔案放進編輯區後，編輯器會攔下事件，外層收不到 `drop`，浮層因此一直留在畫面上。不支援的檔案（例如影片）還會被默默忽略。
+  - 現在拖到編輯區上方時，不顯示全頁浮層，改由編輯器顯示藍框和「放開即可插入圖片」提示；任何 `drop` 或取消拖曳都會收起浮層（`window` 的 capture 監聽）。放進編輯區的不支援檔案會跳出通知說明原因。編輯區以外的地方仍照舊建立新文件。
+  - 新增 `dropzone.py`（8 項）；回歸 `editor.py` 57 項、`images.py` 21 項通過。

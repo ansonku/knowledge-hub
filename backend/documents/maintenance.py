@@ -6,6 +6,7 @@ from django.http import Http404
 
 from . import search, storage
 from .images import collect_unused_images
+from .videos import collect_unused_videos
 from .consistency import inspect_storage
 from .models import PendingDocumentDeletion, Version
 from .trash import finish_permanent_deletion
@@ -47,6 +48,11 @@ def remove_unused_images():
     return {"removed": count, "bytes": size}
 
 
+def remove_unused_videos():
+    count, size = collect_unused_videos()
+    return {"removed": count, "bytes": size}
+
+
 def check_storage():
     """Read-only: counts only, never paths, so nothing about the server layout reaches the page."""
     checked, missing, unreferenced = inspect_storage()
@@ -59,5 +65,6 @@ STEPS = (
     ("deletions", retry_deletions),
     ("index", index_missing),
     ("images", remove_unused_images),
+    ("videos", remove_unused_videos),
     ("storage", check_storage),
 )

@@ -52,6 +52,14 @@ services:
       dockerfile: nginx/Dockerfile
     ports:
       - "127.0.0.1:${HUB_PORT:-18080}:80"
+    # Only the videos folder, read-only: nginx sends video files after Django checks access (X-Accel-Redirect).
+    volumes:
+      - type: volume
+        source: document_data
+        target: /var/lib/knowledge-hub/videos
+        read_only: true
+        volume:
+          subpath: videos
     depends_on:
       backend:
         condition: service_healthy

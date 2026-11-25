@@ -57,6 +57,7 @@ class MaintenanceTests(TransactionTestCase):
             "deletions": {"done": 0, "failed": 0},
             "index": {"indexed": 0, "failed": 0},
             "images": {"removed": 0, "bytes": 0},
+            "videos": {"removed": 0, "bytes": 0},
             "storage": {"checked": 1, "missing": 0, "unreferenced": 0},
         })
 

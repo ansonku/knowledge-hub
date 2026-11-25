@@ -142,20 +142,29 @@ function onPicked() {
 function hasFiles(event: DragEvent) {
   return [...(event.dataTransfer?.types ?? [])].includes('Files')
 }
+const dragging = ref(false)
 function onDragOver(event: DragEvent) {
   if (!props.uploadImage || props.readonly || !hasFiles(event)) return
   event.preventDefault()
+  dragging.value = true
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
+function onDragLeave(event: DragEvent) {
+  if (!root.value?.contains(event.relatedTarget as Node | null)) dragging.value = false
+}
 function onDrop(event: DragEvent) {
+  dragging.value = false
   if (!props.uploadImage || props.readonly || !hasFiles(event) || !instance) return
   event.preventDefault()
   event.stopPropagation()
   const target = instance.getTargetAtClientPoint(event.clientX, event.clientY)?.position
   if (target) instance.setPosition(target)
   instance.focus()
-  void insertImages(imagesFrom(event.dataTransfer?.files))
+  // Every dropped file gets an answer: unsupported ones (videos until P10b, PDFs…) are named in a notice.
+  void insertImages(Array.from(event.dataTransfer?.files ?? []))
 }
+
+const onDragEnd = () => { dragging.value = false }
 
 // Status bar
 const words = ref(0)
@@ -252,6 +261,8 @@ onMounted(() => {
   root.value?.addEventListener('paste', onPaste, true)
   root.value?.addEventListener('dragover', onDragOver, true)
   root.value?.addEventListener('drop', onDrop, true)
+  root.value?.addEventListener('dragleave', onDragLeave, true)
+  window.addEventListener('dragend', onDragEnd, true)
   updateCounts()
 })
 
@@ -264,13 +275,15 @@ onBeforeUnmount(() => {
   root.value?.removeEventListener('paste', onPaste, true)
   root.value?.removeEventListener('dragover', onDragOver, true)
   root.value?.removeEventListener('drop', onDrop, true)
+  root.value?.removeEventListener('dragleave', onDragLeave, true)
+  window.removeEventListener('dragend', onDragEnd, true)
   instance?.dispose()
   model?.dispose()
 })
 </script>
 
 <template>
-  <div ref="root" class="md-editor">
+  <div ref="root" class="md-editor" :class="{ dragging }" :data-file-drop="uploadImage && !readonly ? '' : undefined">
     <div class="toolbar" role="toolbar" aria-label="Markdown 格式">
       <template v-for="(group, index) in visibleGroups" :key="index">
         <span v-if="index" class="sep" aria-hidden="true" />
@@ -285,6 +298,9 @@ onBeforeUnmount(() => {
     <input ref="picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
       aria-hidden="true" tabindex="-1" @change="onPicked">
     <div ref="host" class="editor-host" />
+    <div v-if="dragging" class="drop-hint" aria-hidden="true">
+      <UiIcon name="image" :size="20" /><span>放開即可插入圖片（PNG、JPEG、GIF、WebP）</span>
+    </div>
     <div class="status" aria-live="off">
       <span v-if="uploading" class="uploading" role="status">正在上傳 {{ uploading }} 張圖片…</span>
       <span>{{ words.toLocaleString() }} 字</span>
@@ -312,6 +328,13 @@ onBeforeUnmount(() => {
 .tool:disabled { opacity: .45; cursor: default; }
 .sep { width: 1px; height: 1.25rem; margin: 0 .25rem; background: var(--ui-border-strong); }
 .editor-host { flex: 1; min-height: 0; }
+.md-editor { position: relative; }
+.md-editor.dragging { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-accent-soft); }
+.drop-hint {
+  position: absolute; left: 50%; bottom: 2.75rem; transform: translateX(-50%); display: inline-flex; align-items: center; gap: var(--ui-space-2);
+  padding: var(--ui-space-2) var(--ui-space-4); border-radius: var(--ui-radius-md); background: var(--ui-accent); color: #fff;
+  font-weight: 600; box-shadow: var(--ui-shadow-lg); pointer-events: none; white-space: nowrap; z-index: 5;
+}
 .editor-host :deep(.md-uploading) { color: var(--ui-text-muted); font-style: italic; }
 .uploading { margin-right: auto; color: var(--ui-accent); font-weight: 600; }
 .status {

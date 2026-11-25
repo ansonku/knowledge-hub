@@ -1,7 +1,7 @@
-"""Compare the files on disk with the database: committed version files and pasted images."""
+"""Compare the files on disk with the database: committed version files, pasted images and embedded videos."""
 from django.db import connection, transaction
 
-from .models import DocumentImage, PendingDocumentDeletion, Version
+from .models import DocumentImage, DocumentVideo, PendingDocumentDeletion, Version
 from .services import STORAGE_LOCK_KEY
 from .storage import root, sync_directory
 
@@ -22,10 +22,13 @@ def inspect_storage(*, quarantine=False):
     base = root()
     expected = set(Version.objects.values_list("path", flat=True))
     expected |= {image.path for image in DocumentImage.objects.only("pk", "document_id", "format")}
+    expected |= {video.path for video in DocumentVideo.objects.only("pk", "document_id", "format")}
     pending = {str(item) for item in PendingDocumentDeletion.objects.values_list("pk", flat=True)}
     present = {
-        str(path.relative_to(base)) for folder in ("versions", "images") for path in (base / folder).glob("*/*")
-        if path.is_file() and path.parent.name not in pending
+        str(path.relative_to(base)) for folder in ("versions", "images", "videos")
+        for path in (base / folder).glob("*/*")
+        # .upload-* are videos still arriving; they never get a row of their own.
+        if path.is_file() and path.parent.name not in pending and not path.name.startswith(".upload-")
     }
     unreferenced = sorted(present - expected)
     if quarantine:

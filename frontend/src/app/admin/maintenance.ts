@@ -4,6 +4,7 @@ export type MaintenanceResults = {
   deletions?: { done: number; failed: number } | StepError
   index?: { indexed: number; failed: number } | StepError
   images?: { removed: number; bytes: number } | StepError
+  videos?: { removed: number; bytes: number } | StepError
   storage?: { checked: number; missing: number; unreferenced: number } | StepError
 }
 export type MaintenanceRun = { at: string; actor: string | null; results: MaintenanceResults }
@@ -19,13 +20,15 @@ const failed = (step: object | undefined): step is StepError => !!step && 'error
 
 export function maintenanceLines(results: MaintenanceResults): MaintenanceLine[] {
   const lines: MaintenanceLine[] = []
-  const { deletions, index, images, storage } = results
+  const { deletions, index, images, videos, storage } = results
   if (deletions) lines.push(failed(deletions) ? { label: '檔案清理重試', value: '執行失敗', alert: true }
     : { label: '檔案清理重試', value: `完成 ${deletions.done} 件${deletions.failed ? `，仍失敗 ${deletions.failed} 件` : ''}`, alert: deletions.failed > 0 })
   if (index) lines.push(failed(index) ? { label: '補建搜尋索引', value: '執行失敗', alert: true }
     : { label: '補建搜尋索引', value: `${index.indexed} 份${index.failed ? `，失敗 ${index.failed} 份` : ''}`, alert: index.failed > 0 })
   if (images) lines.push(failed(images) ? { label: '清理未使用圖片', value: '執行失敗', alert: true }
     : { label: '清理未使用圖片', value: images.removed ? `${images.removed} 張（${size(images.bytes)}）` : '0 張', alert: false })
+  if (videos) lines.push(failed(videos) ? { label: '清理未使用影片', value: '執行失敗', alert: true }
+    : { label: '清理未使用影片', value: videos.removed ? `${videos.removed} 支（${size(videos.bytes)}）` : '0 支', alert: false })
   if (storage) lines.push(failed(storage) ? { label: '一致性檢查', value: '執行失敗', alert: true }
     : {
         label: '一致性檢查',
