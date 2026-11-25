@@ -4,7 +4,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import UiIcon, { type IconName } from './app/components/UiIcon.vue'
 import { GALLERY_LAYOUTS, LAYOUT_LABELS } from './gallery'
 import { plainSnippet, SHORTCUTS, SNIPPETS, type Snippet } from './markdownSnippets'
-import { helpers, registerMarkdownHelpers } from './markdownCompletions'
+import { helpers, inFence, registerMarkdownHelpers } from './markdownCompletions'
+import { DOC_LINK, resolveLinks } from './app/links'
 import {
   continueList, countWords, indentList, insertBlockStyle, insertGallery, insertLink, pasteAsLink, toggleInline, toggleLines,
   type BlockStyle, type InlineStyle, type LineStyle,
@@ -15,6 +16,8 @@ const props = defineProps<{
   readonly: boolean
   /** Focus the editor with the cursor at the end, e.g. in a document that was just created. */
   autofocus?: boolean
+  /** The document being edited (left out of document link suggestions). */
+  documentId?: string
   /** Uploads one image and resolves with its address; without it the editor takes no images or videos. */
   uploadImage?: (file: File) => Promise<{ url: string }>
   /** Uploads one video, reporting progress; aborting the signal cancels it. Without it the editor takes no videos. */
@@ -126,10 +129,18 @@ function pick(kind: 'image' | 'video') {
   else if (props.uploadVideo) videoPicker.value?.click()
 }
 type SnippetEditor = { insert: (template: string) => void }
+/** Types `[[` at the cursor and opens the document search (P13b). */
+function startDocLink() {
+  const ed = instance, sel = ed?.getSelection()
+  if (!ed || !sel || props.readonly) return
+  ed.executeEdits('doclink', [{ range: sel, text: '[[', forceMoveMarkers: true }])
+  ed.trigger('doclink', 'editor.action.triggerSuggest', {})
+}
 function insertSnippet(snippet: Snippet) {
   const ed = instance, model = ed?.getModel(), sel = ed?.getSelection()
   if (!ed || !model || !sel || props.readonly) return
   ed.focus()
+  if (snippet.action === 'doclink') { startDocLink(); return }
   if (snippet.action) { pick(snippet.action); return }
   if (snippet.block && model.getLineContent(sel.endLineNumber).trim()) {
     // Block syntax starts on a line of its own, after a blank line.
@@ -326,9 +337,51 @@ function reportScroll() {
  * Pasting an address over selected text makes a link; pasting a picture (with no text alongside it,
  * unlike copied spreadsheet cells) uploads it; everything else pastes as usual.
  */
+/** A pasted address of one of this site's documents, as the short path a link should use. */
+function pastedDocument(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed || /\s/.test(trimmed)) return undefined
+  try {
+    const url = new URL(trimmed, location.href)
+    const id = /^(https?:)?\/\//.test(trimmed) && url.origin !== location.origin ? undefined : DOC_LINK.exec(url.pathname)?.[1]
+    return id && /^(https?:\/\/|\/)/.test(trimmed) ? { id: id.toLowerCase(), path: `/app/docs/${id.toLowerCase()}/${url.hash}` } : undefined
+  } catch {
+    return undefined
+  }
+}
+/** P13b: pasting a document's address inserts [its current title](/app/docs/<id>/); unknown ones paste as they are. */
+async function pasteDocLink(text: string, target: { id: string; path: string }) {
+  const ed = instance
+  if (!ed) return
+  const states = await resolveLinks([target.id])
+  const state = states[target.id]
+  const sel = ed.getSelection()
+  if (!sel) return
+  const title = state?.status === 'ok' && state.title ? state.title.replace(/[[\]]/g, '\\$&') : undefined
+  const inserted = title ? `[${title}](${target.path})` : text
+  ed.pushUndoStop()
+  ed.executeEdits('paste', [{ range: sel, text: inserted, forceMoveMarkers: true }])
+  ed.pushUndoStop()
+}
 function onPaste(event: ClipboardEvent) {
   if (!instance || props.readonly || !instance.hasTextFocus()) return
   const text = event.clipboardData?.getData('text/plain') ?? ''
+  const linked = !event.clipboardData?.files.length ? pastedDocument(text) : undefined
+  if (linked) {
+    event.preventDefault()
+    event.stopPropagation()
+    // Selected text (on one line) becomes the link text; otherwise the document's current title does.
+    const sel = instance.getSelection(), current = instance.getModel()
+    const chosen = sel && current && !sel.isEmpty() && sel.startLineNumber === sel.endLineNumber ? current.getValueInRange(sel) : ''
+    if (chosen && !chosen.includes('](')) {
+      instance.pushUndoStop()
+      instance.executeEdits('paste', [{ range: sel!, text: `[${chosen}](${linked.path})`, forceMoveMarkers: true }])
+      instance.pushUndoStop()
+    } else {
+      void pasteDocLink(text, linked)
+    }
+    return
+  }
   const media = mediaFrom(event.clipboardData?.files)
   if (!text && media.length && props.uploadImage) {
     event.preventDefault()
@@ -377,7 +430,30 @@ onMounted(() => {
   ed.addAction({ id: 'md.save', label: '儲存', keybindings: [KeyMod.CtrlCmd | KeyCode.KeyS], run: () => emit('save') })
   ed.addAction({ id: 'md.help', label: '語法說明', keybindings: [KeyMod.CtrlCmd | KeyCode.Slash], run: () => toggleHelp() })
   registerMarkdownHelpers()
-  if (model) helpers.set(model.uri.toString(), { readonly: () => props.readonly, pick })
+  // The document search after `[[` (P13b) closes in several ways Monaco does not undo by itself: a space ends
+  // the session, an input method composing Chinese hides the list, and switching input methods can take the focus
+  // away for a moment. Whenever the cursor is still in a `[[…` search and no list is showing, open it again.
+  let reopen = 0
+  const reopenSearch = () => {
+    window.clearTimeout(reopen)
+    reopen = window.setTimeout(() => {
+      const position = ed.getPosition(), current = ed.getModel()
+      if (!position || !current || props.readonly || !ed.hasWidgetFocus()) return
+      const before = current.getValueInRange(new Range(position.lineNumber, 1, position.lineNumber, position.column))
+      const search = /\[\[([^[\]\n]{0,80})$/.exec(before)
+      if (!search || inFence(current, position.lineNumber)) return
+      const showing = !!root.value?.querySelector('.suggest-widget.visible')
+      // A space starts a new word: refresh even a showing list so it searches with every word typed.
+      if (showing && !/\s/.test(search[1])) return
+      if (showing) ed.trigger('doclink', 'hideSuggestWidget', {})
+      ed.trigger('doclink', 'editor.action.triggerSuggest', {})
+    }, 150)
+  }
+  model.onDidChangeContent(reopenSearch)
+  ed.onDidCompositionEnd(reopenSearch)
+  ed.onDidFocusEditorText(reopenSearch)
+  ed.onDidFocusEditorWidget(reopenSearch)
+  if (model) helpers.set(model.uri.toString(), { readonly: () => props.readonly, pick, documentId: () => props.documentId })
   ed.onKeyDown(event => {
     // Never act while an input method is composing: Enter there confirms the Chinese text.
     if (props.readonly || event.browserEvent.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
@@ -466,7 +542,7 @@ onBeforeUnmount(() => {
           <div class="help-item-head">
             <span class="help-label">{{ item.label }}</span>
             <button type="button" class="help-insert" :disabled="readonly" @click="insertSnippet(item)">
-              {{ item.action ? '選擇檔案' : '插入' }}
+              {{ item.action === 'image' || item.action === 'video' ? '選擇檔案' : '插入' }}
             </button>
           </div>
           <p class="help-desc">{{ item.description }}</p>

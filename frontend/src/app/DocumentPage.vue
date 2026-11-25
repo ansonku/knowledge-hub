@@ -663,7 +663,7 @@ onBeforeUnmount(() => {
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage"
+              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage" :document-id="file.id"
                 :upload-video="uploadVideo" @notify="notify" @uploading="uploadsRunning = $event"
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">

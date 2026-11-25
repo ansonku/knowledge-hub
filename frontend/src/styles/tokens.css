@@ -38,7 +38,7 @@
   --ui-shadow-lg: 0 12px 32px rgb(16 24 40 / .16);
 
   /* Layout */
-  --ui-sidebar-width: 15rem;
+  --ui-sidebar-width: 16.5rem;
   --ui-inspector-width: 20rem;
   --ui-topbar-height: 3.5rem;
   --ui-target: 2.75rem; /* minimum touch target */
