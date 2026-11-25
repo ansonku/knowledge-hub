@@ -81,6 +81,15 @@ function uploadImage(image: File) {
   form.append('file', image)
   return upload<{ url: string }>(`/api/documents/${encodeURIComponent(documentId.value)}/images/`, form)
 }
+/** Videos can be large: no time limit, progress for the placeholder, and cancelling when the placeholder goes. */
+function uploadVideo(video: File, progress: (percent: number) => void, signal: AbortSignal) {
+  const form = new FormData()
+  form.append('file', video)
+  return upload<{ url: string }>(`/api/documents/${encodeURIComponent(documentId.value)}/videos/`, form, progress,
+    { timeout: 0, signal })
+}
+/** Image or video uploads still running in the editor: saving would keep their placeholders, leaving stops them. */
+const uploadsRunning = ref(0)
 function notify(message: string) {
   toast.add({ severity: 'error', summary: message, life: 6000 })
 }
@@ -157,6 +166,7 @@ watch(mode, (next, previous) => {
 })
 
 async function save() {
+  if (uploadsRunning.value) return
   const number = await doc.save(note.value)
   if (!number) return
   note.value = ''
@@ -373,10 +383,12 @@ function onRestored() {
 
 // ---- Leaving with unsaved changes ------------------------------------------------
 function canLeave() {
-  return !saving.value && (!dirty.value || window.confirm('離開會捨棄未儲存的草稿，要繼續嗎？'))
+  if (saving.value) return false
+  if (uploadsRunning.value) return window.confirm('還有檔案正在上傳，離開會中斷上傳並捨棄未儲存的草稿，要繼續嗎？')
+  return !dirty.value || window.confirm('離開會捨棄未儲存的草稿，要繼續嗎？')
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value || saving.value) {
+  if (dirty.value || saving.value || uploadsRunning.value) {
     event.preventDefault()
     event.returnValue = ''
   }
@@ -470,7 +482,9 @@ onBeforeUnmount(() => {
             </div>
             <div v-if="canEdit" class="modes" role="group" aria-label="檢視模式">
               <button v-for="item in modes" :key="item.value" type="button" class="mode" :class="{ on: mode === item.value }"
-                :aria-pressed="mode === item.value" :disabled="saving" @click="setMode(item.value)">{{ item.label }}</button>
+                :aria-pressed="mode === item.value" :disabled="saving || (uploadsRunning > 0 && item.value === 'read')"
+                :title="uploadsRunning && item.value === 'read' ? '檔案上傳完成後才能切換到閱讀' : undefined"
+                @click="setMode(item.value)">{{ item.label }}</button>
             </div>
           </div>
 
@@ -489,12 +503,14 @@ onBeforeUnmount(() => {
               <InputText id="version-note" v-model="note" maxlength="500" placeholder="更新說明（選填），按 Enter 儲存" size="small"
                 class="note" :disabled="saving" />
               <Button v-if="dirty" type="button" label="捨棄變更" text severity="secondary" size="small" :disabled="saving" @click="discard" />
+              <span v-if="uploadsRunning" class="upload-wait" role="status">檔案上傳中，完成後才能儲存</span>
               <Button type="submit" :label="`儲存為 v${file.current_version.number + 1}`" size="small" :loading="saving"
-                :disabled="!dirty || !draft.trim()" />
+                :disabled="!dirty || !draft.trim() || uploadsRunning > 0" />
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage" @notify="notify"
+              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage"
+                :upload-video="uploadVideo" @notify="notify" @uploading="uploadsRunning = $event"
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
                 <span class="preview-label">即時預覽</span>
@@ -652,6 +668,7 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .draft-state.dirty { color: var(--ui-lagging-text); }
 .draft-state.dirty .dot { background: var(--ui-lagging-dot); }
 .note { flex: 1 1 14rem; max-width: 24rem; }
+.upload-wait { color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; white-space: nowrap; }
 .panes { display: grid; gap: var(--ui-space-3); min-height: var(--editor-height); }
 .panes.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .preview {

@@ -45,13 +45,25 @@ export function isAuthError(error: unknown) {
   return error instanceof ApiError && (error.status === 401 || error.status === 403)
 }
 
+export type UploadOptions = {
+  /** Milliseconds; 0 waits as long as the transfer takes (large videos). */
+  timeout?: number
+  /** Aborting rejects with a DOMException named "AbortError". */
+  signal?: AbortSignal
+}
+
 /** Multipart upload with progress; resolves with the JSON body of a 200 or 201 response. */
-export function upload<T = unknown>(url: string, data: FormData, onProgress?: (percent: number) => void): Promise<T> {
+export function upload<T = unknown>(url: string, data: FormData, onProgress?: (percent: number) => void,
+  options: UploadOptions = {}): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    const { signal } = options
+    if (signal?.aborted) { reject(new DOMException('Upload cancelled', 'AbortError')); return }
     const request = new XMLHttpRequest()
     request.open('POST', url)
     request.responseType = 'json'
-    request.timeout = 180_000
+    request.timeout = options.timeout ?? 180_000
+    signal?.addEventListener('abort', () => request.abort(), { once: true })
+    request.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'))
     request.setRequestHeader('X-CSRFToken', csrfToken)
     request.upload.onprogress = event => {
       if (event.lengthComputable) onProgress?.(Math.round(event.loaded * 100 / event.total))

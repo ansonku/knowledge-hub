@@ -12,8 +12,10 @@ const props = defineProps<{
   readonly: boolean
   /** Focus the editor with the cursor at the end, e.g. in a document that was just created. */
   autofocus?: boolean
-  /** Uploads one image and resolves with its address; without it the editor takes no images. */
+  /** Uploads one image and resolves with its address; without it the editor takes no images or videos. */
   uploadImage?: (file: File) => Promise<{ url: string }>
+  /** Uploads one video, reporting progress; aborting the signal cancels it. Without it the editor takes no videos. */
+  uploadVideo?: (file: File, progress: (percent: number) => void, signal: AbortSignal) => Promise<{ url: string }>
 }>()
 const emit = defineEmits<{
   /** A message for the writer, such as a refused or failed image upload. */
@@ -22,6 +24,8 @@ const emit = defineEmits<{
   save: []
   /** The source line (1-based, fractional) at the top of the editor, or Infinity at the very bottom. */
   scrollLine: [line: number]
+  /** How many image or video uploads are still running (the page holds saving and leaving meanwhile). */
+  uploading: [count: number]
 }>()
 const root = ref<HTMLElement>()
 const host = ref<HTMLElement>()
@@ -37,7 +41,8 @@ type Tool = Look & (
   | { kind: 'line'; style: LineStyle }
   | { kind: 'block'; style: BlockStyle }
   | { kind: 'link' }
-  | { kind: 'image' })
+  | { kind: 'image' }
+  | { kind: 'video' })
 const groups: Tool[][] = [
   [
     { kind: 'line', style: 'h2', text: 'H2', label: '標題 2' },
@@ -50,6 +55,7 @@ const groups: Tool[][] = [
     { kind: 'inline', style: 'code', icon: 'code', label: '行內程式碼' },
     { kind: 'link', icon: 'link', label: '連結', keys: 'K' },
     { kind: 'image', icon: 'image', label: '插入圖片' },
+    { kind: 'video', icon: 'video', label: '插入影片（MP4、WebM，200 MB 以內）' },
   ],
   [
     { kind: 'line', style: 'quote', icon: 'quote', label: '引用' },
@@ -72,71 +78,138 @@ function apply(tool: Tool) {
   else if (tool.kind === 'line') toggleLines(instance, tool.style)
   else if (tool.kind === 'block') insertBlockStyle(instance, tool.style)
   else if (tool.kind === 'image') picker.value?.click()
+  else if (tool.kind === 'video') videoPicker.value?.click()
   else insertLink(instance)
 }
-const visibleGroups = computed(() => props.uploadImage ? groups : groups.map(group => group.filter(tool => tool.kind !== 'image')))
+const visibleGroups = computed(() => groups.map(group => group.filter(tool =>
+  (tool.kind !== 'image' || props.uploadImage) && (tool.kind !== 'video' || (props.uploadImage && props.uploadVideo)))))
 
-// ---- Images: paste, drop or pick; each gets a placeholder until its upload finishes ----
+// ---- Images and videos: paste, drop or pick; each gets a placeholder until its upload finishes ----
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const VIDEO_TYPES = ['video/mp4', 'video/webm']
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const PLACEHOLDER = '![上傳中…]()'
+const MAX_VIDEO_BYTES = 200 * 1024 * 1024 // VIDEO_MAX_BYTES on the server
+const PLACEHOLDER = { image: '![上傳中…]()', video: '![影片上傳中…]()' } as const
+type Kind = keyof typeof PLACEHOLDER
 const picker = ref<HTMLInputElement>()
-const uploading = ref(0)
+const videoPicker = ref<HTMLInputElement>()
+/** Uploads not finished yet; a video shows its progress in the status bar. */
+const pending = ref<{ id: number; kind: Kind; percent: number }[]>([])
+let nextUpload = 0
+const uploadingImages = computed(() => pending.value.filter(item => item.kind === 'image').length)
+const uploadingVideo = computed(() => pending.value.find(item => item.kind === 'video'))
+watch(() => pending.value.length, count => emit('uploading', count))
+const cancels = new Set<AbortController>()
 
-function altText(file: File) {
+function altText(file: File, kind: Kind) {
+  const fallback = kind === 'image' ? '圖片' : '影片'
   const stem = file.name.replace(/\.[^.]*$/, '').replace(/[[\]()\\\r\n]+/g, ' ').trim().slice(0, 100)
-  return !stem || /^image$/i.test(stem) ? '圖片' : stem
+  return !stem || /^(image|video)$/i.test(stem) ? fallback : stem
 }
 
-function imagesFrom(list: FileList | null | undefined) {
-  return Array.from(list ?? []).filter(file => file.type.startsWith('image/'))
+function kindOf(file: File): Kind | undefined {
+  if (IMAGE_TYPES.includes(file.type)) return 'image'
+  // Some systems report no type (or a generic one) for .webm; the server checks the header either way.
+  const typeless = !file.type || file.type === 'application/octet-stream'
+  if (props.uploadVideo && (VIDEO_TYPES.includes(file.type) || (typeless && /\.(mp4|webm)$/i.test(file.name)))) return 'video'
 }
 
-async function insertImages(files: File[]) {
-  const ed = instance, upload = props.uploadImage
-  if (!ed || !upload || props.readonly || !files.length) return
-  const accepted = files.filter(file => {
-    if (!IMAGE_TYPES.includes(file.type)) emit('notify', `「${file.name}」不是 PNG、JPEG、GIF 或 WebP 圖片。`)
-    else if (file.size > MAX_IMAGE_BYTES) emit('notify', `「${file.name}」超過 10 MB。`)
-    else return true
-    return false
-  })
+/** Why a file cannot go in, or nothing when it can. */
+function refusal(file: File, kind: Kind | undefined) {
+  if (!kind) {
+    if (props.uploadVideo && (file.type === 'video/quicktime' || /\.mov$/i.test(file.name))) {
+      return `「${file.name}」是 QuickTime（.mov）影片，請先轉成 MP4（H.264）再上傳。`
+    }
+    return props.uploadVideo
+      ? `「${file.name}」不是可以插入的圖片或影片（PNG、JPEG、GIF、WebP、MP4、WebM）。`
+      : `「${file.name}」不是 PNG、JPEG、GIF 或 WebP 圖片。`
+  }
+  if (kind === 'image' && file.size > MAX_IMAGE_BYTES) return `「${file.name}」超過 10 MB。`
+  if (kind === 'video' && file.size > MAX_VIDEO_BYTES) return `「${file.name}」超過 200 MB。`
+  if (!file.size) return `「${file.name}」是空白檔案。`
+}
+
+function mediaFrom(list: FileList | null | undefined) {
+  return Array.from(list ?? []).filter(file => file.type.startsWith('image/') || file.type.startsWith('video/'))
+}
+
+async function insertFiles(files: File[]) {
+  const ed = instance
+  if (!ed || !props.uploadImage || props.readonly || !files.length) return
+  const accepted: { file: File; kind: Kind }[] = []
+  for (const file of files) {
+    const kind = kindOf(file)
+    const reason = refusal(file, kind)
+    if (reason) emit('notify', reason)
+    else accepted.push({ file, kind: kind! })
+  }
   if (!accepted.length) return
+  const texts = accepted.map(item => PLACEHOLDER[item.kind])
   const start = ed.getSelection() ?? new Selection(1, 1, 1, 1)
   ed.pushUndoStop()
-  ed.executeEdits('image', [{ range: start, text: accepted.map(() => PLACEHOLDER).join('\n'), forceMoveMarkers: true }])
+  ed.executeEdits('upload', [{ range: start, text: texts.join('\n'), forceMoveMarkers: true }])
   ed.pushUndoStop()
-  // Decorations follow the placeholders while the writer keeps typing elsewhere.
-  const marks = ed.createDecorationsCollection(accepted.map((_, index) => {
+  // Decorations follow the placeholders while the writer keeps typing elsewhere; a video's shows its progress.
+  const look = (percent?: number) => ({
+    stickiness: editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges, inlineClassName: 'md-uploading',
+    ...(percent === undefined ? {} : { after: { content: ` ${percent}%`, inlineClassName: 'md-uploading-progress' } }),
+  })
+  const marks = ed.createDecorationsCollection(texts.map((text, index) => {
     const line = start.startLineNumber + index
     const column = index ? 1 : start.startColumn
-    return {
-      range: new Range(line, column, line, column + PLACEHOLDER.length),
-      options: { stickiness: editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges, inlineClassName: 'md-uploading' },
-    }
+    return { range: new Range(line, column, line, column + text.length), options: look() }
   }))
-  uploading.value += accepted.length
-  for (const [index, file] of accepted.entries()) {
-    let replacement = ''
-    try {
-      const { url } = await upload(file)
-      replacement = `![${altText(file)}](${url})`
-    } catch (cause) {
-      emit('notify', `「${file.name}」上傳失敗：${cause instanceof Error ? cause.message : '請稍後再試。'}`)
-    }
-    uploading.value--
+  const ids = accepted.map(() => ++nextUpload)
+  pending.value = [...pending.value, ...accepted.map((item, index) => ({ id: ids[index], kind: item.kind, percent: 0 }))]
+  const done = (id: number) => { pending.value = pending.value.filter(other => other.id !== id) }
+  const setPercent = (id: number, percent: number) => {
+    pending.value = pending.value.map(other => other.id === id ? { ...other, percent } : other)
+  }
+  // A placeholder the writer deleted (or undid) means "never mind".
+  const stillThere = (index: number) => {
     const range = marks.getRange(index)
-    const current = ed.getModel()
-    // If the writer deleted the placeholder meanwhile, leave the text alone (the unused upload is cleaned up later).
-    if (!range || !current || current.getValueInRange(range) !== PLACEHOLDER) continue
-    ed.executeEdits('image', [{ range, text: replacement }])
+    return !!range && ed.getModel()?.getValueInRange(range) === texts[index]
+  }
+  const showProgress = (index: number, percent: number) => {
+    marks.set(texts.map((_, other) => ({
+      range: marks.getRange(other) ?? new Range(1, 1, 1, 1),
+      options: look(other === index ? percent : undefined),
+    })))
+  }
+  for (const [index, { file, kind }] of accepted.entries()) {
+    if (!stillThere(index)) { done(ids[index]); continue }
+    let replacement = ''
+    const cancel = new AbortController()
+    cancels.add(cancel)
+    const watcher = ed.getModel()?.onDidChangeContent(() => { if (!stillThere(index)) cancel.abort() })
+    try {
+      const { url } = kind === 'image'
+        ? await props.uploadImage(file)
+        : await props.uploadVideo!(file, percent => {
+          setPercent(ids[index], percent)
+          showProgress(index, percent)
+        }, cancel.signal)
+      replacement = `![${altText(file, kind)}](${url})`
+    } catch (cause) {
+      if (!cancel.signal.aborted) {
+        emit('notify', `「${file.name}」上傳失敗：${cause instanceof Error ? cause.message : '請稍後再試。'}`)
+      }
+    } finally {
+      watcher?.dispose()
+      cancels.delete(cancel)
+      done(ids[index])
+    }
+    // If the writer deleted the placeholder meanwhile, leave the text alone (an unused upload is cleaned up later).
+    if (!stillThere(index)) continue
+    ed.executeEdits('upload', [{ range: marks.getRange(index)!, text: replacement }])
   }
   marks.clear()
 }
 
-function onPicked() {
-  void insertImages(imagesFrom(picker.value?.files))
-  if (picker.value) picker.value.value = ''
+function onPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  void insertFiles(Array.from(input.files ?? []))
+  input.value = ''
 }
 
 function hasFiles(event: DragEvent) {
@@ -160,8 +233,8 @@ function onDrop(event: DragEvent) {
   const target = instance.getTargetAtClientPoint(event.clientX, event.clientY)?.position
   if (target) instance.setPosition(target)
   instance.focus()
-  // Every dropped file gets an answer: unsupported ones (videos until P10b, PDFs…) are named in a notice.
-  void insertImages(Array.from(event.dataTransfer?.files ?? []))
+  // Every dropped file gets an answer: unsupported ones (.mov, PDFs…) are named in a notice.
+  void insertFiles(Array.from(event.dataTransfer?.files ?? []))
 }
 
 const onDragEnd = () => { dragging.value = false }
@@ -197,11 +270,11 @@ function reportScroll() {
 function onPaste(event: ClipboardEvent) {
   if (!instance || props.readonly || !instance.hasTextFocus()) return
   const text = event.clipboardData?.getData('text/plain') ?? ''
-  const images = imagesFrom(event.clipboardData?.files)
-  if (!text && images.length && props.uploadImage) {
+  const media = mediaFrom(event.clipboardData?.files)
+  if (!text && media.length && props.uploadImage) {
     event.preventDefault()
     event.stopPropagation()
-    void insertImages(images)
+    void insertFiles(media)
     return
   }
   if (pasteAsLink(instance, text)) {
@@ -277,6 +350,9 @@ onBeforeUnmount(() => {
   root.value?.removeEventListener('drop', onDrop, true)
   root.value?.removeEventListener('dragleave', onDragLeave, true)
   window.removeEventListener('dragend', onDragEnd, true)
+  // Leaving the editor stops uploads that would only land in a draft nobody sees.
+  for (const cancel of cancels) cancel.abort()
+  if (pending.value.length) emit('uploading', 0)
   instance?.dispose()
   model?.dispose()
 })
@@ -297,12 +373,19 @@ onBeforeUnmount(() => {
     </div>
     <input ref="picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
       aria-hidden="true" tabindex="-1" @change="onPicked">
+    <input ref="videoPicker" type="file" accept="video/mp4,video/webm,.mp4,.webm" hidden
+      aria-hidden="true" tabindex="-1" @change="onPicked">
     <div ref="host" class="editor-host" />
     <div v-if="dragging" class="drop-hint" aria-hidden="true">
-      <UiIcon name="image" :size="20" /><span>放開即可插入圖片（PNG、JPEG、GIF、WebP）</span>
+      <UiIcon :name="uploadVideo ? 'video' : 'image'" :size="20" />
+      <span>{{ uploadVideo ? '放開即可插入圖片或影片' : '放開即可插入圖片（PNG、JPEG、GIF、WebP）' }}</span>
     </div>
     <div class="status" aria-live="off">
-      <span v-if="uploading" class="uploading" role="status">正在上傳 {{ uploading }} 張圖片…</span>
+      <span v-if="pending.length" class="uploading" role="status">
+        <template v-if="uploadingVideo">正在上傳影片 {{ uploadingVideo.percent }}%</template>
+        <template v-if="uploadingVideo && uploadingImages">，</template>
+        <template v-if="uploadingImages">正在上傳 {{ uploadingImages }} 張圖片</template>…
+      </span>
       <span>{{ words.toLocaleString() }} 字</span>
       <span>{{ lines.toLocaleString() }} 行</span>
       <span>第 {{ cursor.line }} 行，第 {{ cursor.column }} 欄</span>
@@ -336,6 +419,7 @@ onBeforeUnmount(() => {
   font-weight: 600; box-shadow: var(--ui-shadow-lg); pointer-events: none; white-space: nowrap; z-index: 5;
 }
 .editor-host :deep(.md-uploading) { color: var(--ui-text-muted); font-style: italic; }
+.editor-host :deep(.md-uploading-progress) { color: var(--ui-accent); font-weight: 600; }
 .uploading { margin-right: auto; color: var(--ui-accent); font-weight: 600; }
 .status {
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .25rem 1rem; padding: .25rem .75rem;
