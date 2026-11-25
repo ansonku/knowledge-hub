@@ -5,11 +5,14 @@ import { RouterLink, useRoute } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
+import type { GalleryLayout } from '../gallery'
 import { jumpToHeading } from '../headings'
 import { cardDate, collectionStyle, colorClass, portalMode, portals, publicApi, publicDate, usePublicNav, type PublicArticle } from './public'
+import { useSession } from '../stores/session'
 import { useSite } from '../stores/site'
 
 const site = useSite()
+const session = useSession()
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 const article = ref<PublicArticle>()
@@ -69,7 +72,10 @@ function recordView(documentId: string) {
 }
 
 // ---- Markdown -------------------------------------------------------------------------
-const rendered = computed(() => article.value?.format === 'md' ? renderMarkdown(article.value.body) : undefined)
+const rendered = computed(() => article.value?.format === 'md' ? renderMarkdown(article.value.body, {
+  imageSizes: article.value.image_sizes, galleryDefault: site.gallery.layout,
+  album: article.value.presentation === 'gallery' ? { layout: (article.value.gallery_layout ?? '') as GalleryLayout | '' } : undefined,
+}) : undefined)
 /** Many Markdown files open with an H1 equal to the title; the page header already shows it. */
 const leadingTitle = computed(() => {
   const first = rendered.value?.headings[0]
@@ -161,7 +167,8 @@ async function copyLink() {
       <div class="columns">
         <article class="body" :aria-busy="loading">
           <div v-if="rendered" ref="content" class="reading" :class="{ 'skip-title': leadingTitle }">
-            <MarkdownBody :rendered="rendered" />
+            <!-- Signed-in members also get the lightbox download button; visitors do not. -->
+            <MarkdownBody :rendered="rendered" :download="session.status === 'member'" />
           </div>
           <iframe v-else :srcdoc="htmlDocument" sandbox="" referrerpolicy="no-referrer" title="HTML 文章正文" class="html-frame" />
 

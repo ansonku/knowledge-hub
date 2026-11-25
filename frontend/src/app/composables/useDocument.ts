@@ -23,6 +23,9 @@ export type DocumentDetails = {
   tags: Label[]
   current_version: VersionInfo
   updated_at: string
+  /** P11c: 'gallery' reads as a photo album; gallery_layout '' follows the system default. */
+  presentation: 'article' | 'gallery'
+  gallery_layout: string
   preview_available?: boolean
   /** Viewer-specific and publication fields returned by GET only. */
   is_favorite?: boolean

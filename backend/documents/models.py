@@ -53,6 +53,22 @@ class Document(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # P11c: a Markdown document can read as a photo album. Not versioned; it applies to the public article too.
+    class Presentation(models.TextChoices):
+        ARTICLE = "article", "文章"
+        GALLERY = "gallery", "相簿"
+
+    class GalleryLayout(models.TextChoices):
+        DEFAULT = "", "跟隨系統預設"
+        JUSTIFIED = "justified", "齊邊"
+        GRID = "grid", "方格"
+        MASONRY = "masonry", "瀑布流"
+        VERTICAL = "vertical", "直列"
+        CAROUSEL = "carousel", "輪播"
+
+    presentation = models.CharField(max_length=8, choices=Presentation.choices, default=Presentation.ARTICLE)
+    gallery_layout = models.CharField(max_length=12, choices=GalleryLayout.choices, default="", blank=True)
+
 
 class Version(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -208,6 +224,30 @@ class SiteSettings(models.Model):
     notice_starts_at = models.DateTimeField(null=True, blank=True)
     notice_ends_at = models.DateTimeField(null=True, blank=True)
     notice_updated_at = models.DateTimeField(null=True, blank=True)
+
+    # P11d: how pictures open and galleries lay out, site-wide. Only choices, no raw timings (decision 27).
+    class LightboxEffect(models.TextChoices):
+        CENTER = "center", "背景先出、圖片從中間浮現"
+        ZOOM = "zoom", "從縮圖放大"
+        FADE = "fade", "淡入"
+
+    class LightboxSpeed(models.TextChoices):
+        FAST = "fast", "快"
+        NORMAL = "normal", "標準"
+        SLOW = "slow", "慢"
+
+    lightbox_effect = models.CharField(max_length=8, choices=LightboxEffect.choices, default=LightboxEffect.CENTER)
+    lightbox_speed = models.CharField(max_length=8, choices=LightboxSpeed.choices, default=LightboxSpeed.NORMAL)
+    # Backdrop opacity in percent, 60–100.
+    lightbox_backdrop = models.PositiveSmallIntegerField(default=92)
+    gallery_layout = models.CharField(
+        max_length=12, default="justified",
+        choices=[(value, label) for value, label in Document.GalleryLayout.choices if value],
+    )
+    member_download = models.BooleanField(default=True)
+    # Skip the animation when the browser asks for reduced motion. Off for sites whose readers sit on virtual
+    # desktops, where browsers often report reduced motion although nobody asked for it.
+    lightbox_reduced_motion = models.BooleanField(default=True)
 
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]

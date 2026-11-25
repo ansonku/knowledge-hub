@@ -496,8 +496,17 @@ class SiteSettingsInput(serializers.Serializer):
     tagline = serializers.CharField(max_length=160, allow_blank=True)
 
 
+def gallery_payload(site):
+    return {
+        "effect": site.lightbox_effect, "speed": site.lightbox_speed, "backdrop": site.lightbox_backdrop,
+        "layout": site.gallery_layout, "member_download": site.member_download,
+        "respect_reduced_motion": site.lightbox_reduced_motion,
+    }
+
+
 def site_payload(site, request=None):
-    payload = {"name": site.name, "tagline": site.tagline, "notice": site.active_notice()}
+    # The gallery settings are public: the public site's lightbox and galleries follow them too.
+    payload = {"name": site.name, "tagline": site.tagline, "notice": site.active_notice(), "gallery": gallery_payload(site)}
     if request is not None and IsAdmin().has_permission(request, None):
         # The editor needs the stored announcement even when it is off or outside its window.
         payload["notice_settings"] = {
@@ -542,6 +551,42 @@ class NoticeInput(serializers.Serializer):
         if data["starts_at"] and data["ends_at"] and data["ends_at"] <= data["starts_at"]:
             raise serializers.ValidationError({"ends_at": "結束時間必須晚於開始時間。"})
         return data
+
+
+class GallerySettingsInput(serializers.Serializer):
+    effect = serializers.ChoiceField(SiteSettings.LightboxEffect.values)
+    speed = serializers.ChoiceField(SiteSettings.LightboxSpeed.values)
+    backdrop = serializers.IntegerField(min_value=60, max_value=100)
+    layout = serializers.ChoiceField([value for value in Document.GalleryLayout.values if value])
+    member_download = serializers.BooleanField()
+    respect_reduced_motion = serializers.BooleanField()
+
+
+GALLERY_FIELDS = {"effect": "lightbox_effect", "speed": "lightbox_speed", "backdrop": "lightbox_backdrop",
+                  "layout": "gallery_layout", "member_download": "member_download",
+                  "respect_reduced_motion": "lightbox_reduced_motion"}
+
+
+@never_cache
+@api_view(["PUT"])
+@permission_classes([IsAdmin])
+def site_gallery(request):
+    """P11d: Admins choose how the lightbox opens and which gallery layout is the default."""
+    payload = GallerySettingsInput(data=request.data)
+    payload.is_valid(raise_exception=True)
+    with transaction.atomic():
+        site, _ = SiteSettings.objects.select_for_update().get_or_create(pk=1)
+        changes = {}
+        for key, field in GALLERY_FIELDS.items():
+            value = payload.validated_data[key]
+            if getattr(site, field) != value:
+                changes[key] = {"from": getattr(site, field), "to": value}
+                setattr(site, field, value)
+        if changes:
+            site.updated_by = request.user
+            site.save()
+            audit("site_gallery_updated", request.user, actor=request.user, gallery=changes)
+    return Response(site_payload(site, request))
 
 
 @never_cache

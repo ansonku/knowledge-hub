@@ -1,0 +1,36 @@
+/* P11a lightbox additions on top of PhotoSwipe's own stylesheet. */
+.pswp { --pswp-bg: #05070c; --pswp-icon-color: #f4f6fa; --pswp-icon-color-secondary: #1b2130; font-family: inherit; }
+.pswp__button--download, .pswp__button--fullscreen { display: grid; place-items: center; }
+.pswp__button--download[hidden] { display: none; }
+.pswp__button--download .pswp__icn, .pswp__button--fullscreen .pswp__icn {
+  position: static; width: 24px; height: 24px; fill: none; stroke: var(--pswp-icon-color);
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / .6));
+}
+.hub-pswp-caption {
+  position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); max-width: min(56rem, calc(100% - 32px));
+  padding: 4px 12px; border-radius: 6px; background: rgb(0 0 0 / .45); color: #f4f6fa;
+  font-size: .95rem; line-height: 1.5; text-align: center; overflow-wrap: anywhere; pointer-events: none;
+  opacity: 0; transition: opacity .25s;
+}
+.pswp--ui-visible .hub-pswp-caption { opacity: 1; }
+.hub-pswp-caption[hidden] { display: none; }
+.pswp:not(:has(.hub-pswp-thumbs)) .hub-pswp-caption { bottom: 16px; }
+.hub-pswp-thumbs {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 10px 16px 12px;
+  overflow-x: auto; scrollbar-width: thin; background: linear-gradient(transparent, rgb(0 0 0 / .55));
+  opacity: 0; transition: opacity .25s;
+}
+.pswp--ui-visible .hub-pswp-thumbs { opacity: 1; }
+.hub-pswp-thumbs::before, .hub-pswp-thumbs::after { content: ""; margin: auto; } /* center when they fit */
+.hub-pswp-thumbs button {
+  flex: 0 0 auto; width: 76px; height: 52px; padding: 0; border: 2px solid transparent; border-radius: 5px;
+  overflow: hidden; background: #111; opacity: .55; cursor: pointer; transition: opacity .15s, border-color .15s;
+}
+.hub-pswp-thumbs button:hover { opacity: .85; }
+.hub-pswp-thumbs button.current { border-color: #fff; opacity: 1; }
+.hub-pswp-thumbs button:focus-visible { outline: 2px solid #8fadff; outline-offset: 1px; }
+.hub-pswp-thumbs img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 640px) {
+  .hub-pswp-thumbs button { width: 60px; height: 42px; }
+  .hub-pswp-caption { bottom: 74px; font-size: .88rem; }
+}

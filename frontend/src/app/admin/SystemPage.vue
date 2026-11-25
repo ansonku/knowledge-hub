@@ -13,7 +13,8 @@ import { useToast } from 'primevue/usetoast'
 import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
 import { maintenanceLines, type MaintenanceRun } from './maintenance'
-import { useSite, type NoticeLevel, type NoticeSettings } from '../../stores/site'
+import { SPEED_FACTORS, useSite, type GallerySettings, type NoticeLevel, type NoticeSettings } from '../../stores/site'
+import { GALLERY_LAYOUTS, LAYOUT_LABELS } from '../../gallery'
 
 const site = useSite()
 type Report = {
@@ -120,6 +121,76 @@ function resetNotice() {
   noticeError.value = ''
 }
 
+// ---- Lightbox and galleries (P11d) -------------------------------------------------------------
+const effects: { value: GallerySettings['effect']; label: string }[] = [
+  { value: 'center', label: '背景先出、圖片從中間浮現' }, { value: 'zoom', label: '從縮圖放大' }, { value: 'fade', label: '淡入' },
+]
+const speeds: { value: GallerySettings['speed']; label: string }[] = [
+  { value: 'fast', label: '快' }, { value: 'normal', label: '標準' }, { value: 'slow', label: '慢' },
+]
+const layoutChoices = GALLERY_LAYOUTS.map(value => ({ value, label: LAYOUT_LABELS[value] }))
+const galleryForm = ref<GallerySettings>({ ...site.gallery })
+const galleryTouched = ref(false)
+watch(() => site.gallery, settings => { if (!galleryTouched.value) galleryForm.value = { ...settings } })
+const galleryDirty = computed(() => JSON.stringify(galleryForm.value) !== JSON.stringify(site.gallery))
+const gallerySaving = ref(false)
+const galleryError = ref('')
+function pickGallery<K extends keyof GallerySettings>(key: K, value: GallerySettings[K]) {
+  galleryForm.value = { ...galleryForm.value, [key]: value }
+  galleryTouched.value = true
+}
+async function saveGallery() {
+  if (gallerySaving.value) return
+  gallerySaving.value = true
+  galleryError.value = ''
+  try {
+    await site.saveGallery(galleryForm.value)
+    galleryTouched.value = false
+    galleryForm.value = { ...site.gallery }
+    toast.add({ severity: 'success', summary: '已更新相簿與燈箱設定', life: 2500 })
+  } catch (cause) {
+    galleryError.value = cause instanceof Error && cause.message ? cause.message : '無法儲存設定。'
+  } finally {
+    gallerySaving.value = false
+  }
+}
+function resetGallery() {
+  galleryTouched.value = false
+  galleryForm.value = { ...site.gallery }
+  galleryError.value = ''
+}
+// Preview: sample pictures drawn here, opened with the settings on the form (saved or not).
+const samples = ref<{ src: string; alt: string }[]>([])
+function drawSamples() {
+  const shapes: [number, number, number, string][] = [[1600, 1000, 215, '範例 1'], [900, 1300, 25, '範例 2'], [1800, 900, 150, '範例 3'], [1200, 1200, 275, '範例 4']]
+  samples.value = shapes.map(([width, height, hue, label]) => {
+    const canvas = Object.assign(document.createElement('canvas'), { width, height })
+    const context = canvas.getContext('2d')
+    if (context) {
+      const gradient = context.createLinearGradient(0, 0, width, height)
+      gradient.addColorStop(0, `hsl(${hue} 60% 52%)`)
+      gradient.addColorStop(1, `hsl(${hue + 40} 55% 32%)`)
+      context.fillStyle = gradient
+      context.fillRect(0, 0, width, height)
+      context.fillStyle = 'rgb(255 255 255 / .9)'
+      context.font = `600 ${Math.round(Math.min(width, height) / 7)}px sans-serif`
+      context.fillText(label, width * .08, height * .9)
+    }
+    return { src: canvas.toDataURL('image/jpeg', .85), alt: label }
+  })
+}
+const sampleStrip = ref<HTMLElement>()
+async function previewLightbox(index: number) {
+  const images = Array.from(sampleStrip.value?.querySelectorAll('img') ?? [])
+  if (!images[index]) return
+  const { openLightbox } = await import('../../lightbox')
+  const form = galleryForm.value
+  void openLightbox(images, index, {
+    download: false,
+    look: { effect: form.effect, speed: SPEED_FACTORS[form.speed], backdrop: form.backdrop / 100, respectReducedMotion: form.respect_reduced_motion },
+  })
+}
+
 const loading = ref(true)
 const error = ref('')
 
@@ -207,6 +278,7 @@ const contentStats = computed<Stat[]>(() => {
 })
 
 onMounted(() => {
+  drawSamples()
   site.setTitle('系統狀態')
   if (!session.isAdmin) {
     loading.value = false
@@ -364,6 +436,64 @@ onMounted(() => {
           <p class="note">上傳上限：每檔 {{ bytes(report.config.max_upload_bytes) }}，每批 {{ report.config.max_batch }} 檔。</p>
         </section>
 
+        <section class="card" aria-labelledby="gallery-title">
+          <h2 id="gallery-title">相簿與燈箱</h2>
+          <form class="site-form" @submit.prevent="saveGallery">
+            <fieldset class="field levels">
+              <legend>燈箱效果</legend>
+              <div class="level-buttons">
+                <button v-for="item in effects" :key="item.value" type="button" class="level" :class="{ on: galleryForm.effect === item.value }"
+                  :aria-pressed="galleryForm.effect === item.value" @click="pickGallery('effect', item.value)">{{ item.label }}</button>
+              </div>
+            </fieldset>
+            <fieldset class="field levels">
+              <legend>動畫速度</legend>
+              <div class="level-buttons">
+                <button v-for="item in speeds" :key="item.value" type="button" class="level" :class="{ on: galleryForm.speed === item.value }"
+                  :aria-pressed="galleryForm.speed === item.value" @click="pickGallery('speed', item.value)">{{ item.label }}</button>
+              </div>
+            </fieldset>
+            <div class="field">
+              <label for="gallery-backdrop">背景暗度 <span class="optional">{{ (galleryForm.backdrop / 100).toFixed(2) }}</span></label>
+              <input id="gallery-backdrop" type="range" min="60" max="100" step="1" class="range" :value="galleryForm.backdrop"
+                @input="pickGallery('backdrop', Number(($event.target as HTMLInputElement).value))">
+            </div>
+            <fieldset class="field levels">
+              <legend>預設相簿版面</legend>
+              <div class="level-buttons">
+                <button v-for="item in layoutChoices" :key="item.value" type="button" class="level" :class="{ on: galleryForm.layout === item.value }"
+                  :aria-pressed="galleryForm.layout === item.value" @click="pickGallery('layout', item.value)">{{ item.label }}</button>
+              </div>
+            </fieldset>
+            <label class="switch-row">
+              <ToggleSwitch :model-value="galleryForm.member_download" input-id="gallery-download"
+                @update:model-value="pickGallery('member_download', $event)" />
+              <span>成員可在燈箱下載原圖</span>
+            </label>
+            <div class="field">
+              <label class="switch-row">
+                <ToggleSwitch :model-value="galleryForm.respect_reduced_motion" input-id="gallery-reduced-motion"
+                  @update:model-value="pickGallery('respect_reduced_motion', $event)" />
+                <span>配合瀏覽器的「減少動態效果」</span>
+              </label>
+              <p class="note">開啟時，瀏覽器要求減少動態效果的人不會看到動畫（無障礙建議）。虛擬機或遠端桌面上的瀏覽器常會誤報這個設定；成員多半在這類環境時，可以關閉，讓所有人都看到動畫。</p>
+            </div>
+            <div class="field">
+              <span class="field-label">預覽 <span class="optional">點縮圖，以上方（尚未儲存的）設定開啟燈箱</span></span>
+              <div ref="sampleStrip" class="samples">
+                <button v-for="(sample, index) in samples" :key="sample.alt" type="button" class="sample" :aria-label="`預覽：${sample.alt}`"
+                  @click="previewLightbox(index)"><img :src="sample.src" :alt="sample.alt"></button>
+              </div>
+            </div>
+            <p class="note">套用到工作區、閱讀入口與公開站的所有圖片。「預設相簿版面」用於沒有寫明版面的 <code>:::gallery</code> 與相簿模式的文件。訪客一律沒有下載按鈕。</p>
+            <Message v-if="galleryError" severity="error" size="small">{{ galleryError }}</Message>
+            <div class="form-actions">
+              <Button type="submit" label="儲存" size="small" :loading="gallerySaving" :disabled="!galleryDirty" />
+              <Button type="button" label="還原" size="small" text severity="secondary" :disabled="!galleryDirty || gallerySaving" @click="resetGallery" />
+            </div>
+          </form>
+        </section>
+
         <section class="card" aria-labelledby="notice-title">
           <div class="card-title-row">
             <h2 id="notice-title">公告橫幅</h2>
@@ -473,6 +603,13 @@ h2 { margin: 0; font-size: 1rem; }
 .notice-state.scheduled { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
 .switch-row { display: flex; align-items: center; gap: var(--ui-space-3); font-weight: 600; font-size: var(--ui-text-sm); cursor: pointer; }
 .levels { margin: 0; padding: 0; border: 0; }
+.field-label { font-weight: 600; font-size: var(--ui-text-sm); }
+/* Choices without a notice level (相簿與燈箱): the chosen one in the accent colour. */
+.level.on:not(.info, .warning, .urgent) { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
+.range { width: 100%; accent-color: var(--ui-accent); }
+.samples { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
+.sample { width: 5.5rem; height: 3.75rem; padding: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); overflow: hidden; background: var(--ui-bg-subtle); cursor: zoom-in; }
+.sample img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .levels legend { padding: 0 0 var(--ui-space-1); font-weight: 600; font-size: var(--ui-text-sm); }
 .level-buttons { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 .level { height: 2rem; padding: 0 var(--ui-space-3); border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg-surface); color: var(--ui-text-secondary); font: inherit; font-size: var(--ui-text-sm); font-weight: 600; cursor: pointer; }

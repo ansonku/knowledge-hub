@@ -14,6 +14,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, RouterLink, useRoute, useRoute
 import { api, upload } from '../api'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
+import { albumLayout, LAYOUT_LABELS, type GalleryLayout } from '../gallery'
 import { jumpToHeading } from '../headings'
 import { useSession } from '../stores/session'
 import { useTheme } from '../stores/theme'
@@ -59,7 +60,31 @@ const canEdit = computed(() => session.canEdit && file.value?.format === 'md' &&
 const modes: { value: Mode; label: string }[] = [
   { value: 'read', label: '閱讀' }, { value: 'edit', label: '編輯' }, { value: 'split', label: '分割預覽' },
 ]
-const rendered = computed(() => renderMarkdown(doc.source.value))
+// Picture sizes let gallery layouts (P11b) take their final shape before the pictures load.
+const imageSizes = ref<Record<string, [number, number]>>({})
+watch(() => [file.value?.id, file.value?.format] as const, async ([id, format]) => {
+  imageSizes.value = {}
+  if (!id || format !== 'md') return
+  try {
+    const sizes = await api<Record<string, [number, number]>>(`/api/documents/${encodeURIComponent(id)}/image-sizes/`)
+    if (file.value?.id === id) imageSizes.value = { ...sizes, ...imageSizes.value }
+  } catch {
+    // Without sizes, galleries still work: pictures settle once loaded.
+  }
+}, { immediate: true })
+const albumMode = computed(() => file.value?.presentation === 'gallery')
+// The split preview explains which layout the reading page will use, and why.
+const albumLayoutLabel = computed(() => {
+  const { layout, from } = albumLayout(draft.value, file.value?.gallery_layout ?? '', site.gallery.layout)
+  const name = LAYOUT_LABELS[layout]
+  if (from === 'document') return name
+  if (from === 'block') return `${name}，取自 :::gallery ${layout}`
+  return `${name}，系統預設`
+})
+const rendered = computed(() => renderMarkdown(doc.source.value, {
+  imageSizes: imageSizes.value, galleryDefault: site.gallery.layout,
+  album: albumMode.value ? { layout: (file.value?.gallery_layout ?? '') as GalleryLayout | '' } : undefined,
+}))
 /** Many Markdown files open with an H1 equal to the document title; the page header already shows it. */
 const leadingTitle = computed(() => {
   const first = rendered.value.headings[0]
@@ -67,7 +92,9 @@ const leadingTitle = computed(() => {
 })
 const tocHeadings = computed(() => leadingTitle.value ? rendered.value.headings.slice(1) : rendered.value.headings)
 const previewSource = ref('')
-const preview = computed(() => renderMarkdown(previewSource.value, { sourceLines: true }))
+const preview = computed(() => renderMarkdown(previewSource.value, {
+  sourceLines: true, imageSizes: imageSizes.value, galleryDefault: site.gallery.layout,
+}))
 watch(draft, (value, _, onCleanup) => {
   const timer = setTimeout(() => { previewSource.value = value }, 170)
   onCleanup(() => clearTimeout(timer))
@@ -76,10 +103,13 @@ const article = ref<HTMLElement>()
 const previewPane = ref<HTMLElement>()
 
 /** Images pasted, dropped or picked in the editor go to this document. */
-function uploadImage(image: File) {
+async function uploadImage(image: File) {
   const form = new FormData()
   form.append('file', image)
-  return upload<{ url: string }>(`/api/documents/${encodeURIComponent(documentId.value)}/images/`, form)
+  const saved = await upload<{ id: string; url: string; width: number; height: number }>(
+    `/api/documents/${encodeURIComponent(documentId.value)}/images/`, form)
+  imageSizes.value = { ...imageSizes.value, [saved.id]: [saved.width, saved.height] }
+  return saved
 }
 /** Videos can be large: no time limit, progress for the placeholder, and cancelling when the placeholder goes. */
 function uploadVideo(video: File, progress: (percent: number) => void, signal: AbortSignal) {
@@ -490,7 +520,7 @@ onBeforeUnmount(() => {
 
           <!-- Markdown: read -->
           <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading" :class="{ 'skip-title': leadingTitle }">
-            <MarkdownBody :rendered="rendered" />
+            <MarkdownBody :rendered="rendered" download />
           </div>
 
           <!-- Markdown: edit / split -->
@@ -514,7 +544,11 @@ onBeforeUnmount(() => {
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
                 <span class="preview-label">即時預覽</span>
-                <MarkdownBody :rendered="preview" />
+                <p v-if="albumMode" class="album-note" role="note">
+                  閱讀頁與公開文章以「相簿模式」呈現（{{ albumLayoutLabel }}）：所有圖片集中成一本相簿，文字放在上方當作說明。
+                  每張圖片的說明請寫在 <code>![說明]</code> 裡。
+                </p>
+                <MarkdownBody :rendered="preview" download />
               </div>
             </div>
           </div>
@@ -668,6 +702,8 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .draft-state.dirty { color: var(--ui-lagging-text); }
 .draft-state.dirty .dot { background: var(--ui-lagging-dot); }
 .note { flex: 1 1 14rem; max-width: 24rem; }
+.album-note { margin: 0 0 var(--ui-space-3); padding: var(--ui-space-2) var(--ui-space-3); border-radius: var(--ui-radius-md); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); font-size: var(--ui-text-sm); line-height: 1.6; }
+.album-note code { font-size: .9em; }
 .upload-wait { color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; white-space: nowrap; }
 .panes { display: grid; gap: var(--ui-space-3); min-height: var(--editor-height); }
 .panes.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }

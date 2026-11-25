@@ -32,6 +32,7 @@ from users.models import User
 from users.permissions import CanReadLibrary, has_role
 
 from . import services, storage
+from .image_sizes import sizes
 from .models import ArticlePublication, Document, DocumentImage, VersionImage
 
 logger = logging.getLogger(__name__)
@@ -239,6 +240,14 @@ def record_references(version, text):
         return
     images = DocumentImage.objects.filter(document_id=version.document_id, pk__in=ids).values_list("pk", flat=True)
     VersionImage.objects.bulk_create([VersionImage(version=version, image_id=pk) for pk in images], ignore_conflicts=True)
+
+
+@api_view(["GET"])
+@permission_classes([CanReadLibrary])
+def document_image_sizes(request, document_id):
+    """Every image of a document, including ones pasted but not saved yet (the split preview shows them)."""
+    document = get_object_or_404(services.active_documents(), pk=document_id)
+    return Response(sizes(DocumentImage.objects.filter(document=document)))
 
 
 def image_payload(image):

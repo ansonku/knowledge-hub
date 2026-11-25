@@ -27,6 +27,10 @@ export type PublicArticle = {
   title: string
   format: Format
   body: string
+  /** Sizes of this site's pictures the article shows, for gallery layouts. */
+  image_sizes?: Record<string, [number, number]>
+  presentation?: 'article' | 'gallery'
+  gallery_layout?: string
   published_at?: string
   updated_at?: string
   public?: boolean
