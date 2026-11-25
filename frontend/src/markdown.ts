@@ -11,11 +11,12 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import MarkdownIt from 'markdown-it'
+import { galleryPlugin, type GalleryContext } from './gallery'
 import 'highlight.js/styles/github.css'
 import 'katex/dist/katex.min.css'
 
 type Heading = { id: string; text: string; level: number }
-type RenderContext = { diagrams: string[] }
+type RenderContext = GalleryContext & { diagrams: string[] }
 export type RenderedMarkdown = { html: string; headings: Heading[]; diagrams: string[] }
 
 for (const [name, language] of Object.entries({ bash, cpp, javascript, json, python, sql, typescript, xml, yaml })) {
@@ -31,6 +32,7 @@ const parser = new MarkdownIt({
   },
 })
 parser.use(tasklist)
+parser.use(galleryPlugin)
 parser.use(katex, { trust: false, throwOnError: false, maxExpand: 500, maxSize: 25 })
 
 // Videos uploaded to this site (P10) use image syntax: ![說明](/api/videos/<id>/). Only that exact same-origin form
@@ -68,8 +70,14 @@ parser.renderer.rules.fence = (tokens, index, options, context, renderer) => {
 }
 
 /** `sourceLines` marks each top-level block with its first source line (1-based), for the editor's synced preview. */
-export function renderMarkdown(source: string, options: { sourceLines?: boolean } = {}): RenderedMarkdown {
-  const context: RenderContext = { diagrams: [] }
+export type RenderOptions = Omit<GalleryContext, 'hints'> & {
+  /** Marks blocks with their source lines and shows gallery hints: the editor's split preview. */
+  sourceLines?: boolean
+}
+export function renderMarkdown(source: string, options: RenderOptions = {}): RenderedMarkdown {
+  const context: RenderContext = {
+    diagrams: [], imageSizes: options.imageSizes, galleryDefault: options.galleryDefault, hints: options.sourceLines,
+  }
   const headings: Heading[] = []
   const tokens = parser.parse(source, context)
   for (const [index, token] of tokens.entries()) {

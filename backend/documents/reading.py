@@ -17,7 +17,8 @@ from rest_framework.response import Response
 from users.permissions import CanReadLibrary
 
 from . import search
-from .models import ArticlePublication
+from .image_sizes import version_image_sizes
+from .models import ArticlePublication, Document
 from .publication import (
     SAMPLE_LENGTH, category_index, collection_tree, path_of, publication_body, reading_minutes, subtree_ids, summarise,
 )
@@ -98,4 +99,5 @@ def read_article(request, document_id):
         "version_number": version.number, "reading_minutes": reading_minutes(text[:SAMPLE_LENGTH], len(text)),
         "collection": collection_ref(document.category_id, index), "path": path_of(document.category_id, index),
         "public": document.public, "siblings": [],
+        "image_sizes": version_image_sizes(version) if document.format == Document.Format.MARKDOWN else {},
     })

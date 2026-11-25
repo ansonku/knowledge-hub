@@ -2,8 +2,9 @@
 import { editor, KeyCode, KeyMod, Range, Selection } from './monaco'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import UiIcon, { type IconName } from './app/components/UiIcon.vue'
+import { GALLERY_LAYOUTS, LAYOUT_LABELS } from './gallery'
 import {
-  continueList, countWords, indentList, insertBlockStyle, insertLink, pasteAsLink, toggleInline, toggleLines,
+  continueList, countWords, indentList, insertBlockStyle, insertGallery, insertLink, pasteAsLink, toggleInline, toggleLines,
   type BlockStyle, type InlineStyle, type LineStyle,
 } from './markdownCommands'
 
@@ -42,7 +43,8 @@ type Tool = Look & (
   | { kind: 'block'; style: BlockStyle }
   | { kind: 'link' }
   | { kind: 'image' }
-  | { kind: 'video' })
+  | { kind: 'video' }
+  | { kind: 'gallery' })
 const groups: Tool[][] = [
   [
     { kind: 'line', style: 'h2', text: 'H2', label: '標題 2' },
@@ -56,6 +58,7 @@ const groups: Tool[][] = [
     { kind: 'link', icon: 'link', label: '連結', keys: 'K' },
     { kind: 'image', icon: 'image', label: '插入圖片' },
     { kind: 'video', icon: 'video', label: '插入影片（MP4、WebM，200 MB 以內）' },
+    { kind: 'gallery', icon: 'gallery', label: '相簿（選取圖片後按下即可包成相簿）' },
   ],
   [
     { kind: 'line', style: 'quote', icon: 'quote', label: '引用' },
@@ -79,7 +82,28 @@ function apply(tool: Tool) {
   else if (tool.kind === 'block') insertBlockStyle(instance, tool.style)
   else if (tool.kind === 'image') picker.value?.click()
   else if (tool.kind === 'video') videoPicker.value?.click()
+  else if (tool.kind === 'gallery') toggleGalleryMenu()
   else insertLink(instance)
+}
+// Gallery layout menu under the 「相簿」 button.
+const galleryMenu = ref(false)
+const galleryMenuAt = ref({ left: '0px', top: '0px' })
+function toggleGalleryMenu() {
+  const button = root.value?.querySelector<HTMLElement>('.tool[data-kind="gallery"]')
+  if (button) galleryMenuAt.value = { left: `${button.offsetLeft}px`, top: `${button.offsetTop + button.offsetHeight + 4}px` }
+  galleryMenu.value = !galleryMenu.value
+}
+const galleryChoices = [{ value: '', label: '跟隨預設版面' }, ...GALLERY_LAYOUTS.map(value => ({ value, label: `${LAYOUT_LABELS[value]}（${value}）` }))]
+function chooseGallery(layout: string) {
+  galleryMenu.value = false
+  if (instance && !props.readonly) insertGallery(instance, layout)
+}
+function closeGalleryMenu(event: Event) {
+  if (!galleryMenu.value) return
+  if (event instanceof KeyboardEvent ? event.key === 'Escape' : !(event.target as Element).closest('.gallery-menu, .tool[data-kind="gallery"]')) {
+    galleryMenu.value = false
+    instance?.focus()
+  }
 }
 const visibleGroups = computed(() => groups.map(group => group.filter(tool =>
   (tool.kind !== 'image' || props.uploadImage) && (tool.kind !== 'video' || (props.uploadImage && props.uploadVideo)))))
@@ -335,6 +359,8 @@ onMounted(() => {
   root.value?.addEventListener('dragover', onDragOver, true)
   root.value?.addEventListener('drop', onDrop, true)
   root.value?.addEventListener('dragleave', onDragLeave, true)
+  document.addEventListener('mousedown', closeGalleryMenu)
+  document.addEventListener('keydown', closeGalleryMenu)
   window.addEventListener('dragend', onDragEnd, true)
   updateCounts()
 })
@@ -349,6 +375,8 @@ onBeforeUnmount(() => {
   root.value?.removeEventListener('dragover', onDragOver, true)
   root.value?.removeEventListener('drop', onDrop, true)
   root.value?.removeEventListener('dragleave', onDragLeave, true)
+  document.removeEventListener('mousedown', closeGalleryMenu)
+  document.removeEventListener('keydown', closeGalleryMenu)
   window.removeEventListener('dragend', onDragEnd, true)
   // Leaving the editor stops uploads that would only land in a draft nobody sees.
   for (const cancel of cancels) cancel.abort()
@@ -364,12 +392,17 @@ onBeforeUnmount(() => {
       <template v-for="(group, index) in visibleGroups" :key="index">
         <span v-if="index" class="sep" aria-hidden="true" />
         <!-- mousedown.prevent keeps the selection in the editor while the button is pressed. -->
-        <button v-for="tool in group" :key="tool.label" type="button" class="tool" :class="{ text: !tool.icon }"
+        <button v-for="tool in group" :key="tool.label" type="button" class="tool" :class="{ text: !tool.icon, pressed: tool.kind === 'gallery' && galleryMenu }"
+          :data-kind="tool.kind" :aria-haspopup="tool.kind === 'gallery' ? 'menu' : undefined" :aria-expanded="tool.kind === 'gallery' ? galleryMenu : undefined"
           :aria-label="title(tool)" :title="title(tool)" :disabled="readonly" @mousedown.prevent @click="apply(tool)">
           <UiIcon v-if="tool.icon" :name="tool.icon" :size="17" />
           <span v-else aria-hidden="true">{{ tool.text }}</span>
         </button>
       </template>
+    </div>
+    <div v-if="galleryMenu" class="gallery-menu" role="menu" aria-label="相簿版面" :style="galleryMenuAt">
+      <button v-for="choice in galleryChoices" :key="choice.value" type="button" role="menuitem" @mousedown.prevent
+        @click="chooseGallery(choice.value)">{{ choice.label }}</button>
     </div>
     <input ref="picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
       aria-hidden="true" tabindex="-1" @change="onPicked">
@@ -412,6 +445,13 @@ onBeforeUnmount(() => {
 .sep { width: 1px; height: 1.25rem; margin: 0 .25rem; background: var(--ui-border-strong); }
 .editor-host { flex: 1; min-height: 0; }
 .md-editor { position: relative; }
+.gallery-menu {
+  position: absolute; z-index: 10; display: grid; min-width: 12rem; padding: .3rem;
+  border: 1px solid var(--ui-border); border-radius: .5rem; background: var(--ui-bg-surface); box-shadow: var(--ui-shadow-lg);
+}
+.gallery-menu button { padding: .45rem .7rem; border: 0; border-radius: .35rem; background: none; color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; }
+.gallery-menu button:hover, .gallery-menu button:focus-visible { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
+.tool.pressed { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
 .md-editor.dragging { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-accent-soft); }
 .drop-hint {
   position: absolute; left: 50%; bottom: 2.75rem; transform: translateX(-50%); display: inline-flex; align-items: center; gap: var(--ui-space-2);

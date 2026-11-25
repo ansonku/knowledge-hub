@@ -258,3 +258,26 @@ export function countWords(text: string) {
   const words = text.replace(HAN, ' ').match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length ?? 0
   return han + words
 }
+
+/**
+ * Gallery block (P11b): wraps the selected lines in `:::gallery [layout]` … `:::`, or inserts an empty block
+ * with the cursor inside, ready for pasting pictures. An empty layout follows the system default.
+ */
+export function insertGallery(ed: Editor, layout: string) {
+  const model = ed.getModel(), sel = ed.getSelection()
+  if (!model || !sel) return
+  const head = layout ? `:::gallery ${layout}` : ':::gallery'
+  if (sel.isEmpty()) {
+    insertBlock(ed, [head, '', ':::'], { line: 1, from: 1, to: 1 })
+    return
+  }
+  const lines = selectedLines(sel)
+  const first = lines[0], last = lines[lines.length - 1]
+  const before = first > 1 && model.getLineContent(first - 1).trim() !== '' ? '\n' : ''
+  const after = last < model.getLineCount() && model.getLineContent(last + 1).trim() !== '' ? '\n' : ''
+  const start = first + (before ? 1 : 0)
+  edit(ed, [
+    { range: new Range(last, model.getLineMaxColumn(last), last, model.getLineMaxColumn(last)), text: `\n:::${after}` },
+    { range: new Range(first, 1, first, 1), text: `${before}${head}\n` },
+  ], new Selection(start, 1, start, head.length + 1))
+}

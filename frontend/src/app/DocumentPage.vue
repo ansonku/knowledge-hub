@@ -59,7 +59,19 @@ const canEdit = computed(() => session.canEdit && file.value?.format === 'md' &&
 const modes: { value: Mode; label: string }[] = [
   { value: 'read', label: '閱讀' }, { value: 'edit', label: '編輯' }, { value: 'split', label: '分割預覽' },
 ]
-const rendered = computed(() => renderMarkdown(doc.source.value))
+// Picture sizes let gallery layouts (P11b) take their final shape before the pictures load.
+const imageSizes = ref<Record<string, [number, number]>>({})
+watch(() => [file.value?.id, file.value?.format] as const, async ([id, format]) => {
+  imageSizes.value = {}
+  if (!id || format !== 'md') return
+  try {
+    const sizes = await api<Record<string, [number, number]>>(`/api/documents/${encodeURIComponent(id)}/image-sizes/`)
+    if (file.value?.id === id) imageSizes.value = { ...sizes, ...imageSizes.value }
+  } catch {
+    // Without sizes, galleries still work: pictures settle once loaded.
+  }
+}, { immediate: true })
+const rendered = computed(() => renderMarkdown(doc.source.value, { imageSizes: imageSizes.value }))
 /** Many Markdown files open with an H1 equal to the document title; the page header already shows it. */
 const leadingTitle = computed(() => {
   const first = rendered.value.headings[0]
@@ -67,7 +79,7 @@ const leadingTitle = computed(() => {
 })
 const tocHeadings = computed(() => leadingTitle.value ? rendered.value.headings.slice(1) : rendered.value.headings)
 const previewSource = ref('')
-const preview = computed(() => renderMarkdown(previewSource.value, { sourceLines: true }))
+const preview = computed(() => renderMarkdown(previewSource.value, { sourceLines: true, imageSizes: imageSizes.value }))
 watch(draft, (value, _, onCleanup) => {
   const timer = setTimeout(() => { previewSource.value = value }, 170)
   onCleanup(() => clearTimeout(timer))
@@ -76,10 +88,13 @@ const article = ref<HTMLElement>()
 const previewPane = ref<HTMLElement>()
 
 /** Images pasted, dropped or picked in the editor go to this document. */
-function uploadImage(image: File) {
+async function uploadImage(image: File) {
   const form = new FormData()
   form.append('file', image)
-  return upload<{ url: string }>(`/api/documents/${encodeURIComponent(documentId.value)}/images/`, form)
+  const saved = await upload<{ id: string; url: string; width: number; height: number }>(
+    `/api/documents/${encodeURIComponent(documentId.value)}/images/`, form)
+  imageSizes.value = { ...imageSizes.value, [saved.id]: [saved.width, saved.height] }
+  return saved
 }
 /** Videos can be large: no time limit, progress for the placeholder, and cancelling when the placeholder goes. */
 function uploadVideo(video: File, progress: (percent: number) => void, signal: AbortSignal) {

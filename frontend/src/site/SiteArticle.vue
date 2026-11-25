@@ -71,7 +71,7 @@ function recordView(documentId: string) {
 }
 
 // ---- Markdown -------------------------------------------------------------------------
-const rendered = computed(() => article.value?.format === 'md' ? renderMarkdown(article.value.body) : undefined)
+const rendered = computed(() => article.value?.format === 'md' ? renderMarkdown(article.value.body, { imageSizes: article.value.image_sizes }) : undefined)
 /** Many Markdown files open with an H1 equal to the title; the page header already shows it. */
 const leadingTitle = computed(() => {
   const first = rendered.value?.headings[0]
