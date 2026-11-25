@@ -12,6 +12,7 @@ import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
 import { auditLabel, roleLabels, type MemberListing, type MemberRow } from './members'
 import { maintenanceSummary, type MaintenanceResults } from './maintenance'
+import { gallerySummary } from './gallerySettings'
 import { useSite } from '../../stores/site'
 
 const site = useSite()
@@ -136,6 +137,7 @@ function detailLine(row: AuditRow) {
   if (row.category === 'deletion' && row.action !== 'version_deleted') return `共 ${detail.version_count ?? '?'} 個版本`
   if (row.category === 'account' || row.category === 'signin') {
     if (detail.maintenance) return maintenanceSummary(detail.maintenance as MaintenanceResults)
+    if (detail.gallery) return gallerySummary(detail.gallery as Record<string, { from: unknown; to: unknown }>)
     const parts: string[] = []
     if (detail.old_role && detail.role) parts.push(`${roleLabels[detail.old_role as 'viewer'] ?? detail.old_role} → ${roleLabels[detail.role as 'viewer'] ?? detail.role}`)
     else if (detail.role) parts.push(`角色 ${roleLabels[detail.role as 'viewer'] ?? detail.role}`)

@@ -61,6 +61,7 @@ const auditLabels: Record<string, string> = {
   site_notice_updated: '更新公告橫幅',
   site_notice_disabled: '關閉公告橫幅',
   maintenance_run: '執行系統維護',
+  site_gallery_updated: '更新相簿與燈箱設定',
 }
 export const auditLabel = (action: string) => auditLabels[action] ?? action
 export const memberName = (member: Pick<MemberRow, 'display_name' | 'username'>) => member.display_name || member.username

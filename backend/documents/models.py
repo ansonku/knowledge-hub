@@ -225,6 +225,27 @@ class SiteSettings(models.Model):
     notice_ends_at = models.DateTimeField(null=True, blank=True)
     notice_updated_at = models.DateTimeField(null=True, blank=True)
 
+    # P11d: how pictures open and galleries lay out, site-wide. Only choices, no raw timings (decision 27).
+    class LightboxEffect(models.TextChoices):
+        CENTER = "center", "背景先出、圖片從中間浮現"
+        ZOOM = "zoom", "從縮圖放大"
+        FADE = "fade", "淡入"
+
+    class LightboxSpeed(models.TextChoices):
+        FAST = "fast", "快"
+        NORMAL = "normal", "標準"
+        SLOW = "slow", "慢"
+
+    lightbox_effect = models.CharField(max_length=8, choices=LightboxEffect.choices, default=LightboxEffect.CENTER)
+    lightbox_speed = models.CharField(max_length=8, choices=LightboxSpeed.choices, default=LightboxSpeed.NORMAL)
+    # Backdrop opacity in percent, 60–100.
+    lightbox_backdrop = models.PositiveSmallIntegerField(default=92)
+    gallery_layout = models.CharField(
+        max_length=12, default="justified",
+        choices=[(value, label) for value, label in Document.GalleryLayout.choices if value],
+    )
+    member_download = models.BooleanField(default=True)
+
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]
 

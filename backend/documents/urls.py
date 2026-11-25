@@ -11,6 +11,7 @@ urlpatterns = [
     path("public/articles/", publication.public_articles),
     path("site/", views.site_settings),
     path("site/notice/", views.site_notice),
+    path("site/gallery/", views.site_gallery),
     path("public/collections/", publication.public_collections),
     path("public/nav/", publication.public_nav),
     path("public/popular/", popularity.popular_articles),

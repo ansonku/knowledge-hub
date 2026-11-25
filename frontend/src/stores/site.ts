@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api } from '../api'
 
 export type NoticeLevel = 'info' | 'warning' | 'urgent'
@@ -7,7 +7,20 @@ export type NoticeLevel = 'info' | 'warning' | 'urgent'
 export type SiteNotice = { id: string; text: string; link: string; level: NoticeLevel }
 /** The stored announcement, returned to Admins only. */
 export type NoticeSettings = { enabled: boolean; text: string; link: string; level: NoticeLevel; starts_at: string | null; ends_at: string | null }
-export type SiteSettings = { name: string; tagline: string; notice?: SiteNotice | null; notice_settings?: NoticeSettings }
+/** P11d: how pictures open and galleries lay out, site-wide (decision 27: choices only, no raw timings). */
+export type GallerySettings = {
+  effect: 'center' | 'zoom' | 'fade'
+  speed: 'fast' | 'normal' | 'slow'
+  /** Backdrop opacity in percent, 60–100. */
+  backdrop: number
+  layout: 'justified' | 'grid' | 'masonry' | 'vertical' | 'carousel'
+  member_download: boolean
+}
+export const STANDARD_GALLERY: GallerySettings = { effect: 'center', speed: 'normal', backdrop: 92, layout: 'justified', member_download: true }
+export const SPEED_FACTORS: Record<GallerySettings['speed'], number> = { fast: 0.5, normal: 1, slow: 1.5 }
+export type SiteSettings = {
+  name: string; tagline: string; notice?: SiteNotice | null; notice_settings?: NoticeSettings; gallery?: GallerySettings
+}
 
 const DEFAULT_NAME = 'Knowledge Hub'
 
@@ -20,6 +33,11 @@ export const useSite = defineStore('site', () => {
   const tagline = ref('')
   const notice = ref<SiteNotice | null>(null)
   const noticeSettings = ref<NoticeSettings>()
+  const gallery = ref<GallerySettings>({ ...STANDARD_GALLERY })
+  /** What the lightbox needs from the settings. */
+  const lightboxLook = computed(() => ({
+    effect: gallery.value.effect, speed: SPEED_FACTORS[gallery.value.speed] ?? 1, backdrop: gallery.value.backdrop / 100,
+  }))
   const loaded = ref(false)
   const page = ref<string | undefined>()
   let pending: Promise<void> | undefined
@@ -29,6 +47,7 @@ export const useSite = defineStore('site', () => {
     tagline.value = settings.tagline
     notice.value = settings.notice ?? null
     noticeSettings.value = settings.notice_settings
+    if (settings.gallery) gallery.value = settings.gallery
     loaded.value = true
   }
 
@@ -48,6 +67,10 @@ export const useSite = defineStore('site', () => {
     apply(await api<SiteSettings>('/api/site/notice/', 'PUT', settings))
   }
 
+  async function saveGallery(settings: GallerySettings) {
+    apply(await api<SiteSettings>('/api/site/gallery/', 'PUT', settings))
+  }
+
   /** Reload, e.g. after signing in, so Admins receive the stored announcement settings. */
   function refresh() {
     pending = undefined
@@ -63,5 +86,7 @@ export const useSite = defineStore('site', () => {
   })
 
   void load()
-  return { name, tagline, notice, noticeSettings, loaded, load, refresh, save, saveNotice, setTitle }
+  return {
+    name, tagline, notice, noticeSettings, gallery, lightboxLook, loaded, load, refresh, save, saveNotice, saveGallery, setTitle,
+  }
 })

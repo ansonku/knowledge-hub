@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { enhanceGalleries } from './galleryView'
+import { useSite } from './stores/site'
 import type { RenderedMarkdown } from './markdown'
 
 const props = withDefaults(defineProps<{
@@ -106,6 +107,7 @@ function lightboxImages(from?: HTMLImageElement) {
   }
   return Array.from(root.value?.querySelectorAll<HTMLImageElement>('img') ?? []).filter(image => photo(image) && !image.closest('.md-gallery'))
 }
+const site = useSite()
 let lightboxModule: Promise<typeof import('./lightbox')> | undefined
 const loadLightbox = () => (lightboxModule ??= import('./lightbox'))
 function prepareImages() {
@@ -131,7 +133,8 @@ async function openImage(target: EventTarget | null, event: Event) {
   opening = true
   try {
     const { openLightbox } = await loadLightbox()
-    void openLightbox(images, index, { download: props.download })
+    // Site-wide choices (P11d): effect, speed, backdrop, and whether members may download.
+    void openLightbox(images, index, { download: props.download && site.gallery.member_download, look: site.lightboxLook })
   } finally {
     opening = false
   }

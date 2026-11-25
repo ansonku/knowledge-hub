@@ -23,7 +23,10 @@ class SiteSettingsTests(TestCase):
 
     def test_anyone_reads_only_admins_change(self):
         self.assertEqual(Client().get("/api/site/").json(),
-                         {"name": SiteSettings.DEFAULT_NAME, "tagline": SiteSettings.DEFAULT_TAGLINE, "notice": None})
+                         {"name": SiteSettings.DEFAULT_NAME, "tagline": SiteSettings.DEFAULT_TAGLINE, "notice": None,
+                          # P11d: public gallery choices (test_gallery_settings covers them).
+                          "gallery": {"effect": "center", "speed": "normal", "backdrop": 92, "layout": "justified",
+                                      "member_download": True}})
         payload = {"name": "  研發知識庫 ", "tagline": "<b>規格</b>與指南"}
         for user in (None, self.editor):
             self.assertEqual(self.as_user(user).patch("/api/site/", payload, content_type="application/json").status_code, 403)

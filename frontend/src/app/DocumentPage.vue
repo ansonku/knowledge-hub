@@ -75,14 +75,14 @@ watch(() => [file.value?.id, file.value?.format] as const, async ([id, format]) 
 const albumMode = computed(() => file.value?.presentation === 'gallery')
 // The split preview explains which layout the reading page will use, and why.
 const albumLayoutLabel = computed(() => {
-  const { layout, from } = albumLayout(draft.value, file.value?.gallery_layout ?? '')
+  const { layout, from } = albumLayout(draft.value, file.value?.gallery_layout ?? '', site.gallery.layout)
   const name = LAYOUT_LABELS[layout]
   if (from === 'document') return name
   if (from === 'block') return `${name}，取自 :::gallery ${layout}`
   return `${name}，系統預設`
 })
 const rendered = computed(() => renderMarkdown(doc.source.value, {
-  imageSizes: imageSizes.value,
+  imageSizes: imageSizes.value, galleryDefault: site.gallery.layout,
   album: albumMode.value ? { layout: (file.value?.gallery_layout ?? '') as GalleryLayout | '' } : undefined,
 }))
 /** Many Markdown files open with an H1 equal to the document title; the page header already shows it. */
@@ -92,7 +92,9 @@ const leadingTitle = computed(() => {
 })
 const tocHeadings = computed(() => leadingTitle.value ? rendered.value.headings.slice(1) : rendered.value.headings)
 const previewSource = ref('')
-const preview = computed(() => renderMarkdown(previewSource.value, { sourceLines: true, imageSizes: imageSizes.value }))
+const preview = computed(() => renderMarkdown(previewSource.value, {
+  sourceLines: true, imageSizes: imageSizes.value, galleryDefault: site.gallery.layout,
+}))
 watch(draft, (value, _, onCleanup) => {
   const timer = setTimeout(() => { previewSource.value = value }, 170)
   onCleanup(() => clearTimeout(timer))
