@@ -292,10 +292,12 @@ def public_article(request, document_id):
             published_articles().filter(document__category_id=row["document__category_id"])
             .order_by("-published_at", "document_id").values("document_id", "title")[:SIBLING_LIMIT]
         )
-    publication = ArticlePublication.objects.select_related("version").get(document_id=document_id)
+    publication = ArticlePublication.objects.select_related("version", "document").get(document_id=document_id)
     return Response({
         "title": row["title"], "format": row["format"], "body": row["body_text"],
         "image_sizes": version_image_sizes(publication.version) if row["format"] == Document.Format.MARKDOWN else {},
+        # P11c: how the article reads (a live document setting, not part of the published snapshot).
+        "presentation": publication.document.presentation, "gallery_layout": publication.document.gallery_layout,
         "published_at": row["published_at"], "reading_minutes": reading_minutes(row["sample"], row["text_length"]),
         "collection": collection_of(row), "path": path_of(row["document__category_id"], category_index()),
         "siblings": siblings,

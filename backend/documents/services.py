@@ -131,7 +131,10 @@ def change_document(actor, document_id, data=None):
         activity.record(document.pk, actor, activity.Action.TRASHED)
     else:
         before = activity.metadata_snapshot(document)
-        fields = [field for field in ("title", "category") if field in data]
+        if "presentation" in data and data["presentation"] != document.presentation \
+                and document.format != Document.Format.MARKDOWN:
+            raise ValidationError({"presentation": "只有 Markdown 文件可以使用相簿模式。"})
+        fields = [field for field in ("title", "category", "presentation", "gallery_layout") if field in data]
         for field in fields:
             setattr(document, field, data[field])
         if "tags" in data:

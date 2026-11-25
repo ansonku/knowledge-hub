@@ -144,7 +144,26 @@ function onImageKey(event: KeyboardEvent) {
 let galleries: ReturnType<typeof enhanceGalleries> | undefined
 let carouselSlides: number[] = []
 function startGalleries() {
-  if (root.value) galleries = enhanceGalleries(root.value, carouselSlides)
+  if (!root.value) return
+  galleries = enhanceGalleries(root.value, carouselSlides)
+  clampAlbumText()
+}
+// Gallery mode (P11c): a long description folds to a few lines above the album, with a button to unfold.
+function clampAlbumText() {
+  const text = root.value?.querySelector<HTMLElement>('.md-album-text')
+  if (!text || text.scrollHeight <= 300) return
+  text.classList.add('clamped')
+  const toggle = document.createElement('button')
+  toggle.type = 'button'
+  toggle.className = 'md-album-toggle'
+  toggle.textContent = '顯示完整說明'
+  toggle.setAttribute('aria-expanded', 'false')
+  toggle.addEventListener('click', () => {
+    const open = text.classList.toggle('clamped') === false
+    toggle.textContent = open ? '收合說明' : '顯示完整說明'
+    toggle.setAttribute('aria-expanded', String(open))
+  })
+  text.after(toggle)
 }
 function stopGalleries() {
   carouselSlides = galleries?.slides() ?? carouselSlides
@@ -188,6 +207,10 @@ onBeforeUnmount(() => {
 .markdown-body :deep(figcaption) { color: #52647c; font-size: .9rem; }
 .markdown-body :deep(code.hljs) { padding: 0; background: transparent; }
 .markdown-body :deep(img.zoomable) { cursor: zoom-in; }
+/* ---- Gallery mode (P11c) ---- */
+.markdown-body :deep(.md-album-text.clamped) { max-height: 12rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.markdown-body :deep(.md-album-toggle) { margin: .25rem 0 0; padding: .25rem .75rem; border: 1px solid var(--ui-border, #e4e7ec); border-radius: .4rem; background: var(--ui-bg-surface, #fff); color: var(--ui-accent, #1d4ed8); font: inherit; font-size: .9rem; cursor: pointer; }
+.markdown-body :deep(.md-album) { margin-top: 1.5rem; }
 /* ---- Galleries (P11b) ---- */
 .markdown-body :deep(.md-gallery) { margin: 1.25rem 0; }
 .markdown-body :deep(.md-gallery-hint) { margin: 0 0 .5rem; padding: .35rem .7rem; border-radius: .4rem; background: var(--ui-lagging-bg, #fff6e5); color: var(--ui-lagging-text, #8a5a00); font-size: .88rem; }

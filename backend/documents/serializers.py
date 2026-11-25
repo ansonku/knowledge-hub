@@ -56,7 +56,10 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ["id", "title", "format", "category", "category_name", "tags", "current_version", "updated_at"]
+        fields = [
+            "id", "title", "format", "category", "category_name", "tags", "current_version", "updated_at",
+            "presentation", "gallery_layout",
+        ]
 
 
 class DocumentListSerializer(DocumentSerializer):
@@ -105,6 +108,8 @@ class DocumentMetadata(serializers.Serializer):
     title = serializers.CharField(max_length=240, required=False)
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), allow_null=True, required=False)
     tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True, required=False)
+    presentation = serializers.ChoiceField(Document.Presentation.choices, required=False)
+    gallery_layout = serializers.ChoiceField(Document.GalleryLayout.choices, required=False, allow_blank=True)
 
 
 class VersionUpload(serializers.Serializer):

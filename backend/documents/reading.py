@@ -100,4 +100,5 @@ def read_article(request, document_id):
         "collection": collection_ref(document.category_id, index), "path": path_of(document.category_id, index),
         "public": document.public, "siblings": [],
         "image_sizes": version_image_sizes(version) if document.format == Document.Format.MARKDOWN else {},
+        "presentation": document.presentation, "gallery_layout": document.gallery_layout,
     })

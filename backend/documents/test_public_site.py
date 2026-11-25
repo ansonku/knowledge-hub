@@ -13,7 +13,8 @@ from .publication import reading_minutes, summarise
 # authors, tags, version ids) is internal and must not appear in public responses.
 CARD_FIELDS = {"document_id", "title", "format", "published_at", "excerpt", "reading_minutes", "collection", "path"}
 # image_sizes (P11b): ids and sizes of pictures the published body already shows, nothing else.
-ARTICLE_FIELDS = {"title", "format", "body", "published_at", "reading_minutes", "collection", "path", "siblings", "image_sizes"}
+ARTICLE_FIELDS = {"title", "format", "body", "published_at", "reading_minutes", "collection", "path", "siblings", "image_sizes",
+                  "presentation", "gallery_layout"}
 NODE_FIELDS = {"id", "name", "color", "parent", "depth", "article_count", "total_count"}
 COLLECTION_FIELDS = {"id", "name", "color"}
 

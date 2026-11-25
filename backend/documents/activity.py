@@ -29,7 +29,7 @@ def record_version(version):
 
 
 def record_metadata(document, actor, before):
-    """Record title, collection and tag changes compared with the `before` snapshot."""
+    """Record title, collection, tag and presentation changes compared with the `before` snapshot."""
     changes = {}
     if before["title"] != document.title:
         changes["title"] = {"from": before["title"], "to": document.title}
@@ -38,6 +38,9 @@ def record_metadata(document, actor, before):
             "from": before["category_name"],
             "to": document.category.name if document.category_id else None,
         }
+    for field in ("presentation", "gallery_layout"):
+        if before[field] != getattr(document, field):
+            changes[field] = {"from": before[field], "to": getattr(document, field)}
     tags = {tag.pk: tag.name for tag in document.tags.all()}
     added = sorted(name for pk, name in tags.items() if pk not in before["tags"])
     removed = sorted(name for pk, name in before["tags"].items() if pk not in tags)
@@ -53,4 +56,6 @@ def metadata_snapshot(document):
         "category_id": document.category_id,
         "category_name": document.category.name if document.category_id else None,
         "tags": {tag.pk: tag.name for tag in document.tags.all()},
+        "presentation": document.presentation,
+        "gallery_layout": document.gallery_layout,
     }

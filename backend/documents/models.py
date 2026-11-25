@@ -53,6 +53,22 @@ class Document(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # P11c: a Markdown document can read as a photo album. Not versioned; it applies to the public article too.
+    class Presentation(models.TextChoices):
+        ARTICLE = "article", "文章"
+        GALLERY = "gallery", "相簿"
+
+    class GalleryLayout(models.TextChoices):
+        DEFAULT = "", "跟隨系統預設"
+        JUSTIFIED = "justified", "齊邊"
+        GRID = "grid", "方格"
+        MASONRY = "masonry", "瀑布流"
+        VERTICAL = "vertical", "直列"
+        CAROUSEL = "carousel", "輪播"
+
+    presentation = models.CharField(max_length=8, choices=Presentation.choices, default=Presentation.ARTICLE)
+    gallery_layout = models.CharField(max_length=12, choices=GalleryLayout.choices, default="", blank=True)
+
 
 class Version(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

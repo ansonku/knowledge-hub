@@ -15,6 +15,23 @@ export type GalleryLayout = (typeof GALLERY_LAYOUTS)[number]
 export const LAYOUT_LABELS: Record<GalleryLayout, string> = {
   justified: '齊邊', grid: '方格', masonry: '瀑布流', vertical: '直列', carousel: '輪播',
 }
+/**
+ * The layout a document in gallery mode reads with, and where it comes from: the document setting, else the
+ * first `:::gallery` block that names a known layout (outside code fences), else the system default.
+ */
+export function albumLayout(source: string, documentLayout: string, fallback: GalleryLayout = DEFAULT_LAYOUT) {
+  if ((GALLERY_LAYOUTS as readonly string[]).includes(documentLayout)) return { layout: documentLayout as GalleryLayout, from: 'document' as const }
+  let fence = ''
+  for (const line of source.split('\n')) {
+    const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1]
+    if (marker && (!fence || marker[0] === fence[0])) { fence = fence ? '' : marker; continue }
+    if (fence) continue
+    const named = OPEN.exec(line.trim())?.[1]?.toLowerCase()
+    if (named && (GALLERY_LAYOUTS as readonly string[]).includes(named)) return { layout: named as GalleryLayout, from: 'block' as const }
+  }
+  return { layout: fallback, from: 'default' as const }
+}
+
 /** Until the system setting exists (P11d), galleries without a layout name use this one. */
 export const DEFAULT_LAYOUT: GalleryLayout = 'justified'
 
@@ -24,6 +41,8 @@ export type GalleryContext = {
   galleryDefault?: GalleryLayout
   /** The editor's split preview: show hints about mistakes in gallery blocks. */
   hints?: boolean
+  /** P11c gallery mode: every picture of the document forms one album below the text. */
+  album?: { layout: GalleryLayout | '' }
 }
 type Picture = { src: string; alt: string; title: string }
 type GalleryMeta = { layout: GalleryLayout; asked: string; pictures: Picture[]; leftover: boolean }
@@ -110,9 +129,75 @@ function collect(state: StateCore) {
   state.tokens = out
 }
 
+const blank = (part: Token) => part.type === 'softbreak' || part.type === 'hardbreak' || (part.type === 'text' && !part.content.trim())
+
+/**
+ * Gallery mode: pulls every picture (in document order, gallery blocks included) out of the text into one
+ * album. A leading H1 stays first (pages hide it when it repeats the title); the remaining text becomes the
+ * album's description. Videos and pictures inside links stay where they are.
+ */
+function album(state: StateCore) {
+  const env = state.env as GalleryContext
+  if (!env.album) return
+  const tokens = state.tokens
+  const pictures: Picture[] = []
+  const rest: Token[] = []
+  // Decision 28 (revised): when the document follows the default, the first gallery block that names a
+  // layout decides, e.g. `:::gallery carousel`; otherwise the system default.
+  let blockLayout: GalleryLayout | '' = ''
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    if (token.type === 'gallery') {
+      const meta = token.meta as GalleryMeta
+      blockLayout ||= meta.layout
+      pictures.push(...meta.pictures)
+      continue
+    }
+    if (token.type === 'inline' && token.children) {
+      const kept: Token[] = []
+      let links = 0
+      for (const part of token.children) {
+        if (part.type === 'link_open') links++
+        else if (part.type === 'link_close') links--
+        const src = part.type === 'image' ? String(part.attrGet('src') ?? '') : ''
+        if (src && !links && !VIDEO.test(src)) {
+          pictures.push({ src, alt: state.md.renderer.renderInlineAsText(part.children ?? [], state.md.options, {}), title: String(part.attrGet('title') ?? '') })
+          continue
+        }
+        kept.push(part)
+      }
+      token.children = kept
+      // A paragraph that only held pictures disappears entirely.
+      if (tokens[index - 1]?.type === 'paragraph_open' && tokens[index + 1]?.type === 'paragraph_close' && kept.every(blank)) {
+        rest.pop()
+        index++
+        continue
+      }
+    }
+    rest.push(token)
+  }
+  const out: Token[] = []
+  let start = 0
+  if (rest[0]?.type === 'heading_open' && rest[0].tag === 'h1') { out.push(...rest.slice(0, 3)); start = 3 }
+  const description = rest.slice(start)
+  if (description.length) {
+    out.push(Object.assign(new state.Token('album_text_open', 'div', 1), { block: true }), ...description,
+      Object.assign(new state.Token('album_text_close', 'div', -1), { block: true }))
+  }
+  const gallery = new state.Token('gallery', 'div', 0)
+  gallery.block = true
+  gallery.meta = { layout: env.album.layout || blockLayout, asked: '', pictures, leftover: false } satisfies GalleryMeta | (Omit<GalleryMeta, 'layout'> & { layout: '' })
+  out.push(gallery)
+  state.tokens = out
+}
+
 export function galleryPlugin(md: MarkdownIt) {
   md.block.ruler.before('fence', 'gallery', block, { alt: ['paragraph', 'reference', 'blockquote', 'list'] })
   md.core.ruler.push('gallery', collect)
+  md.core.ruler.push('album', album)
+  md.renderer.rules.album_text_open = () => '<div class="md-album-text">'
+  md.renderer.rules.album_text_close = () => '</div>\n'
+
   md.renderer.rules.gallery = (tokens, index, _options, context) => {
     const env = context as GalleryContext
     const token = tokens[index]
@@ -137,7 +222,7 @@ export function galleryPlugin(md: MarkdownIt) {
       const caption = layout === 'vertical' && picture.alt ? `<figcaption>${escape(picture.alt)}</figcaption>` : ''
       return `<figure class="g-item" data-index="${position}" style="--r:${ratio}"${size ? '' : ' data-unsized=""'}>${image}${caption}</figure>`
     })
-    const head = `<div class="md-gallery" data-layout="${layout}" data-count="${items.length}"${lineAttr}>`
+    const head = `<div class="md-gallery${env.album ? ' md-album' : ''}" data-layout="${layout}" data-count="${items.length}"${lineAttr}>`
     const notes = hints.map(hint => `<p class="md-gallery-hint" role="note">${escape(hint)}</p>`).join('')
     if (layout !== 'carousel' || !items.length) return `${head}${notes}<div class="g-items">${items.join('')}</div></div>\n`
     const thumbs = meta.pictures.map((picture, position) =>

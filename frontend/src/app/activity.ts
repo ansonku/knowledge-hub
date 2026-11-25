@@ -1,3 +1,4 @@
+import { LAYOUT_LABELS, type GalleryLayout } from '../gallery'
 import type { Format } from './types'
 
 export type ActivityItem = {
@@ -14,6 +15,8 @@ export type ActivityItem = {
     title?: { from: string; to: string }
     category?: { from: string | null; to: string | null }
     tags?: { added: string[]; removed: string[] }
+    presentation?: { from: string; to: string }
+    gallery_layout?: { from: string; to: string }
   }
   created_at: string
   document: { id: string; title: string; format: Format }
@@ -50,6 +53,11 @@ export function activityDetail(item: ActivityItem) {
   if (detail.category) parts.push(`集合改為「${detail.category.to ?? '未分類'}」`)
   if (detail.tags?.added.length) parts.push(`加上標籤 ${detail.tags.added.join('、')}`)
   if (detail.tags?.removed.length) parts.push(`移除標籤 ${detail.tags.removed.join('、')}`)
+  if (detail.presentation) parts.push(`呈現方式改為「${detail.presentation.to === 'gallery' ? '相簿' : '文章'}」`)
+  if (detail.gallery_layout) {
+    const to = detail.gallery_layout.to as GalleryLayout | ''
+    parts.push(`相簿版面改為「${to ? LAYOUT_LABELS[to] ?? to : '跟隨系統預設'}」`)
+  }
   return parts.join('；')
 }
 

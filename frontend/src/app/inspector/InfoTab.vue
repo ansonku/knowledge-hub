@@ -7,6 +7,7 @@ import { api } from '../../api'
 import { useTaxonomy } from '../../stores/taxonomy'
 import type { DocumentDetails } from '../composables/useDocument'
 import { formatLabel, longDateTime } from '../types'
+import { GALLERY_LAYOUTS, LAYOUT_LABELS } from '../../gallery'
 
 type Heading = { id: string; text: string; level: number }
 
@@ -17,6 +18,8 @@ const taxonomy = useTaxonomy()
 const toast = useToast()
 // Indent relative to the shallowest heading so a hidden leading H1 does not shift the whole list.
 const topLevel = computed(() => Math.min(...props.headings.map(heading => heading.level), 6))
+const presentations = [{ value: 'article', label: '文章' }, { value: 'gallery', label: '相簿' }]
+const layouts = [{ value: '', label: '跟隨系統預設' }, ...GALLERY_LAYOUTS.map(value => ({ value, label: LAYOUT_LABELS[value] }))]
 const category = ref<string | null>(null)
 const tags = ref<string[]>([])
 const saving = ref(false)
@@ -26,11 +29,14 @@ watch(() => props.document, document => {
   tags.value = document.tags.map(tag => tag.id)
 }, { immediate: true })
 
-async function patch(payload: { category?: string | null; tags?: string[] }) {
+async function patch(payload: { category?: string | null; tags?: string[]; presentation?: string; gallery_layout?: string }) {
   saving.value = true
   try {
     const saved = await api<DocumentDetails>(`/api/documents/${props.document.id}/`, 'PATCH', payload)
-    emit('updated', { category: saved.category, category_name: saved.category_name, tags: saved.tags, updated_at: saved.updated_at })
+    emit('updated', {
+      category: saved.category, category_name: saved.category_name, tags: saved.tags, updated_at: saved.updated_at,
+      presentation: saved.presentation, gallery_layout: saved.gallery_layout,
+    })
     toast.add({ severity: 'success', summary: '已更新文件資料', life: 2500 })
   } catch (cause) {
     category.value = props.document.category
@@ -49,6 +55,13 @@ function changeCategory(value: string | null) {
 function commitTags() {
   const before = props.document.tags.map(tag => tag.id).sort().join()
   if ([...tags.value].sort().join() !== before) void patch({ tags: tags.value })
+}
+
+function changePresentation(value: string) {
+  if (value && value !== props.document.presentation) void patch({ presentation: value })
+}
+function changeLayout(value: string | null) {
+  if ((value ?? '') !== props.document.gallery_layout) void patch({ gallery_layout: value ?? '' })
 }
 
 function sizeLabel(size?: number) {
@@ -77,6 +90,23 @@ function sizeLabel(size?: number) {
           <span v-if="!document.tags.length" class="muted">—</span>
         </span>
       </dd>
+      <template v-if="document.format === 'md'">
+        <dt><label for="info-presentation">呈現方式</label></dt>
+        <dd>
+          <Select v-if="editable" input-id="info-presentation" :model-value="document.presentation" :options="presentations"
+            option-label="label" option-value="value" size="small" :disabled="saving" fluid @update:model-value="changePresentation" />
+          <span v-else>{{ document.presentation === 'gallery' ? '相簿' : '文章' }}</span>
+        </dd>
+        <template v-if="document.presentation === 'gallery'">
+          <dt><label for="info-layout">相簿版面</label></dt>
+          <dd>
+            <Select v-if="editable" input-id="info-layout" :model-value="document.gallery_layout" :options="layouts"
+              option-label="label" option-value="value" placeholder="跟隨系統預設" size="small" :disabled="saving" fluid
+              @update:model-value="changeLayout" />
+            <span v-else>{{ layouts.find(item => item.value === document.gallery_layout)?.label }}</span>
+          </dd>
+        </template>
+      </template>
       <dt>格式</dt>
       <dd>{{ formatLabel(document.format) }}<template v-if="document.current_version.size"> · {{ sizeLabel(document.current_version.size) }}</template></dd>
       <dt>最新版本</dt>

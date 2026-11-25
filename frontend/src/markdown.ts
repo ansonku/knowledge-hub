@@ -77,6 +77,7 @@ export type RenderOptions = Omit<GalleryContext, 'hints'> & {
 export function renderMarkdown(source: string, options: RenderOptions = {}): RenderedMarkdown {
   const context: RenderContext = {
     diagrams: [], imageSizes: options.imageSizes, galleryDefault: options.galleryDefault, hints: options.sourceLines,
+    album: options.album,
   }
   const headings: Heading[] = []
   const tokens = parser.parse(source, context)
