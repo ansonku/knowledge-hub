@@ -49,6 +49,7 @@ const paths = {
   table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
   rule: 'M4 12h16M4 6h.01M20 6h.01M4 18h.01M20 18h.01',
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15 9.5h.01',
+  video: 'M3 6h12v12H3zM15 10.5l6-3.5v10l-6-3.5',
 } as const
 
 export type IconName = keyof typeof paths

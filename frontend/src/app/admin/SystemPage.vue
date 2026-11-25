@@ -18,8 +18,8 @@ import { useSite, type NoticeLevel, type NoticeSettings } from '../../stores/sit
 const site = useSite()
 type Report = {
   generated_at: string
-  content: { documents: number; trashed: number; versions: number; published: number; collections: number; tags: number; images: number }
-  storage: { versions_bytes: number; images_bytes: number; database_bytes: number | null; disk: { total_bytes: number; free_bytes: number } | null }
+  content: { documents: number; trashed: number; versions: number; published: number; collections: number; tags: number; images: number; videos: number }
+  storage: { versions_bytes: number; images_bytes: number; videos_bytes: number; database_bytes: number | null; disk: { total_bytes: number; free_bytes: number } | null }
   members: {
     total: number; active: number; pending: number; disabled: number
     by_role: { admin: number; editor: number; viewer: number }; active_admins: number; mfa_enabled: number
@@ -27,6 +27,7 @@ type Report = {
   jobs: {
     pending_deletions: number; oldest_pending_deletion: string | null; unindexed_documents: number
     unused_images: number; unused_images_bytes: number
+    unused_videos: number; unused_videos_bytes: number
   }
   config: { https: boolean; google_login: boolean; smtp: boolean; mfa_key: boolean; html_preview: boolean; max_upload_bytes: number; max_batch: number }
   warnings: { level: 'info' | 'warning' | 'danger'; key: string; text: string }[]
@@ -130,8 +131,8 @@ const lastLines = computed(() => lastRun.value ? maintenanceLines(lastRun.value.
 function confirmMaintenance() {
   confirm.require({
     header: '立即執行維護',
-    message: '會依序執行：重試未完成的檔案清理、補建缺少的搜尋索引、刪除超過 24 小時且沒有任何版本使用的圖片，'
-      + '以及檢查檔案和資料庫是否一致（只檢查，不移動檔案）。執行期間會短暫暫停儲存版本和上傳圖片。',
+    message: '會依序執行：重試未完成的檔案清理、補建缺少的搜尋索引、刪除超過 24 小時且沒有任何版本使用的圖片與影片，'
+      + '以及檢查檔案和資料庫是否一致（只檢查，不移動檔案）。執行期間會短暫暫停儲存版本和上傳圖片、影片。',
     acceptProps: { label: '執行' },
     rejectProps: { label: '取消', severity: 'secondary', text: true },
     accept: () => { void runMaintenance() },
@@ -279,6 +280,7 @@ onMounted(() => {
           <dl class="facts">
             <div><dt>文件版本檔案</dt><dd>{{ bytes(report.storage.versions_bytes) }}</dd></div>
             <div><dt>文件中的圖片（{{ report.content.images.toLocaleString() }} 張）</dt><dd>{{ bytes(report.storage.images_bytes) }}</dd></div>
+            <div><dt>文件中的影片（{{ report.content.videos.toLocaleString() }} 支）</dt><dd>{{ bytes(report.storage.videos_bytes) }}</dd></div>
             <div><dt>資料庫</dt><dd>{{ bytes(report.storage.database_bytes) }}</dd></div>
           </dl>
           <div v-if="report.storage.disk" class="disk">
@@ -325,8 +327,12 @@ onMounted(() => {
               <dt>待清理的未使用圖片</dt>
               <dd>{{ report.jobs.unused_images }}<template v-if="report.jobs.unused_images">（{{ bytes(report.jobs.unused_images_bytes) }}）</template></dd>
             </div>
+            <div>
+              <dt>待清理的未使用影片</dt>
+              <dd>{{ report.jobs.unused_videos }}<template v-if="report.jobs.unused_videos">（{{ bytes(report.jobs.unused_videos_bytes) }}）</template></dd>
+            </div>
           </dl>
-          <p class="note">沒有任何版本使用、且超過 24 小時的圖片會自動刪除：服務啟動時一次，之後有人上傳圖片時最多每小時一次。</p>
+          <p class="note">沒有任何版本使用、且超過 24 小時的圖片與影片會自動刪除：服務啟動時一次，之後有人上傳圖片或影片時最多每小時一次。</p>
           <div class="maintenance">
             <div class="maintenance-head">
               <p class="note">

@@ -49,7 +49,7 @@ class SystemStatusTests(TransactionTestCase):
 
         report = self.report()
         self.assertEqual(report["content"] | {}, {"documents": 1, "trashed": 1, "versions": 2, "published": 0,
-                                                 "collections": 0, "tags": 0, "images": 0})
+                                                 "collections": 0, "tags": 0, "images": 0, "videos": 0})
         self.assertEqual(report["storage"]["versions_bytes"], len(b"first") + len(b"second!"))
         self.assertGreater(report["storage"]["database_bytes"], 0)
         self.assertGreater(report["storage"]["disk"]["total_bytes"], 0)

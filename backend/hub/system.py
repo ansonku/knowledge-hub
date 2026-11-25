@@ -16,7 +16,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from documents.images import unused_images
-from documents.models import ArticlePublication, Category, Document, DocumentImage, PendingDocumentDeletion, Tag, Version
+from documents.videos import unused_videos
+from documents.models import (
+    ArticlePublication, Category, Document, DocumentImage, DocumentVideo, PendingDocumentDeletion, Tag, Version,
+)
 from users.models import User
 from users.permissions import IsAdmin
 
@@ -82,6 +85,8 @@ def system_status(request):
     versions = Version.objects.aggregate(count=Count("pk"), bytes=Sum("size"))
     images = DocumentImage.objects.aggregate(count=Count("pk"), bytes=Sum("size"))
     unused = unused_images().aggregate(count=Count("pk"), bytes=Sum("size"))
+    videos = DocumentVideo.objects.aggregate(count=Count("pk"), bytes=Sum("size"))
+    unused_video = unused_videos().aggregate(count=Count("pk"), bytes=Sum("size"))
     pending = PendingDocumentDeletion.objects.aggregate(count=Count("pk"), oldest=Min("created_at"))
     people = User.objects.aggregate(
         total=Count("pk"),
@@ -99,9 +104,11 @@ def system_status(request):
             "documents": documents["active"], "trashed": documents["trashed"], "versions": versions["count"],
             "published": ArticlePublication.objects.filter(document__is_trashed=False).count(),
             "collections": Category.objects.count(), "tags": Tag.objects.count(), "images": images["count"],
+            "videos": videos["count"],
         },
         "storage": {
             "versions_bytes": versions["bytes"] or 0, "images_bytes": images["bytes"] or 0,
+            "videos_bytes": videos["bytes"] or 0,
             "database_bytes": database_size(), "disk": disk(),
         },
         "members": {
@@ -114,6 +121,7 @@ def system_status(request):
             "pending_deletions": pending["count"], "oldest_pending_deletion": pending["oldest"],
             # Normally near zero: the cleanup runs at start-up and at most hourly after uploads.
             "unused_images": unused["count"], "unused_images_bytes": unused["bytes"] or 0,
+            "unused_videos": unused_video["count"], "unused_videos_bytes": unused_video["bytes"] or 0,
             "unindexed_documents": Version.objects.filter(
                 search_text__isnull=True, pk=F("document__current_version_id"), document__is_trashed=False,
             ).count(),

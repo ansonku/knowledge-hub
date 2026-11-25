@@ -208,13 +208,13 @@ def remove_files(paths):
             folders.add(path.parent)
         except OSError:
             # check_document_storage reports the leftover file; nothing refers to it any more.
-            logger.error("Could not remove an unused image file.")
+            logger.error("Could not remove an unused image or video file.")
     for folder in folders:
         try:
             storage.sync_directory(folder)
             folder.rmdir()
         except OSError:
-            pass  # Not empty: other images of the document remain.
+            pass  # Not empty: other images or videos of the document remain.
 
 
 def collect_occasionally():
@@ -225,6 +225,11 @@ def collect_occasionally():
         collect_unused_images()
     except Exception:
         logger.exception("Unused image cleanup failed.")
+    from .videos import collect_unused_videos
+    try:
+        collect_unused_videos()
+    except Exception:
+        logger.exception("Unused video cleanup failed.")
 
 
 def record_references(version, text):

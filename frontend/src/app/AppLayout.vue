@@ -89,8 +89,18 @@ function onDragEnter(event: DragEvent) {
   event.preventDefault()
   dragDepth.value++
 }
+// Over a Markdown editor the drop inserts into the document instead; the editor shows its own hint.
+const overEditor = ref(false)
 function onDragOver(event: DragEvent) {
-  if (session.canEdit && hasFiles(event)) event.preventDefault()
+  if (!session.canEdit || !hasFiles(event)) return
+  event.preventDefault()
+  overEditor.value = !!(event.target as Element | null)?.closest?.('[data-file-drop]')
+}
+// The editor handles its own drops and stops them there, so the shell's @drop never sees them:
+// any drop (or a cancelled drag) anywhere ends the overlay.
+function endDrag() {
+  dragDepth.value = 0
+  overEditor.value = false
 }
 function onDragLeave(event: DragEvent) {
   if (session.canEdit && hasFiles(event)) dragDepth.value = Math.max(0, dragDepth.value - 1)
@@ -98,7 +108,7 @@ function onDragLeave(event: DragEvent) {
 function onDrop(event: DragEvent) {
   if (!session.canEdit || !hasFiles(event)) return
   event.preventDefault()
-  dragDepth.value = 0
+  endDrag()
   if (event.dataTransfer?.files.length) uploads.add(event.dataTransfer.files, uploadCategory())
 }
 const onDocumentsChanged = () => { void workspace.refresh(true) }
@@ -120,11 +130,15 @@ watch(() => route.fullPath, () => {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('hub:documents-changed', onDocumentsChanged)
+  window.addEventListener('drop', endDrag, true)
+  window.addEventListener('dragend', endDrag, true)
   void start()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('hub:documents-changed', onDocumentsChanged)
+  window.removeEventListener('drop', endDrag, true)
+  window.removeEventListener('dragend', endDrag, true)
   detachTheme()
 })
 </script>
@@ -167,7 +181,7 @@ onBeforeUnmount(() => {
       <NewMarkdownDialog v-model:visible="creating" :default-category="createCategory" />
       <input ref="chooser" type="file" accept=".md,.html" multiple hidden @change="onChosen">
       <UploadTray />
-      <div v-if="dragDepth > 0" class="drop" aria-hidden="true">
+      <div v-if="dragDepth > 0 && !overEditor" class="drop" aria-hidden="true">
         <div class="drop-card">
           <UiIcon name="upload" :size="28" />
           <strong>放開即可上傳</strong>

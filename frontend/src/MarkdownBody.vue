@@ -50,8 +50,45 @@ function showResults(event: MessageEvent) {
   }
 }
 
-watch(() => props.rendered, () => { revision.value++ }, { flush: 'sync' })
-watch(() => props.rendered, renderDiagrams, { flush: 'post' })
+// ---- Videos --------------------------------------------------------------------
+// The split preview re-renders a moment after each keystroke. Players already on the page are carried over
+// (matched by address and order), so a video keeps playing while the writer types around it.
+let players = new Map<string, HTMLVideoElement>()
+function videoKeys(scope: ParentNode) {
+  const seen = new Map<string, number>()
+  return Array.from(scope.querySelectorAll<HTMLVideoElement>('video[data-video]')).map(video => {
+    const source = video.getAttribute('src') ?? ''
+    const count = seen.get(source) ?? 0
+    seen.set(source, count + 1)
+    return [`${source}#${count}`, video] as const
+  })
+}
+function keepPlayers() {
+  players = root.value ? new Map(videoKeys(root.value)) : new Map()
+}
+function restorePlayers() {
+  if (root.value) {
+    for (const [key, fresh] of videoKeys(root.value)) {
+      const kept = players.get(key)
+      if (!kept || kept === fresh) continue
+      fresh.replaceWith(kept)
+      // The hint follows its own player's state.
+      const hint = kept.nextElementSibling
+      if (hint instanceof HTMLElement && hint.classList.contains('md-video-error')) hint.hidden = !kept.error
+    }
+  }
+  players = new Map()
+}
+/** Media errors do not bubble; this listens in the capture phase and reveals the hint under that player. */
+function onMediaError(event: Event) {
+  const video = event.target
+  if (!(video instanceof HTMLVideoElement) || !video.hasAttribute('data-video')) return
+  const hint = video.nextElementSibling
+  if (hint instanceof HTMLElement && hint.classList.contains('md-video-error')) hint.hidden = false
+}
+
+watch(() => props.rendered, () => { keepPlayers(); revision.value++ }, { flush: 'sync' })
+watch(() => props.rendered, () => { restorePlayers(); renderDiagrams() }, { flush: 'post' })
 watch(renderer, () => { frameReady.value = false })
 onMounted(() => window.addEventListener('message', showResults))
 onBeforeUnmount(() => {
@@ -61,7 +98,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <article class="markdown-body">
+  <article class="markdown-body" @error.capture="onMediaError">
     <!-- Rendered Markdown escapes raw HTML. Diagram output is inserted only as an image. -->
     <div :key="revision" ref="root" v-html="rendered.html" />
     <iframe v-if="rendered.diagrams.length" ref="renderer" src="/markdown-diagram.html" sandbox="allow-scripts"
@@ -79,4 +116,9 @@ onBeforeUnmount(() => {
 .markdown-body :deep(figure[data-diagram] img) { display: block; width: auto; max-width: 100%; }
 .markdown-body :deep(figcaption) { color: #52647c; font-size: .9rem; }
 .markdown-body :deep(code.hljs) { padding: 0; background: transparent; }
+.markdown-body :deep(.md-pending) { color: #6b7a90; font-style: italic; }
+.markdown-body :deep(.md-video) { display: block; margin: 1rem 0; }
+.markdown-body :deep(.md-video video) { display: block; width: 100%; max-height: 75vh; border-radius: .5rem; background: #000; }
+.markdown-body :deep(.md-video-error) { display: block; margin-top: .4rem; color: var(--ui-danger, #b42318); font-size: .9rem; }
+.markdown-body :deep(.md-video-error[hidden]) { display: none; }
 </style>

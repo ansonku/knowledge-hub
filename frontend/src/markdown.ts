@@ -33,8 +33,25 @@ const parser = new MarkdownIt({
 parser.use(tasklist)
 parser.use(katex, { trust: false, throwOnError: false, maxExpand: 500, maxSize: 25 })
 
+// Videos uploaded to this site (P10) use image syntax: ![說明](/api/videos/<id>/). Only that exact same-origin form
+// becomes a player; any other address stays an image. Raw HTML stays off, so this is the only way to get <video>.
+const VIDEO = /^\/api\/videos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/$/
+export const VIDEO_ERROR = '這段影片無法播放：瀏覽器可能不支援它的編碼（請轉成 MP4／H.264 後重新上傳），或影片已無法存取。'
+
 const image = parser.renderer.rules.image!
 parser.renderer.rules.image = (tokens, index, options, context, renderer) => {
+  const token = tokens[index]
+  const source = String(token.attrGet('src') ?? '')
+  if (VIDEO.test(source)) {
+    const label = parser.utils.escapeHtml(renderer.renderInlineAsText(token.children ?? [], options, context) || '影片')
+    return `<span class="md-video"><video controls preload="metadata" playsinline src="${source}" aria-label="${label}" data-video></video>`
+      + `<span class="md-video-error" role="note" hidden>${VIDEO_ERROR}</span></span>`
+  }
+  // No address, e.g. the editor's "![上傳中…]()" placeholder: show its text instead of a broken image.
+  if (!source) {
+    const label = parser.utils.escapeHtml(renderer.renderInlineAsText(token.children ?? [], options, context))
+    return label ? `<span class="md-pending">${label}</span>` : ''
+  }
   tokens[index].attrSet('loading', 'lazy')
   tokens[index].attrSet('referrerpolicy', 'no-referrer')
   return image(tokens, index, options, context, renderer)
