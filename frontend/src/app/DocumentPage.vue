@@ -23,6 +23,7 @@ import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
 import { useDocument, type DocumentDetails, type PublicationStatus } from './composables/useDocument'
+import { draftImageIds, readDraft, removeDraft, writeDraft, type Draft, type DraftWrite } from './drafts'
 import InfoTab from './inspector/InfoTab.vue'
 import ActivityTab from './inspector/ActivityTab.vue'
 import PublishTab from './inspector/PublishTab.vue'
@@ -62,12 +63,17 @@ const modes: { value: Mode; label: string }[] = [
 ]
 // Picture sizes let gallery layouts (P11b) take their final shape before the pictures load.
 const imageSizes = ref<Record<string, [number, number]>>({})
+const imageSizesReady = ref(false)
 watch(() => [file.value?.id, file.value?.format] as const, async ([id, format]) => {
   imageSizes.value = {}
+  imageSizesReady.value = false
   if (!id || format !== 'md') return
   try {
     const sizes = await api<Record<string, [number, number]>>(`/api/documents/${encodeURIComponent(id)}/image-sizes/`)
-    if (file.value?.id === id) imageSizes.value = { ...sizes, ...imageSizes.value }
+    if (file.value?.id === id) {
+      imageSizes.value = { ...sizes, ...imageSizes.value }
+      imageSizesReady.value = true
+    }
   } catch {
     // Without sizes, galleries still work: pictures settle once loaded.
   }
@@ -161,11 +167,92 @@ watch([documentId, versionId], () => {
   closePreview()
   previewError.value = ''
 })
+// ---- Drafts kept in this browser (P12) ---------------------------------------------
+// While editing, the draft is written to localStorage a moment after typing stops (and at once when the
+// tab is hidden or closed), so a crash or a reload does not lose it. Coming back offers to restore it.
+const draftAccount = computed(() => session.account?.id)
+const pendingDraft = ref<Draft>()
+const draftChecked = ref(false)
+const draftStatus = ref<{ state: DraftWrite; at: number }>()
+// Only a draft this page wrote is removed when the changes are undone; another tab may be keeping its own.
+let wroteDraft = false
+const draftable = computed(() => canEdit.value && file.value?.format === 'md' && !!draftAccount.value)
+function checkDraft() {
+  pendingDraft.value = undefined
+  draftStatus.value = undefined
+  wroteDraft = false
+  const account = draftAccount.value, current = file.value
+  if (!draftable.value || !account || !current) { draftChecked.value = true; return }
+  const stored = readDraft(account, current.id)
+  // Nothing to offer when it matches the saved text (e.g. saved in another tab).
+  if (stored && stored.text === doc.source.value) removeDraft(account, current.id)
+  else pendingDraft.value = stored
+  draftChecked.value = true
+}
+function flushDraft() {
+  const account = draftAccount.value, current = file.value
+  if (!draftChecked.value || pendingDraft.value || !draftable.value || !account || !current) return
+  if (!dirty.value) {
+    if (wroteDraft) removeDraft(account, current.id)
+    wroteDraft = false
+    draftStatus.value = undefined
+    return
+  }
+  wroteDraft = true
+  const state = writeDraft(account, current.id, {
+    text: draft.value, baseId: current.current_version.id, baseNumber: current.current_version.number, savedAt: Date.now(),
+  })
+  draftStatus.value = { state, at: Date.now() }
+}
+watch(draft, (_, __, onCleanup) => {
+  const timer = setTimeout(flushDraft, 1000)
+  onCleanup(() => clearTimeout(timer))
+})
+const onHide = () => { if (document.visibilityState === 'hidden') flushDraft() }
+watch([documentId, versionId], () => { draftChecked.value = false; pendingDraft.value = undefined; draftStatus.value = undefined })
+const draftOutdated = computed(() => !!pendingDraft.value && !!file.value && pendingDraft.value.baseId !== file.value.current_version.id)
+/** Pictures of this site the draft shows that the 24-hour cleanup has removed since. */
+const draftMissingImages = computed(() => {
+  if (!pendingDraft.value || !imageSizesReady.value) return 0
+  return draftImageIds(pendingDraft.value.text).filter(id => !(id in imageSizes.value)).length
+})
+const draftNote = computed(() => {
+  const status = draftStatus.value
+  if (!status || !dirty.value) return ''
+  if (status.state === 'too-large') return '文件太大，無法暫存草稿'
+  if (status.state === 'unavailable') return '瀏覽器無法暫存草稿'
+  return `草稿已暫存 ${new Date(status.at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+})
+const draftTime = (at: number) => new Date(at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+function restoreDraft() {
+  const stored = pendingDraft.value
+  if (!stored) return
+  pendingDraft.value = undefined
+  draft.value = stored.text
+  setMode('split')
+  flushDraft()
+}
+function dropDraft() {
+  const account = draftAccount.value, current = file.value
+  if (account && current) removeDraft(account, current.id)
+  pendingDraft.value = undefined
+}
+function downloadDraft() {
+  const stored = pendingDraft.value
+  if (!stored || !file.value) return
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(new Blob([stored.text], { type: 'text/markdown;charset=utf-8' }))
+  link.download = `${file.value.title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'document'}（草稿）.md`
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+}
+
 // ?mode=split (e.g. right after creating a document) opens the editor with the cursor ready to type.
 const focusEditor = ref(false)
 watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
   if (busy) return
   site.setTitle(file.value?.title)
+  if (!historical.value) checkDraft()
   if (route.query.mode === 'split') {
     const { mode: _ignored, ...rest } = route.query
     void router.replace({ query: rest })
@@ -199,6 +286,8 @@ async function save() {
   if (uploadsRunning.value) return
   const number = await doc.save(note.value)
   if (!number) return
+  if (draftAccount.value && file.value) removeDraft(draftAccount.value, file.value.id)
+  draftStatus.value = undefined
   note.value = ''
   toast.add({ severity: 'success', summary: `已儲存為 v${number}`, life: 3000 })
   void loadPublication()
@@ -210,7 +299,12 @@ function discard() {
     message: '編輯區會回到目前版本的內容，未儲存的修改將遺失。',
     acceptProps: { label: '捨棄變更', severity: 'danger' },
     rejectProps: { label: '繼續編輯', severity: 'secondary', text: true },
-    accept: () => { doc.discard(); mode.value = 'read' },
+    accept: () => {
+      doc.discard()
+      if (draftAccount.value && file.value) removeDraft(draftAccount.value, file.value.id)
+      draftStatus.value = undefined
+      mode.value = 'read'
+    },
   })
 }
 
@@ -427,9 +521,14 @@ onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate((to, from) => (to.params.id === from.params.id && to.query.version === from.query.version) || canLeave())
 onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
+  window.addEventListener('pagehide', flushDraft)
+  document.addEventListener('visibilitychange', onHide)
   narrow.addEventListener('change', onNarrowChange)
 })
 onBeforeUnmount(() => {
+  flushDraft()
+  window.removeEventListener('pagehide', flushDraft)
+  document.removeEventListener('visibilitychange', onHide)
   doc.abort()
   window.removeEventListener('beforeunload', beforeUnload)
   narrow.removeEventListener('change', onNarrowChange)
@@ -518,6 +617,25 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <!-- Draft kept in this browser (P12) -->
+          <div v-if="pendingDraft && file.format === 'md'" class="draft-banner" :class="{ outdated: draftOutdated }" role="status">
+            <UiIcon :name="draftOutdated ? 'alert' : 'info'" :size="18" />
+            <div class="draft-banner-text">
+              <p>你有一份尚未儲存的草稿（{{ draftTime(pendingDraft.savedAt) }} 暫存）。</p>
+              <p v-if="draftOutdated">
+                草稿是根據 v{{ pendingDraft.baseNumber }} 編輯的，之後已有新版本（目前是 v{{ file.current_version.number }}）。
+                恢復並儲存，會以草稿內容成為 v{{ file.current_version.number + 1 }}，之後版本的修改不會併入（仍保留在版本歷史中）。
+                建議先下載草稿，或到版本歷史比對再決定。
+              </p>
+              <p v-if="draftMissingImages">草稿中有 {{ draftMissingImages }} 張圖片已被清除（超過 24 小時沒有存進任何版本），需要重新貼上。</p>
+            </div>
+            <div class="draft-banner-actions">
+              <Button label="恢復草稿" size="small" @click="restoreDraft" />
+              <Button label="下載草稿" size="small" severity="secondary" outlined @click="downloadDraft" />
+              <Button label="捨棄草稿" size="small" severity="secondary" text @click="dropDraft" />
+            </div>
+          </div>
+
           <!-- Markdown: read -->
           <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading" :class="{ 'skip-title': leadingTitle }">
             <MarkdownBody :rendered="rendered" download />
@@ -529,6 +647,7 @@ onBeforeUnmount(() => {
               <span class="draft-state" :class="{ dirty }" role="status">
                 <span class="dot" aria-hidden="true" />{{ dirty ? '尚未儲存的變更' : '沒有變更' }}
               </span>
+              <span v-if="draftNote" class="draft-note" :class="{ warn: draftStatus?.state !== 'saved' }">{{ draftNote }}</span>
               <label for="version-note" class="ui-visually-hidden">更新說明</label>
               <InputText id="version-note" v-model="note" maxlength="500" placeholder="更新說明（選填），按 Enter 儲存" size="small"
                 class="note" :disabled="saving" />
@@ -704,6 +823,17 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .note { flex: 1 1 14rem; max-width: 24rem; }
 .album-note { margin: 0 0 var(--ui-space-3); padding: var(--ui-space-2) var(--ui-space-3); border-radius: var(--ui-radius-md); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); font-size: var(--ui-text-sm); line-height: 1.6; }
 .album-note code { font-size: .9em; }
+.draft-note { color: var(--ui-text-muted); font-size: var(--ui-text-xs); white-space: nowrap; }
+.draft-note.warn { color: var(--ui-lagging-text); }
+.draft-banner {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--ui-space-3); margin: 0 0 var(--ui-space-4); padding: var(--ui-space-3) var(--ui-space-4);
+  border: 1px solid var(--ui-accent); border-radius: var(--ui-radius-md); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft);
+}
+.draft-banner.outdated { border-color: var(--ui-lagging-border); background: var(--ui-lagging-bg); color: var(--ui-lagging-text); }
+.draft-banner-text { flex: 1 1 18rem; min-width: 0; }
+.draft-banner-text p { margin: 0; line-height: 1.6; font-size: var(--ui-text-sm); }
+.draft-banner-text p + p { margin-top: var(--ui-space-1); }
+.draft-banner-actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }
 .upload-wait { color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; white-space: nowrap; }
 .panes { display: grid; gap: var(--ui-space-3); min-height: var(--editor-height); }
 .panes.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }

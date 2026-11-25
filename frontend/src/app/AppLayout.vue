@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pruneDrafts, removeAccountDrafts } from './drafts'
 import Button from 'primevue/button'
 import ConfirmDialog from 'primevue/confirmdialog'
 import Message from 'primevue/message'
@@ -127,7 +128,15 @@ watch(() => route.fullPath, () => {
   void workspace.refresh()
 })
 
+// P12: drafts kept in this browser leave it on sign-out, and expire after three days.
+function onSignOut(event: MouseEvent) {
+  const link = (event.target as Element | null)?.closest?.('a[href]')
+  if (!link || !session.account) return
+  if (new URL((link as HTMLAnchorElement).href, location.href).pathname.startsWith('/accounts/logout/')) removeAccountDrafts(session.account.id)
+}
 onMounted(() => {
+  pruneDrafts()
+  document.addEventListener('click', onSignOut, true)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('hub:documents-changed', onDocumentsChanged)
   window.addEventListener('drop', endDrag, true)
@@ -135,6 +144,7 @@ onMounted(() => {
   void start()
 })
 onBeforeUnmount(() => {
+  document.removeEventListener('click', onSignOut, true)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('hub:documents-changed', onDocumentsChanged)
   window.removeEventListener('drop', endDrag, true)
