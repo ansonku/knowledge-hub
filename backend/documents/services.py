@@ -209,6 +209,9 @@ def publish_version(document, actor, temporary, sha256, size, number, filename, 
         text = temporary.read_text(encoding="utf-8")
         images.record_references(version, text)
         videos.record_references(version, text)
+        from .links import record_links
+
+        record_links(version, text)
     activity.record_version(version)
     return version
 

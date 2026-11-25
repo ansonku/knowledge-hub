@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { enhanceGalleries } from './galleryView'
+import { useRouter } from 'vue-router'
+import { linkedDocument, resolveLinks } from './app/links'
 import { useSite } from './stores/site'
 import type { RenderedMarkdown } from './markdown'
 
@@ -10,7 +12,9 @@ const props = withDefaults(defineProps<{
   lightbox?: boolean
   /** Members get a "download" button in the lightbox for this site's images. */
   download?: boolean
-}>(), { lightbox: true, download: false })
+  /** Workspace: mark links to other documents with their current title, and broken ones (P13a). */
+  docLinks?: boolean
+}>(), { lightbox: true, download: false, docLinks: false })
 const root = ref<HTMLElement>()
 const renderer = ref<HTMLIFrameElement>()
 const frameReady = ref(false)
@@ -143,6 +147,38 @@ function onImageKey(event: KeyboardEvent) {
   if (event.key === 'Enter' || event.key === ' ') void openImage(event.target, event)
 }
 
+// ---- Links to other documents (P13a) -----------------------------------------------------
+const router = useRouter()
+let linkRun = 0
+async function markDocLinks() {
+  if (!props.docLinks || !root.value) return
+  const run = ++linkRun
+  const anchors = Array.from(root.value.querySelectorAll<HTMLAnchorElement>('a[href]'))
+    .map(anchor => [anchor, linkedDocument(anchor)] as const).filter((pair): pair is readonly [HTMLAnchorElement, string] => !!pair[1])
+  if (!anchors.length) return
+  for (const [anchor] of anchors) anchor.classList.add('doc-link')
+  const states = await resolveLinks(anchors.map(([, id]) => id))
+  if (run !== linkRun) return
+  for (const [anchor, id] of anchors) {
+    const state = states[id]
+    if (!state) continue
+    const broken = state.status !== 'ok'
+    anchor.classList.toggle('doc-link-broken', broken)
+    anchor.title = broken
+      ? `${state.title ? `「${state.title}」` : '這份文件'}${state.status === 'trashed' ? '已移入回收桶' : '不存在'}，連結已失效`
+      : `連到：${state.title}（${state.category_name ?? '未分類'}）`
+  }
+}
+/** Links to documents stay inside the app instead of reloading the page. */
+function followDocLink(event: MouseEvent) {
+  if (!props.docLinks || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  const anchor = (event.target as Element | null)?.closest?.('a.doc-link') as HTMLAnchorElement | null
+  if (!anchor || anchor.target) return
+  const url = new URL(anchor.href)
+  event.preventDefault()
+  void router.push(url.pathname + url.search + url.hash)
+}
+
 // ---- Galleries (P11b) -------------------------------------------------------------
 let galleries: ReturnType<typeof enhanceGalleries> | undefined
 let carouselSlides: number[] = []
@@ -175,12 +211,13 @@ function stopGalleries() {
 }
 
 watch(() => props.rendered, () => { keepPlayers(); stopGalleries(); revision.value++ }, { flush: 'sync' })
-watch(() => props.rendered, () => { restorePlayers(); renderDiagrams(); startGalleries(); prepareImages() }, { flush: 'post' })
+watch(() => props.rendered, () => { restorePlayers(); renderDiagrams(); startGalleries(); prepareImages(); void markDocLinks() }, { flush: 'post' })
 watch(renderer, () => { frameReady.value = false })
 onMounted(() => {
   window.addEventListener('message', showResults)
   startGalleries()
   prepareImages()
+  void markDocLinks()
 })
 onBeforeUnmount(() => {
   stopGalleries()
@@ -190,7 +227,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <article class="markdown-body" @error.capture="onMediaError" @click="openImage($event.target, $event)"
+  <article class="markdown-body" @error.capture="onMediaError" @click="openImage($event.target, $event); followDocLink($event)"
     @keydown="onImageKey">
     <!-- Rendered Markdown escapes raw HTML. Diagram output is inserted only as an image. -->
     <div :key="revision" ref="root" v-html="rendered.html" />
@@ -210,6 +247,13 @@ onBeforeUnmount(() => {
 .markdown-body :deep(figcaption) { color: #52647c; font-size: .9rem; }
 .markdown-body :deep(code.hljs) { padding: 0; background: transparent; }
 .markdown-body :deep(img.zoomable) { cursor: zoom-in; }
+/* Links to other documents (P13a): a small page icon; broken ones struck through. */
+.markdown-body :deep(a.doc-link)::before {
+  content: ""; display: inline-block; width: .85em; height: .85em; margin-right: .2em; vertical-align: -.08em; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M6 3h8l4 4v14H6z'/%3E%3Cpath d='M14 3v4h4M9 12h6M9 16h6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M6 3h8l4 4v14H6z'/%3E%3Cpath d='M14 3v4h4M9 12h6M9 16h6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.markdown-body :deep(a.doc-link-broken) { color: var(--ui-text-muted, #667085); text-decoration: line-through; }
 /* ---- Gallery mode (P11c) ---- */
 .markdown-body :deep(.md-album-text.clamped) { max-height: 12rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
 .markdown-body :deep(.md-album-toggle) { margin: .25rem 0 0; padding: .25rem .75rem; border: 1px solid var(--ui-border, #e4e7ec); border-radius: .4rem; background: var(--ui-bg-surface, #fff); color: var(--ui-accent, #1d4ed8); font: inherit; font-size: .9rem; cursor: pointer; }
