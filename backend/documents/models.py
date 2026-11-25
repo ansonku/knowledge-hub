@@ -245,6 +245,9 @@ class SiteSettings(models.Model):
         choices=[(value, label) for value, label in Document.GalleryLayout.choices if value],
     )
     member_download = models.BooleanField(default=True)
+    # Skip the animation when the browser asks for reduced motion. Off for sites whose readers sit on virtual
+    # desktops, where browsers often report reduced motion although nobody asked for it.
+    lightbox_reduced_motion = models.BooleanField(default=True)
 
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]

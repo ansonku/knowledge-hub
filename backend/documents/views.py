@@ -500,6 +500,7 @@ def gallery_payload(site):
     return {
         "effect": site.lightbox_effect, "speed": site.lightbox_speed, "backdrop": site.lightbox_backdrop,
         "layout": site.gallery_layout, "member_download": site.member_download,
+        "respect_reduced_motion": site.lightbox_reduced_motion,
     }
 
 
@@ -558,10 +559,12 @@ class GallerySettingsInput(serializers.Serializer):
     backdrop = serializers.IntegerField(min_value=60, max_value=100)
     layout = serializers.ChoiceField([value for value in Document.GalleryLayout.values if value])
     member_download = serializers.BooleanField()
+    respect_reduced_motion = serializers.BooleanField()
 
 
 GALLERY_FIELDS = {"effect": "lightbox_effect", "speed": "lightbox_speed", "backdrop": "lightbox_backdrop",
-                  "layout": "gallery_layout", "member_download": "member_download"}
+                  "layout": "gallery_layout", "member_download": "member_download",
+                  "respect_reduced_motion": "lightbox_reduced_motion"}
 
 
 @never_cache

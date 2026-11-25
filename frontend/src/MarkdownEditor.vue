@@ -3,6 +3,8 @@ import { editor, KeyCode, KeyMod, Range, Selection } from './monaco'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import UiIcon, { type IconName } from './app/components/UiIcon.vue'
 import { GALLERY_LAYOUTS, LAYOUT_LABELS } from './gallery'
+import { plainSnippet, SHORTCUTS, SNIPPETS, type Snippet } from './markdownSnippets'
+import { helpers, registerMarkdownHelpers } from './markdownCompletions'
 import {
   continueList, countWords, indentList, insertBlockStyle, insertGallery, insertLink, pasteAsLink, toggleInline, toggleLines,
   type BlockStyle, type InlineStyle, type LineStyle,
@@ -44,7 +46,8 @@ type Tool = Look & (
   | { kind: 'link' }
   | { kind: 'image' }
   | { kind: 'video' }
-  | { kind: 'gallery' })
+  | { kind: 'gallery' }
+  | { kind: 'help' })
 const groups: Tool[][] = [
   [
     { kind: 'line', style: 'h2', text: 'H2', label: '標題 2' },
@@ -71,6 +74,7 @@ const groups: Tool[][] = [
     { kind: 'block', style: 'table', icon: 'table', label: '表格' },
     { kind: 'block', style: 'rule', icon: 'rule', label: '分隔線' },
   ],
+  [{ kind: 'help', icon: 'help', label: '語法說明', keys: '/' }],
 ]
 function title(tool: Tool) {
   return tool.keys ? `${tool.label}（${mod}${tool.keys}）` : tool.label
@@ -83,6 +87,7 @@ function apply(tool: Tool) {
   else if (tool.kind === 'image') picker.value?.click()
   else if (tool.kind === 'video') videoPicker.value?.click()
   else if (tool.kind === 'gallery') toggleGalleryMenu()
+  else if (tool.kind === 'help') toggleHelp()
   else insertLink(instance)
 }
 // Gallery layout menu under the 「相簿」 button.
@@ -105,6 +110,36 @@ function closeGalleryMenu(event: Event) {
     instance?.focus()
   }
 }
+// ---- Syntax help (P11e): a side panel (Ctrl+/) and a slash menu at the start of a line ----
+const helpOpen = ref(false)
+const helpGroups = computed(() => ['文字', '區塊', '圖片與影片'].map(name => ({
+  name, items: SNIPPETS.filter(item => item.group === name && (item.action !== 'video' || props.uploadVideo)),
+})))
+const helpPanel = ref<HTMLElement>()
+function toggleHelp(open = !helpOpen.value) {
+  helpOpen.value = open
+  if (!open) instance?.focus()
+}
+function pick(kind: 'image' | 'video') {
+  if (props.readonly) return
+  if (kind === 'image') picker.value?.click()
+  else if (props.uploadVideo) videoPicker.value?.click()
+}
+type SnippetEditor = { insert: (template: string) => void }
+function insertSnippet(snippet: Snippet) {
+  const ed = instance, model = ed?.getModel(), sel = ed?.getSelection()
+  if (!ed || !model || !sel || props.readonly) return
+  ed.focus()
+  if (snippet.action) { pick(snippet.action); return }
+  if (snippet.block && model.getLineContent(sel.endLineNumber).trim()) {
+    // Block syntax starts on a line of its own, after a blank line.
+    const end = model.getLineMaxColumn(sel.endLineNumber)
+    ed.executeEdits('help', [{ range: new Range(sel.endLineNumber, end, sel.endLineNumber, end), text: '\n\n' }])
+    ed.setPosition({ lineNumber: sel.endLineNumber + 2, column: 1 })
+  }
+  ed.getContribution<SnippetEditor & editor.IEditorContribution>('snippetController2')?.insert(snippet.insert ?? '')
+}
+
 const visibleGroups = computed(() => groups.map(group => group.filter(tool =>
   (tool.kind !== 'image' || props.uploadImage) && (tool.kind !== 'video' || (props.uploadImage && props.uploadVideo)))))
 
@@ -324,7 +359,13 @@ onMounted(() => {
     // Prose needs no word completion popups.
     quickSuggestions: false,
     wordBasedSuggestions: 'off',
-    suggestOnTriggerCharacters: false,
+    // Only this editor's own suggestions: the slash menu and gallery layout names (P11e).
+    suggestOnTriggerCharacters: true,
+    // No icons: the codicon font is not loaded (core editor only), so they would show as empty boxes.
+    suggest: { showWords: false, showIcons: false, filterGraceful: true, insertMode: 'replace' },
+    // Enter accepts a suggestion only when that changes the text: typing a whole layout name then Enter
+    // still starts a new line.
+    acceptSuggestionOnEnter: 'smart',
     // Dropped files are images to upload (handled below), never file paths to type in.
     dropIntoEditor: { enabled: false },
   })
@@ -334,6 +375,9 @@ onMounted(() => {
   ed.addAction({ id: 'md.italic', label: '斜體', keybindings: [KeyMod.CtrlCmd | KeyCode.KeyI], run: unlessReadonly(() => toggleInline(ed, 'italic')) })
   ed.addAction({ id: 'md.link', label: '連結', keybindings: [KeyMod.CtrlCmd | KeyCode.KeyK], run: unlessReadonly(() => insertLink(ed)) })
   ed.addAction({ id: 'md.save', label: '儲存', keybindings: [KeyMod.CtrlCmd | KeyCode.KeyS], run: () => emit('save') })
+  ed.addAction({ id: 'md.help', label: '語法說明', keybindings: [KeyMod.CtrlCmd | KeyCode.Slash], run: () => toggleHelp() })
+  registerMarkdownHelpers()
+  if (model) helpers.set(model.uri.toString(), { readonly: () => props.readonly, pick })
   ed.onKeyDown(event => {
     // Never act while an input method is composing: Enter there confirms the Chinese text.
     if (props.readonly || event.browserEvent.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
@@ -371,6 +415,7 @@ watch(value, text => {
 watch(() => props.readonly, readOnly => instance?.updateOptions({ readOnly }))
 
 onBeforeUnmount(() => {
+  if (model) helpers.delete(model.uri.toString())
   root.value?.removeEventListener('paste', onPaste, true)
   root.value?.removeEventListener('dragover', onDragOver, true)
   root.value?.removeEventListener('drop', onDrop, true)
@@ -409,6 +454,34 @@ onBeforeUnmount(() => {
     <input ref="videoPicker" type="file" accept="video/mp4,video/webm,.mp4,.webm" hidden
       aria-hidden="true" tabindex="-1" @change="onPicked">
     <div ref="host" class="editor-host" />
+    <aside v-if="helpOpen" ref="helpPanel" class="help-panel" aria-label="Markdown 語法說明" @keydown.esc.stop="toggleHelp(false)">
+      <div class="help-head">
+        <strong>語法說明</strong>
+        <button type="button" class="help-close" aria-label="關閉語法說明" @click="toggleHelp(false)"><UiIcon name="close" :size="16" /></button>
+      </div>
+      <p class="help-tip">在空白行開頭輸入 <kbd>/</kbd> 可以快速插入，例如 <code>/相簿</code>、<code>/表格</code>。</p>
+      <section v-for="group in helpGroups" :key="group.name" class="help-group">
+        <h3>{{ group.name }}</h3>
+        <div v-for="item in group.items" :key="item.id" class="help-item">
+          <div class="help-item-head">
+            <span class="help-label">{{ item.label }}</span>
+            <button type="button" class="help-insert" :disabled="readonly" @click="insertSnippet(item)">
+              {{ item.action ? '選擇檔案' : '插入' }}
+            </button>
+          </div>
+          <p class="help-desc">{{ item.description }}</p>
+          <pre class="help-code"><code>{{ plainSnippet(item) }}</code></pre>
+        </div>
+      </section>
+      <section class="help-group">
+        <h3>快捷鍵</h3>
+        <dl class="help-keys">
+          <template v-for="shortcut in SHORTCUTS" :key="shortcut.keys">
+            <dt><kbd>{{ shortcut.keys }}</kbd></dt><dd>{{ shortcut.label }}</dd>
+          </template>
+        </dl>
+      </section>
+    </aside>
     <div v-if="dragging" class="drop-hint" aria-hidden="true">
       <UiIcon :name="uploadVideo ? 'video' : 'image'" :size="20" />
       <span>{{ uploadVideo ? '放開即可插入圖片或影片' : '放開即可插入圖片（PNG、JPEG、GIF、WebP）' }}</span>
@@ -445,6 +518,27 @@ onBeforeUnmount(() => {
 .sep { width: 1px; height: 1.25rem; margin: 0 .25rem; background: var(--ui-border-strong); }
 .editor-host { flex: 1; min-height: 0; }
 .md-editor { position: relative; }
+.help-panel {
+  position: absolute; top: 0; right: 0; bottom: 1.75rem; z-index: 9; width: min(22rem, 100%); box-sizing: border-box; overflow-y: auto;
+  padding: var(--ui-space-3) var(--ui-space-4) var(--ui-space-5); border-left: 1px solid var(--ui-border);
+  background: var(--ui-bg-surface); box-shadow: -8px 0 24px rgb(16 24 40 / .08);
+}
+.help-head { display: flex; align-items: center; justify-content: space-between; position: sticky; top: calc(-1 * var(--ui-space-3)); margin: calc(-1 * var(--ui-space-3)) calc(-1 * var(--ui-space-4)) 0; padding: var(--ui-space-3) var(--ui-space-4); background: var(--ui-bg-surface); border-bottom: 1px solid var(--ui-border); }
+.help-close { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border: 0; border-radius: var(--ui-radius-sm); background: none; color: var(--ui-text-muted); cursor: pointer; }
+.help-close:hover { background: var(--ui-bg-subtle); color: var(--ui-text); }
+.help-tip { margin: var(--ui-space-3) 0 0; color: var(--ui-text-secondary); font-size: var(--ui-text-sm); line-height: 1.6; }
+.help-group h3 { margin: var(--ui-space-4) 0 var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; }
+.help-item { padding: var(--ui-space-2) 0; border-top: 1px solid var(--ui-border-subtle, var(--ui-border)); }
+.help-item-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-2); }
+.help-label { font-weight: 600; }
+.help-insert { padding: 2px var(--ui-space-2); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-bg-surface); color: var(--ui-accent); font: inherit; font-size: var(--ui-text-xs); font-weight: 600; cursor: pointer; }
+.help-insert:hover:not(:disabled) { background: var(--ui-accent-soft); }
+.help-insert:disabled { opacity: .5; cursor: default; }
+.help-desc { margin: 2px 0 var(--ui-space-1); color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.5; }
+.help-code { margin: 0; padding: var(--ui-space-2); border-radius: var(--ui-radius-sm); background: var(--ui-bg-subtle); font-size: .78rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.help-keys { display: grid; grid-template-columns: auto 1fr; gap: var(--ui-space-2) var(--ui-space-3); margin: 0; font-size: var(--ui-text-sm); }
+.help-keys dd { margin: 0; color: var(--ui-text-secondary); }
+.help-panel kbd { padding: 1px 5px; border: 1px solid var(--ui-border); border-radius: 4px; background: var(--ui-bg-subtle); font-family: inherit; font-size: .75rem; white-space: nowrap; }
 .gallery-menu {
   position: absolute; z-index: 10; display: grid; min-width: 12rem; padding: .3rem;
   border: 1px solid var(--ui-border); border-radius: .5rem; background: var(--ui-bg-surface); box-shadow: var(--ui-shadow-lg);

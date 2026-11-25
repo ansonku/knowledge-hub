@@ -15,9 +15,11 @@ export type GallerySettings = {
   backdrop: number
   layout: 'justified' | 'grid' | 'masonry' | 'vertical' | 'carousel'
   member_download: boolean
+  /** Skip the animation when the browser asks for reduced motion (off: always animate). */
+  respect_reduced_motion: boolean
 }
-export const STANDARD_GALLERY: GallerySettings = { effect: 'center', speed: 'normal', backdrop: 92, layout: 'justified', member_download: true }
-export const SPEED_FACTORS: Record<GallerySettings['speed'], number> = { fast: 0.5, normal: 1, slow: 1.5 }
+export const STANDARD_GALLERY: GallerySettings = { effect: 'center', speed: 'normal', backdrop: 92, layout: 'justified', member_download: true, respect_reduced_motion: true }
+export const SPEED_FACTORS: Record<GallerySettings['speed'], number> = { fast: 0.75, normal: 1, slow: 1.25 }
 export type SiteSettings = {
   name: string; tagline: string; notice?: SiteNotice | null; notice_settings?: NoticeSettings; gallery?: GallerySettings
 }
@@ -37,6 +39,7 @@ export const useSite = defineStore('site', () => {
   /** What the lightbox needs from the settings. */
   const lightboxLook = computed(() => ({
     effect: gallery.value.effect, speed: SPEED_FACTORS[gallery.value.speed] ?? 1, backdrop: gallery.value.backdrop / 100,
+    respectReducedMotion: gallery.value.respect_reduced_motion !== false,
   }))
   const loaded = ref(false)
   const page = ref<string | undefined>()

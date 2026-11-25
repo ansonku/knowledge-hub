@@ -5,7 +5,8 @@ from users.models import AuditLog, User
 from .models import SiteSettings
 
 URL = "/api/site/gallery/"
-STANDARD = {"effect": "center", "speed": "normal", "backdrop": 92, "layout": "justified", "member_download": True}
+STANDARD = {"effect": "center", "speed": "normal", "backdrop": 92, "layout": "justified", "member_download": True,
+            "respect_reduced_motion": True}
 
 
 class GallerySettingsTests(TestCase):
@@ -23,9 +24,12 @@ class GallerySettingsTests(TestCase):
         self.assertEqual(Client().get("/api/site/").json()["gallery"], STANDARD)
 
     def test_admin_changes_them_and_the_change_is_audited(self):
-        response = self.put({**STANDARD, "effect": "zoom", "speed": "fast", "backdrop": 100, "layout": "masonry", "member_download": False})
+        response = self.put({**STANDARD, "effect": "zoom", "speed": "fast", "backdrop": 100, "layout": "masonry", "member_download": False,
+                             "respect_reduced_motion": False})
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()["gallery"], {"effect": "zoom", "speed": "fast", "backdrop": 100, "layout": "masonry", "member_download": False})
+        self.assertEqual(response.json()["gallery"], {"effect": "zoom", "speed": "fast", "backdrop": 100, "layout": "masonry", "member_download": False,
+                                                      "respect_reduced_motion": False})
+        self.assertEqual(SiteSettings.current().lightbox_reduced_motion, False)
         self.assertEqual(Client().get("/api/site/").json()["gallery"]["layout"], "masonry")
         entry = AuditLog.objects.get(action="site_gallery_updated")
         self.assertEqual(entry.actor, self.admin)

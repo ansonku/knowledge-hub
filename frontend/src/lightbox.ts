@@ -8,10 +8,12 @@ import './lightbox.css'
 export type LightboxEffect = 'center' | 'zoom' | 'fade'
 export type LightboxLook = {
   effect: LightboxEffect
-  /** Multiplies every duration: 0.5 fast, 1 standard, 1.5 slow. */
+  /** Multiplies every duration: 0.75 fast, 1 standard, 1.25 slow. */
   speed: number
   /** Opacity of the dark backdrop. */
   backdrop: number
+  /** Follow the browser's reduced-motion preference (no animation). Off: always animate. Default on. */
+  respectReducedMotion?: boolean
 }
 /** The "standard" look picked on the comparison page (UI_REDESIGN.md 10.11). */
 export const STANDARD_LOOK: LightboxLook = { effect: 'center', speed: 1, backdrop: 0.92 }
@@ -21,8 +23,9 @@ export type LightboxOptions = {
   look?: LightboxLook
 }
 
-// "Background first, then the picture grows out of the middle."
-const CENTER = { backdrop: 800, delay: 250, grow: 200, scale: 0.84, close: 400, easing: 'cubic-bezier(.25, .8, .25, 1)' }
+// "Background first, then the picture grows out of the middle." Standard values picked on the comparison page
+// (2026-11-25, revised): backdrop 300 ms, picture after 150 ms over 650 ms from 84 %, ease in-out.
+const CENTER = { backdrop: 300, delay: 150, grow: 650, scale: 0.84, close: 400, easing: 'cubic-bezier(.4, 0, .2, 1)' }
 const ZOOM = { open: 600, close: 400, easing: 'cubic-bezier(.4, 0, .2, 1)' }
 const FADE = { open: 300, close: 250 }
 const SITE_IMAGE = /^\/api\/images\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/$/
@@ -53,7 +56,9 @@ type Item = SlideData & { element: HTMLImageElement; alt: string; path: string }
 /** Opens the pictures of one group (in page order) at `index`. Resolves once the lightbox is closed. */
 export async function openLightbox(images: HTMLImageElement[], index: number, options: LightboxOptions) {
   const look = options.look ?? STANDARD_LOOK
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+  // Browsers on virtual desktops often report reduced motion although nobody asked for it; Admins can
+  // choose to animate anyway (system setting).
+  const still = look.respectReducedMotion !== false && matchMedia('(prefers-reduced-motion: reduce)').matches
   const items: Item[] = images.map(element => {
     const src = element.currentSrc || element.src
     const known = element.complete && element.naturalWidth

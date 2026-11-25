@@ -186,7 +186,8 @@ async function previewLightbox(index: number) {
   const { openLightbox } = await import('../../lightbox')
   const form = galleryForm.value
   void openLightbox(images, index, {
-    download: false, look: { effect: form.effect, speed: SPEED_FACTORS[form.speed], backdrop: form.backdrop / 100 },
+    download: false,
+    look: { effect: form.effect, speed: SPEED_FACTORS[form.speed], backdrop: form.backdrop / 100, respectReducedMotion: form.respect_reduced_motion },
   })
 }
 
@@ -470,13 +471,21 @@ onMounted(() => {
               <span>成員可在燈箱下載原圖</span>
             </label>
             <div class="field">
+              <label class="switch-row">
+                <ToggleSwitch :model-value="galleryForm.respect_reduced_motion" input-id="gallery-reduced-motion"
+                  @update:model-value="pickGallery('respect_reduced_motion', $event)" />
+                <span>配合瀏覽器的「減少動態效果」</span>
+              </label>
+              <p class="note">開啟時，瀏覽器要求減少動態效果的人不會看到動畫（無障礙建議）。虛擬機或遠端桌面上的瀏覽器常會誤報這個設定；成員多半在這類環境時，可以關閉，讓所有人都看到動畫。</p>
+            </div>
+            <div class="field">
               <span class="field-label">預覽 <span class="optional">點縮圖，以上方（尚未儲存的）設定開啟燈箱</span></span>
               <div ref="sampleStrip" class="samples">
                 <button v-for="(sample, index) in samples" :key="sample.alt" type="button" class="sample" :aria-label="`預覽：${sample.alt}`"
                   @click="previewLightbox(index)"><img :src="sample.src" :alt="sample.alt"></button>
               </div>
             </div>
-            <p class="note">套用到工作區、閱讀入口與公開站的所有圖片。「預設相簿版面」用於沒有寫明版面的 <code>:::gallery</code> 與相簿模式的文件。訪客一律沒有下載按鈕；作業系統開啟「減少動態效果」的人不會看到動畫。</p>
+            <p class="note">套用到工作區、閱讀入口與公開站的所有圖片。「預設相簿版面」用於沒有寫明版面的 <code>:::gallery</code> 與相簿模式的文件。訪客一律沒有下載按鈕。</p>
             <Message v-if="galleryError" severity="error" size="small">{{ galleryError }}</Message>
             <div class="form-actions">
               <Button type="submit" label="儲存" size="small" :loading="gallerySaving" :disabled="!galleryDirty" />
