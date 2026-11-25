@@ -7,9 +7,11 @@ import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import { jumpToHeading } from '../headings'
 import { cardDate, collectionStyle, colorClass, portalMode, portals, publicApi, publicDate, usePublicNav, type PublicArticle } from './public'
+import { useSession } from '../stores/session'
 import { useSite } from '../stores/site'
 
 const site = useSite()
+const session = useSession()
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 const article = ref<PublicArticle>()
@@ -161,7 +163,8 @@ async function copyLink() {
       <div class="columns">
         <article class="body" :aria-busy="loading">
           <div v-if="rendered" ref="content" class="reading" :class="{ 'skip-title': leadingTitle }">
-            <MarkdownBody :rendered="rendered" />
+            <!-- Signed-in members also get the lightbox download button; visitors do not. -->
+            <MarkdownBody :rendered="rendered" :download="session.status === 'member'" />
           </div>
           <iframe v-else :srcdoc="htmlDocument" sandbox="" referrerpolicy="no-referrer" title="HTML 文章正文" class="html-frame" />
 

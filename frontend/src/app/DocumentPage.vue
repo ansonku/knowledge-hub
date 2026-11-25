@@ -490,7 +490,7 @@ onBeforeUnmount(() => {
 
           <!-- Markdown: read -->
           <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading" :class="{ 'skip-title': leadingTitle }">
-            <MarkdownBody :rendered="rendered" />
+            <MarkdownBody :rendered="rendered" download />
           </div>
 
           <!-- Markdown: edit / split -->
@@ -514,7 +514,7 @@ onBeforeUnmount(() => {
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
                 <span class="preview-label">即時預覽</span>
-                <MarkdownBody :rendered="preview" />
+                <MarkdownBody :rendered="preview" download />
               </div>
             </div>
           </div>

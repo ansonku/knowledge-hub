@@ -2,7 +2,13 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RenderedMarkdown } from './markdown'
 
-const props = defineProps<{ rendered: RenderedMarkdown }>()
+const props = withDefaults(defineProps<{
+  rendered: RenderedMarkdown
+  /** Clicking a picture opens it in the lightbox. */
+  lightbox?: boolean
+  /** Members get a "download" button in the lightbox for this site's images. */
+  download?: boolean
+}>(), { lightbox: true, download: false })
 const root = ref<HTMLElement>()
 const renderer = ref<HTMLIFrameElement>()
 const frameReady = ref(false)
@@ -87,10 +93,53 @@ function onMediaError(event: Event) {
   if (hint instanceof HTMLElement && hint.classList.contains('md-video-error')) hint.hidden = false
 }
 
+// ---- Lightbox (P11a) -------------------------------------------------------------
+// Pictures inside links keep opening the link; diagrams and pending placeholders are not photos.
+function lightboxImages() {
+  return Array.from(root.value?.querySelectorAll<HTMLImageElement>('img') ?? [])
+    .filter(image => image.getAttribute('src') && !image.closest('a, figure[data-diagram]'))
+}
+let lightboxModule: Promise<typeof import('./lightbox')> | undefined
+const loadLightbox = () => (lightboxModule ??= import('./lightbox'))
+function prepareImages() {
+  if (!props.lightbox) return
+  const images = lightboxImages()
+  for (const image of images) {
+    image.classList.add('zoomable')
+    image.tabIndex = 0
+  }
+  // Fetch the lightbox code while the reader is still reading, so the first click opens at once.
+  if (images.length) {
+    const idle = window.requestIdleCallback ?? ((callback: () => void) => window.setTimeout(callback, 600))
+    idle(() => { void loadLightbox() })
+  }
+}
+let opening = false
+async function openImage(target: EventTarget | null, event: Event) {
+  if (!props.lightbox || opening || !(target instanceof HTMLImageElement) || !target.classList.contains('zoomable')) return
+  const images = lightboxImages()
+  const index = images.indexOf(target)
+  if (index < 0) return
+  event.preventDefault()
+  opening = true
+  try {
+    const { openLightbox } = await loadLightbox()
+    void openLightbox(images, index, { download: props.download })
+  } finally {
+    opening = false
+  }
+}
+function onImageKey(event: KeyboardEvent) {
+  if (event.key === 'Enter' || event.key === ' ') void openImage(event.target, event)
+}
+
 watch(() => props.rendered, () => { keepPlayers(); revision.value++ }, { flush: 'sync' })
-watch(() => props.rendered, () => { restorePlayers(); renderDiagrams() }, { flush: 'post' })
+watch(() => props.rendered, () => { restorePlayers(); renderDiagrams(); prepareImages() }, { flush: 'post' })
 watch(renderer, () => { frameReady.value = false })
-onMounted(() => window.addEventListener('message', showResults))
+onMounted(() => {
+  window.addEventListener('message', showResults)
+  prepareImages()
+})
 onBeforeUnmount(() => {
   window.removeEventListener('message', showResults)
   releaseUrls()
@@ -98,7 +147,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <article class="markdown-body" @error.capture="onMediaError">
+  <article class="markdown-body" @error.capture="onMediaError" @click="openImage($event.target, $event)"
+    @keydown="onImageKey">
     <!-- Rendered Markdown escapes raw HTML. Diagram output is inserted only as an image. -->
     <div :key="revision" ref="root" v-html="rendered.html" />
     <iframe v-if="rendered.diagrams.length" ref="renderer" src="/markdown-diagram.html" sandbox="allow-scripts"
@@ -116,6 +166,8 @@ onBeforeUnmount(() => {
 .markdown-body :deep(figure[data-diagram] img) { display: block; width: auto; max-width: 100%; }
 .markdown-body :deep(figcaption) { color: #52647c; font-size: .9rem; }
 .markdown-body :deep(code.hljs) { padding: 0; background: transparent; }
+.markdown-body :deep(img.zoomable) { cursor: zoom-in; }
+.markdown-body :deep(img.zoomable:focus-visible) { outline: 2px solid var(--ui-accent, #1d4ed8); outline-offset: 2px; }
 .markdown-body :deep(.md-pending) { color: #6b7a90; font-style: italic; }
 .markdown-body :deep(.md-video) { display: block; margin: 1rem 0; }
 .markdown-body :deep(.md-video video) { display: block; width: 100%; max-height: 75vh; border-radius: .5rem; background: #000; }
