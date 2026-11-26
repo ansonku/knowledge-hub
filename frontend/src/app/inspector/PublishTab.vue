@@ -112,7 +112,7 @@ function comparePublished() {
 <template>
   <div class="publish">
     <Message v-if="error" severity="error" size="small">{{ error }}</Message>
-    <p v-else-if="!status" class="muted" role="status">正在讀取公開設定…</p>
+    <p v-else-if="!status" class="muted" role="status">正在讀取發布狀態…</p>
     <template v-else>
       <div v-if="published && behind > 0" class="card lagging">
         <strong>公開版本落後 {{ behind }} 版</strong>

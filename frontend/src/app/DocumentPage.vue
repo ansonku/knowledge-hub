@@ -374,7 +374,7 @@ async function loadPublication() {
   try {
     publication.value = await api<PublicationStatus>(`/api/documents/${encodeURIComponent(file.value.id)}/publication/`)
   } catch (cause) {
-    publicationError.value = cause instanceof Error ? cause.message : '無法讀取公開設定。'
+    publicationError.value = cause instanceof Error ? cause.message : '無法讀取發布狀態。'
   }
 }
 watch(() => file.value?.id, loadPublication)
@@ -448,7 +448,7 @@ const tabs = computed(() => [
   { value: 'versions' as const, label: '版本' },
   { value: 'links' as const, label: '連結' },
   { value: 'activity' as const, label: '活動' },
-  ...(session.isAdmin ? [{ value: 'publish' as const, label: '公開' }] : []),
+  ...(session.isAdmin ? [{ value: 'publish' as const, label: '發布' }] : []),
 ])
 function setInspector(open: boolean) {
   inspectorOpen.value = open
@@ -580,7 +580,7 @@ onBeforeUnmount(() => {
           <UiIcon name="star" :size="18" :filled="file.is_favorite" />
         </button>
         <Button v-if="session.isAdmin" outlined severity="secondary" size="small" class="action-button" @click="openTab('publish')">
-          <UiIcon name="globe" :size="16" /><span>公開設定</span>
+          <UiIcon name="globe" :size="16" /><span>發布管理</span>
         </Button>
         <Button v-if="canEdit && mode === 'read'" size="small" class="action-button" @click="setMode('split')">
           <UiIcon name="edit" :size="16" /><span>編輯</span>

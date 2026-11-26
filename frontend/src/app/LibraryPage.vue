@@ -230,7 +230,7 @@ const menuItems = computed<MenuItem[]>(() => {
       { label: '新增版本', command: () => openUpload(row) },
     )
   }
-  if (session.isAdmin) items.push({ label: '公開設定', command: () => { publishing.value = row } })
+  if (session.isAdmin) items.push({ label: '發布管理', command: () => { publishing.value = row } })
   if (session.canEdit) items.push({ separator: true }, { label: '移入回收桶', class: 'danger-item', command: () => moveToTrash(row) })
   return items
 })
