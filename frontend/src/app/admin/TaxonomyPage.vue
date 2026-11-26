@@ -185,7 +185,6 @@ watch(() => route.query.new, value => {
 <template>
   <div class="page">
     <header class="page-head">
-      <p class="eyebrow">管理</p>
       <h1>集合與標籤</h1>
       <p class="subtitle">集合是文件的資料夾，每份文件屬於一個集合；標籤可以跨集合標記文件。</p>
     </header>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { useSession } from '../stores/session'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
@@ -10,6 +10,8 @@ import { useWorkspace } from '../stores/workspace'
 import UiIcon, { type IconName } from './components/UiIcon.vue'
 import { useSite } from '../stores/site'
 import { newCollection } from './collectionEditor'
+import { groupOf, groupsFor, lastAdminPage } from './admin/adminNav'
+import { useAttention } from '../stores/attention'
 
 const site = useSite()
 const emit = defineEmits<{ search: []; navigate: [] }>()
@@ -57,6 +59,14 @@ function toggle(id: string) {
   else next.add(id)
   collapsed.value = next
 }
+
+// ---- P19 (E2＋): 管理 opens the management page visited last --------------------------------
+const attention = useAttention()
+onMounted(() => { void attention.load() })
+const adminGroups = computed(() => groupsFor(session.canEdit, session.isAdmin))
+const onAdminPage = computed(() => Boolean(groupOf(adminGroups.value, String(route.name ?? ''))))
+// Re-read on every route change: the last page is remembered as the member moves around.
+const adminTarget = computed(() => { void route.name; return lastAdminPage(adminGroups.value) })
 
 const themeLabels: Record<ThemeMode, string> = { system: '跟隨系統', light: '淺色', dark: '深色' }
 const userMenu = ref<InstanceType<typeof Menu>>()
@@ -150,30 +160,11 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
       <a href="/read/" class="item">
         <UiIcon name="book" :size="17" /><span class="label">閱讀入口</span>
       </a>
-      <RouterLink v-if="session.canEdit" :to="{ name: 'app-taxonomy' }" class="item" :class="{ active: route.name === 'app-taxonomy' }"
-        :aria-current="route.name === 'app-taxonomy' ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="sliders" :size="17" /><span class="label">集合與標籤</span>
-      </RouterLink>
-      <RouterLink v-if="session.canEdit" :to="{ name: 'app-broken-links' }" class="item" :class="{ active: route.name === 'app-broken-links' }"
-        :aria-current="route.name === 'app-broken-links' ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="link" :size="17" /><span class="label">失效連結</span>
-      </RouterLink>
-      <RouterLink v-if="session.isAdmin" :to="{ name: 'app-members' }" class="item"
-        :class="{ active: String(route.name ?? '').startsWith('app-member') }"
-        :aria-current="String(route.name ?? '').startsWith('app-member') ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="users" :size="17" /><span class="label">成員管理</span>
-      </RouterLink>
-      <RouterLink v-if="session.isAdmin" :to="{ name: 'app-public-overview' }" class="item" :class="{ active: route.name === 'app-public-overview' }"
-        :aria-current="route.name === 'app-public-overview' ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="chart" :size="17" /><span class="label">公開站總覽</span>
-      </RouterLink>
-      <RouterLink v-if="session.isAdmin" :to="{ name: 'app-audit' }" class="item" :class="{ active: route.name === 'app-audit' }"
-        :aria-current="route.name === 'app-audit' ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="history" :size="17" /><span class="label">稽核紀錄</span>
-      </RouterLink>
-      <RouterLink v-if="session.isAdmin" :to="{ name: 'app-system' }" class="item" :class="{ active: route.name === 'app-system' }"
-        :aria-current="route.name === 'app-system' ? 'page' : undefined" @click="emit('navigate')">
-        <UiIcon name="alert" :size="17" /><span class="label">系統狀態</span>
+      <!-- P19 (E2＋): one entry; the management area has its own menu at the top. -->
+      <RouterLink v-if="adminTarget" :to="{ name: adminTarget }" class="item" :class="{ active: onAdminPage }"
+        :aria-current="onAdminPage ? 'page' : undefined" @click="emit('navigate')">
+        <UiIcon name="sliders" :size="17" /><span class="label">管理</span>
+        <span v-if="attention.any" class="attention-dot" aria-label="有需要注意的項目" />
       </RouterLink>
     </div>
 
@@ -218,6 +209,8 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 }
 .item:hover { background: var(--ui-bg-muted); color: var(--ui-text); }
 .item.active { background: var(--ui-accent-selected); color: var(--ui-accent-on-soft); font-weight: 600; }
+.item:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
+.attention-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--ui-danger); }
 .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .muted { color: var(--ui-text-muted); }
 .count { color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 500; }

@@ -11,6 +11,7 @@ import { activityDetail, activityVerb, initialOf, type ActivityItem, type Activi
 import UiIcon from './components/UiIcon.vue'
 import { longDateTime, shortDate, type DocumentRow } from './types'
 import { useSite } from '../stores/site'
+import { useAttention } from '../stores/attention'
 
 const site = useSite()
 const emit = defineEmits<{ upload: []; create: [] }>()
@@ -62,23 +63,15 @@ watch(scope, () => loadActivity())
 const roots = computed(() => taxonomy.tree.filter(node => node.depth === 0))
 const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 
-/** P18b: documents with broken links (Editors and Admins; warnings alone are not shown here). */
-const brokenDocuments = ref(0)
-async function loadBroken() {
-  if (!session.canEdit) return
-  try {
-    const report = await api<{ documents: { issues: { severity: string }[] }[] }>('/api/admin/broken-links/')
-    brokenDocuments.value = report.documents.filter(row => row.issues.some(item => item.severity === 'broken')).length
-  } catch {
-    brokenDocuments.value = 0
-  }
-}
+/** P18b: documents with broken links (Editors and Admins); shared with the management menu's marks (P19). */
+const attention = useAttention()
+const brokenDocuments = computed(() => attention.brokenDocuments)
 
 onMounted(async () => {
   site.setTitle()
   void workspace.refresh()
   void loadActivity()
-  void loadBroken()
+  void attention.load(true)
   try {
     recent.value = (await api<{ results: DocumentRow[] }>('/api/me/recent/?limit=4')).results
   } catch {

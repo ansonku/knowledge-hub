@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import HighlightText from '../../HighlightText.vue'
 import { matchedFields, searchTerms } from '../../searchTerms'
+import { groupsFor } from '../admin/adminNav'
 import { api } from '../../api'
 import { useSession } from '../../stores/session'
 import { useTaxonomy } from '../../stores/taxonomy'
@@ -18,7 +19,7 @@ const session = useSession()
 const taxonomy = useTaxonomy()
 const theme = useTheme()
 
-type Command = { id: string; group: string; label: string; hint?: string; snippet?: string; icon: IconName; run: () => void }
+type Command = { id: string; group: string; label: string; hint?: string; snippet?: string; keywords?: string; icon: IconName; run: () => void }
 
 const query = ref('')
 const active = ref(0)
@@ -46,7 +47,6 @@ const actions = computed<Command[]>(() => [
   ...(session.canEdit ? [
     { id: 'act-upload', group: '動作', label: '上傳文件', icon: 'upload' as const, run: () => { open.value = false; emit('upload') } },
     { id: 'act-create', group: '動作', label: '新增 Markdown 文件', icon: 'edit' as const, run: () => { open.value = false; emit('create') } },
-    { id: 'act-taxonomy', group: '動作', label: '管理集合與標籤', icon: 'sliders' as const, run: () => go({ name: 'app-taxonomy' }) },
   ] : []),
   {
     id: 'act-theme', group: '動作', label: theme.isDark ? '切換為淺色模式' : '切換為深色模式',
@@ -64,6 +64,29 @@ function documentCommand(row: DocumentRow, group: string, words: string[] = []):
 }
 const words = computed(() => searchTerms(query.value))
 
+// P19 (E2＋): every management page this member may open, and the settings inside them (with an anchor).
+const SETTINGS: { label: string; page: string; hash: string; keywords: string }[] = [
+  { label: '站名與介紹', page: 'app-site-settings', hash: '#site', keywords: '站台設定 站名 介紹 名稱 site name' },
+  { label: '公告橫幅', page: 'app-site-settings', hash: '#notice', keywords: '公告 橫幅 notice banner' },
+  { label: '相簿與燈箱', page: 'app-site-settings', hash: '#gallery', keywords: '相簿 燈箱 gallery lightbox 動畫' },
+  { label: '立即執行維護', page: 'app-maintenance', hash: '#jobs', keywords: '維護 清理 索引 一致性 maintenance 備份 backup' },
+  { label: '儲存空間', page: 'app-system', hash: '#storage', keywords: '儲存 空間 磁碟 storage disk' },
+]
+const admin = computed<Command[]>(() => {
+  const groups = groupsFor(session.canEdit, session.isAdmin)
+  const pages = groups.flatMap(group => group.pages.map(page => ({ ...page, group: group.name })))
+  return [
+    ...pages.map<Command>(page => ({
+      id: `admin-${page.name}`, group: '管理', label: page.label, hint: page.group, icon: page.icon, keywords: '管理',
+      run: () => go({ name: page.name }),
+    })),
+    ...SETTINGS.filter(item => pages.some(page => page.name === item.page)).map<Command>(item => ({
+      id: `setting-${item.hash}`, group: '設定', label: item.label, hint: pages.find(page => page.name === item.page)?.label,
+      icon: 'sliders', keywords: item.keywords, run: () => go({ name: item.page, hash: item.hash }),
+    })),
+  ]
+})
+
 const results = computed<Command[]>(() => {
   const term = query.value.trim().toLowerCase()
   if (!term) {
@@ -77,7 +100,7 @@ const results = computed<Command[]>(() => {
   // Commands whose name matches come first: typing「上傳」or「新增」should run that command on Enter,
   // not open a document that merely mentions the words.
   return [
-    ...[...actions.value, ...navigation.value].filter(command => matches(command.label)),
+    ...[...actions.value, ...navigation.value, ...admin.value].filter(command => matches(`${command.label} ${command.keywords ?? ''}`)),
     ...documents.value.map(row => documentCommand(row, '文件', words.value)),
     ...collections,
   ]

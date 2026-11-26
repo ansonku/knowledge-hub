@@ -165,7 +165,6 @@ onMounted(async () => {
 <template>
   <div class="page">
     <header class="page-head">
-      <p class="eyebrow">管理</p>
       <h1>稽核紀錄</h1>
       <p class="subtitle" aria-live="polite">
         {{ loading && !rows.length ? '正在載入…' : `已顯示 ${rows.length} 筆${hasMore ? '，還有更早的紀錄' : ''}` }} ·
