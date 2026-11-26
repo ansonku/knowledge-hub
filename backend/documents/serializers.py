@@ -58,8 +58,17 @@ class DocumentSerializer(serializers.ModelSerializer):
         model = Document
         fields = [
             "id", "title", "format", "category", "category_name", "tags", "current_version", "updated_at",
-            "presentation", "gallery_layout",
+            "presentation", "gallery_layout", "cover_image",
         ]
+
+    cover_image = serializers.SerializerMethodField()
+
+    def get_cover_image(self, document):
+        image = document.cover_image
+        if image is None:
+            return None
+        return {"id": str(image.pk), "url": f"/api/images/{image.pk}/", "thumb": f"/api/images/{image.pk}/thumb/",
+                "width": image.width, "height": image.height}
 
 
 class DocumentListSerializer(DocumentSerializer):
@@ -110,6 +119,7 @@ class DocumentMetadata(serializers.Serializer):
     tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True, required=False)
     presentation = serializers.ChoiceField(Document.Presentation.choices, required=False)
     gallery_layout = serializers.ChoiceField(Document.GalleryLayout.choices, required=False, allow_blank=True)
+    cover_image = serializers.UUIDField(required=False, allow_null=True)
 
 
 class VersionUpload(serializers.Serializer):

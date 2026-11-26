@@ -47,7 +47,7 @@ from .serializers import (
 def document_list():
     return (
         services.active_documents()
-        .select_related("category", "current_version__created_by", "current_version__restored_from")
+        .select_related("category", "current_version__created_by", "current_version__restored_from", "cover_image")
         .defer("current_version__search_text", "current_version__restored_from__search_text")
         .prefetch_related("tags")
     )

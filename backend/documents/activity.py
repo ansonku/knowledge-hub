@@ -41,6 +41,9 @@ def record_metadata(document, actor, before):
     for field in ("presentation", "gallery_layout"):
         if before[field] != getattr(document, field):
             changes[field] = {"from": before[field], "to": getattr(document, field)}
+    if before["cover_image"] != document.cover_image_id:
+        # P22: which picture is not meaningful in the feed; whether a cover was set, changed or removed is.
+        changes["cover"] = {"from": bool(before["cover_image"]), "to": bool(document.cover_image_id)}
     tags = {tag.pk: tag.name for tag in document.tags.all()}
     added = sorted(name for pk, name in tags.items() if pk not in before["tags"])
     removed = sorted(name for pk, name in before["tags"].items() if pk not in tags)
@@ -58,4 +61,5 @@ def metadata_snapshot(document):
         "tags": {tag.pk: tag.name for tag in document.tags.all()},
         "presentation": document.presentation,
         "gallery_layout": document.gallery_layout,
+        "cover_image": document.cover_image_id,
     }

@@ -14,7 +14,7 @@ from users.models import User
 from users.permissions import has_role
 
 from . import activity, search, storage
-from .models import ArticlePublication, Document, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
+from .models import ArticlePublication, Document, DocumentImage, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
 from .publication import withdraw_publication
 
 
@@ -134,12 +134,18 @@ def change_document(actor, document_id, data=None):
         if "presentation" in data and data["presentation"] != document.presentation \
                 and document.format != Document.Format.MARKDOWN:
             raise ValidationError({"presentation": "只有 Markdown 文件可以使用相簿模式。"})
+        if "cover_image" in data:
+            # Only this document's own pictures (P22).
+            cover = data["cover_image"]
+            if cover is not None and not DocumentImage.objects.filter(pk=cover, document=document).exists():
+                raise ValidationError({"cover_image": "封面只能使用這份文件的圖片。"})
+            document.cover_image_id = cover
         fields = [field for field in ("title", "category", "presentation", "gallery_layout") if field in data]
         for field in fields:
             setattr(document, field, data[field])
         if "tags" in data:
             document.tags.set(data["tags"])
-        document.save(update_fields=[*fields, "updated_at"])
+        document.save(update_fields=[*fields, *(["cover_image"] if "cover_image" in data else []), "updated_at"])
         activity.record_metadata(document, actor, before)
     return document
 

@@ -118,9 +118,10 @@ class ImageTests(ImageFixture):
         self.assertEqual(self.upload(picture(), client=self.as_user()).status_code, 403)
         self.assertFalse(DocumentImage.objects.exists())
 
-    def test_only_active_markdown_documents_take_images(self):
+    def test_only_active_documents_take_images(self):
+        # P22: HTML documents take pictures too, for their cover.
         html = self.create("<p>x</p>", name="page.html")
-        self.assertEqual(self.upload(picture(), html).status_code, 400)
+        self.assertEqual(self.upload(picture(), html).status_code, 201)
         self.assertEqual(self.client.delete(f"/api/documents/{self.doc}/").status_code, 204)
         self.assertEqual(self.upload(picture()).status_code, 404)
 
