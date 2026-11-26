@@ -42,9 +42,42 @@ Django -> SMTP for activation/reset/security notifications
 4. Allocate monotonically increasing version number; atomically move staged file to immutable path; commit DB metadata/current pointer in transaction, with cleanup/reconciliation for partial failures.
 5. Audit; respond per-file success/failure. Never infer existing document by filename.
 
-Storage example (verify NAS mount first):
-`documents/<document_uuid>/versions/v0001.html`
-`documents/<document_uuid>/versions/v0002.html`
+Files land under `versions/<document id>/<version id>`; see [File storage](#file-storage) for the full layout.
+
+## File storage
+
+Two places hold everything, and they only make sense together:
+
+| What | Where |
+|---|---|
+| File contents: Markdown and HTML versions, images, videos | Compose volume `document_data`, mounted at `DOCUMENT_STORAGE` (default `/var/lib/knowledge-hub/documents`) |
+| Everything else: titles, collections, tags, version history, activity, publication state, search text, link and image references | PostgreSQL (volume `postgres_data`) |
+
+Back up and restore both volumes together, from the same moment. Either one alone cannot be matched to the other.
+
+Layout under `DOCUMENT_STORAGE`:
+
+```
+versions/<document id>/<version id>        one file per version of a Markdown or HTML document, no extension
+images/<document id>/<image id>.<format>   png, jpeg, gif or webp, pasted into Markdown
+videos/<document id>/<video id>.<format>   mp4 or webm, embedded in Markdown
+staging/                                   uploads being checked; empty when idle
+quarantine/{versions,images,videos}/...    files with no database row, moved here by check_document_storage --quarantine
+```
+
+Rules:
+- **Names are ids, never filenames.** The uploaded filename is kept only as metadata. Nothing is ever matched by filename.
+- **Collections, tags and titles exist only in the database.** Moving a document to another collection, renaming it or renaming a collection does not touch any file. The folder layout cannot be browsed by collection.
+- **Versions are immutable.** Every save, upload or restore writes a new version file; restoring an old version copies its content into a new version. An upload is first written to `staging/`, checked (size, UTF-8, SHA-256) and hard-linked into `versions/` before the database row commits. The SHA-256 is stored and checked on every read.
+- **Images** are decoded and re-encoded on upload, which drops EXIF and other embedded data; animated GIF and WebP keep their frames.
+- **Images and videos belong to one document** and follow its read access. Inside a document they are deduplicated by SHA-256. `VersionImage` and `VersionVideo` record which versions refer to them. One that no version refers to is removed after a 24-hour grace period. Videos are not re-encoded; their headers must be MP4 or WebM.
+- **Publishing copies the published version's content into the database** (`ArticlePublication.body`). Later edits never change what visitors read.
+- **Trash moves no files.** Permanent deletion removes the database rows, then the document's folder in `versions/`, `images/`, `videos/` and their `quarantine/` counterparts. Deleting a single version (P8b) removes its file after the transaction commits.
+- **Permissions:**
+  - The backend runs as uid 999.
+  - `versions/`, `images/` and `staging/` are `0700`; Nginx cannot read them, so images and downloads are always served through Django's access checks.
+  - `videos/` is `0750`, with files `0640`, shared with Nginx through the `media` group (gid 2101). Nginx mounts only that folder, read-only, and serves it from the internal location `/_protected/videos/` after Django answers with `X-Accel-Redirect`.
+- **Consistency check:** `python manage.py check_document_storage` reports database rows whose files are missing, and files with no row. With `--quarantine` it moves the latter to `quarantine/` and never deletes anything.
 
 ## Article publication (M6)
 - Use separate public list and reading endpoints. Validate Public status, a published version belonging to the requested document, and the active trash state on every request. Return the same 404 response for an unavailable article and an unknown public URL.
