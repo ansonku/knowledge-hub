@@ -30,7 +30,7 @@ async function update(method: 'GET' | 'POST' | 'DELETE') {
       body: method === 'POST' ? JSON.stringify({ version: version.value, title: status.value?.title }) : undefined,
     })
     const data = response.status === 204 ? null : await response.json()
-    if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : '無法更新公開設定。')
+    if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : '無法更新發布狀態。')
     if (data) {
       status.value = data
       version.value = version.value ?? data.versions[0]?.id
@@ -40,7 +40,7 @@ async function update(method: 'GET' | 'POST' | 'DELETE') {
     confirmation.value = undefined
     if (method !== 'GET') emit('changed')
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '無法讀取公開設定。'
+    error.value = cause instanceof Error ? cause.message : '無法讀取發布狀態。'
   } finally {
     busy.value = false
   }
@@ -50,10 +50,10 @@ onMounted(() => void update('GET'))
 </script>
 
 <template>
-  <Dialog :visible="true" modal header="文章公開設定" :style="{ width: 'min(94vw, 35rem)' }"
+  <Dialog :visible="true" modal header="發布管理" :style="{ width: 'min(94vw, 35rem)' }"
     @update:visible="value => { if (!value && !busy) emit('close') }">
     <Message v-if="error" severity="error">{{ error }}</Message>
-    <p v-if="!status && busy" role="status">正在讀取公開設定…</p>
+    <p v-if="!status && busy" role="status">正在讀取發布狀態…</p>
     <template v-if="status">
       <p v-if="status.publication">
         Public・v{{ status.publication.version__number }}・{{ status.publication.title }}
