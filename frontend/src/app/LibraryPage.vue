@@ -15,11 +15,11 @@ import PublicationDialog from '../PublicationDialog.vue'
 import { useSession } from '../stores/session'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import BulkDialog, { type BulkAction } from './components/BulkDialog.vue'
-import CollectionDialog from './components/CollectionDialog.vue'
+import { editCollection } from './collectionEditor'
 import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
-import { formatLabel, longDateTime, shortDate, visibilityOf, type Category, type DocumentPage, type DocumentRow, type Format, type Visibility } from './types'
+import { formatLabel, longDateTime, shortDate, visibilityOf, type DocumentPage, type DocumentRow, type Format, type Visibility } from './types'
 import { useSite } from '../stores/site'
 
 const site = useSite()
@@ -162,7 +162,6 @@ const heading = computed(() => {
 watch(heading, value => site.setTitle(value), { immediate: true })
 const breadcrumb = computed(() => taxonomy.pathOf(category.value).slice(0, -1))
 const collection = computed(() => category.value && category.value !== UNCATEGORIZED ? taxonomy.byId(category.value) : undefined)
-const editingCollection = ref<Category>()
 const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 const pageCount = computed(() => Math.max(1, Math.ceil(count.value / pageSize.value)))
 const rangeLabel = computed(() => {
@@ -311,7 +310,7 @@ function onSaved() {
           <span v-if="collection" class="ui-col-mark title-mark" :class="`ui-col-${collection.color || 'gray'}`" aria-hidden="true">{{ markOf(collection.name) }}</span>
           <h1>{{ heading }}</h1>
           <button v-if="collection && session.canEdit" type="button" class="edit-collection" aria-label="編輯集合"
-            @click="editingCollection = collection">
+            @click="editCollection(collection.id)">
             <UiIcon name="edit" :size="16" />
           </button>
         </div>
@@ -464,7 +463,6 @@ function onSaved() {
     <Menu id="row-menu" ref="rowMenu" :model="menuItems" popup />
     <UploadDialog v-if="versionTarget" v-model:visible="uploadOpen" :target="versionTarget" :max-bytes="limits.bytes" @uploaded="load" />
     <BulkDialog :action="bulkAction" :ids="selected" @close="bulkAction = undefined" @done="bulkDone" />
-    <CollectionDialog :collection="editingCollection" @close="editingCollection = undefined" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onSaved" />
     <PublicationDialog v-if="publishing" :id="publishing.id" :format="publishing.format" :csrf="getCsrfToken()"
       @close="publishing = undefined" @changed="load" />

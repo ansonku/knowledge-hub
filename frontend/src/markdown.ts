@@ -93,3 +93,19 @@ export function renderMarkdown(source: string, options: RenderOptions = {}): Ren
   }
   return { html: parser.renderer.render(tokens, parser.options, context), headings, diagrams: context.diagrams }
 }
+
+export type OutlineEntry = { text: string; level: number; line: number }
+/** P14b: the headings of Markdown source with their 1-based source lines, for the editor's outline.
+ *  Parsed like the preview, so `#` lines inside code blocks are not headings. */
+export function outlineOf(source: string): OutlineEntry[] {
+  const context: RenderContext = { diagrams: [] }
+  const tokens = parser.parse(source, context)
+  const entries: OutlineEntry[] = []
+  for (const [index, token] of tokens.entries()) {
+    if (token.type !== 'heading_open' || !token.map) continue
+    const title = tokens[index + 1]
+    const text = title.children?.map(part => part.children?.map(child => child.content).join('') ?? part.content).join('') || title.content
+    entries.push({ text: text.trim() || '（空白標題）', level: Number(token.tag.slice(1)), line: token.map[0] + 1 })
+  }
+  return entries
+}

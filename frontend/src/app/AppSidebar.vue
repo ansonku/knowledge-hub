@@ -9,6 +9,7 @@ import { useTheme, type ThemeMode } from '../stores/theme'
 import { useWorkspace } from '../stores/workspace'
 import UiIcon, { type IconName } from './components/UiIcon.vue'
 import { useSite } from '../stores/site'
+import { newCollection } from './collectionEditor'
 
 const site = useSite()
 const emit = defineEmits<{ search: []; navigate: [] }>()
@@ -105,10 +106,11 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
     <div class="group">
       <div class="group-head">
         <span id="collections-heading">集合</span>
-        <RouterLink v-if="session.canEdit" :to="{ name: 'app-taxonomy', query: { new: 'collection' } }" class="icon-button"
-          aria-label="新增集合" title="新增集合" @click="emit('navigate')">
+        <button v-if="session.canEdit" type="button" class="icon-button" aria-label="新增集合"
+          :title="activeCategory ? `新增集合（預設在「${taxonomy.byId(activeCategory)?.name ?? ''}」底下）` : '新增集合'"
+          @click="emit('navigate'); newCollection(activeCategory && activeCategory !== UNCATEGORIZED ? activeCategory : null)">
           <UiIcon name="plus" :size="15" />
-        </RouterLink>
+        </button>
       </div>
       <ul class="tree" aria-labelledby="collections-heading">
         <li v-for="node in visibleNodes" :key="node.id" class="tree-row" :style="{ '--depth': node.depth }">

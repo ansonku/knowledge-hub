@@ -2,22 +2,18 @@
 import MultiSelect from 'primevue/multiselect'
 import Select from 'primevue/select'
 import { useToast } from 'primevue/usetoast'
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { api } from '../../api'
 import { useTaxonomy } from '../../stores/taxonomy'
 import type { DocumentDetails } from '../composables/useDocument'
 import { formatLabel, longDateTime } from '../types'
 import { GALLERY_LAYOUTS, LAYOUT_LABELS } from '../../gallery'
 
-type Heading = { id: string; text: string; level: number }
-
-const props = defineProps<{ document: DocumentDetails; headings: Heading[]; editable: boolean }>()
-const emit = defineEmits<{ jump: [id: string]; updated: [document: Partial<DocumentDetails>] }>()
+const props = defineProps<{ document: DocumentDetails; editable: boolean }>()
+const emit = defineEmits<{ updated: [document: Partial<DocumentDetails>] }>()
 
 const taxonomy = useTaxonomy()
 const toast = useToast()
-// Indent relative to the shallowest heading so a hidden leading H1 does not shift the whole list.
-const topLevel = computed(() => Math.min(...props.headings.map(heading => heading.level), 6))
 const presentations = [{ value: 'article', label: '文章' }, { value: 'gallery', label: '相簿' }]
 const layouts = [{ value: '', label: '跟隨系統預設' }, ...GALLERY_LAYOUTS.map(value => ({ value, label: LAYOUT_LABELS[value] }))]
 const category = ref<string | null>(null)
@@ -115,12 +111,6 @@ function sizeLabel(size?: number) {
       <dd><time :datetime="document.updated_at">{{ longDateTime(document.updated_at) }}</time></dd>
     </dl>
 
-    <nav v-if="headings.length" class="toc" aria-label="本頁目錄">
-      <span class="toc-title">本頁目錄</span>
-      <a v-for="heading in headings" :key="heading.id" :href="`#${heading.id}`" class="toc-link"
-        :style="{ paddingInlineStart: `${.75 + Math.max(0, heading.level - topLevel) * .75}rem` }"
-        @click.prevent="emit('jump', heading.id)">{{ heading.text }}</a>
-    </nav>
   </div>
 </template>
 
@@ -132,11 +122,4 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .tags { display: flex; flex-wrap: wrap; gap: var(--ui-space-1); }
 .tag { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-pill); background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); font-size: var(--ui-text-xs); font-weight: 500; }
 .muted { color: var(--ui-text-muted); }
-.toc { display: flex; flex-direction: column; gap: 2px; padding-top: var(--ui-space-4); border-top: 1px solid var(--ui-border); }
-.toc-title { margin-bottom: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; }
-.toc-link {
-  padding-block: .3125rem; border-left: 2px solid var(--ui-border); color: var(--ui-text-secondary);
-  font-size: var(--ui-text-sm); text-decoration: none; overflow-wrap: anywhere;
-}
-.toc-link:hover { border-left-color: var(--ui-accent); color: var(--ui-accent); }
 </style>
