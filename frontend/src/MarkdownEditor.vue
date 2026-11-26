@@ -21,6 +21,8 @@ const props = defineProps<{
   autofocus?: boolean
   /** The document being edited (left out of document link suggestions). */
   documentId?: string
+  /** P18b: put the cursor at the start of this line (1-based) and select it, e.g. from the broken link report. */
+  startLine?: number
   /** Its collection: the 選擇文件 dialog starts there (P17). */
   categoryId?: string | null
   /** Uploads one image and resolves with its address; without it the editor takes no images or videos. */
@@ -576,7 +578,12 @@ onMounted(() => {
   })
   ed.onDidChangeCursorPosition(event => { cursor.value = { line: event.position.lineNumber, column: event.position.column } })
   ed.onDidScrollChange(event => { if (event.scrollTopChanged) reportScroll() })
-  if (props.autofocus) {
+  if (props.startLine) {
+    const line = Math.min(Math.max(1, Math.floor(props.startLine)), model.getLineCount())
+    ed.setSelection(new Selection(line, 1, line, model.getLineMaxColumn(line)))
+    ed.revealLineInCenter(line)
+    ed.focus()
+  } else if (props.autofocus) {
     const last = model.getLineCount()
     ed.setPosition({ lineNumber: last, column: model.getLineMaxColumn(last) })
     ed.focus()

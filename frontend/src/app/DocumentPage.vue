@@ -166,9 +166,12 @@ function syncPreview(line: number) {
 watch(preview, () => syncPreview(editorLine), { flush: 'post' })
 watch(mode, next => { if (next !== 'split') editorLine = 1 })
 
+/** ?line=N with ?mode=split (P18b: 編輯第 N 行) puts the cursor on that line. */
+const startLine = ref<number>()
 watch([documentId, versionId], () => {
   mode.value = 'read'
   focusEditor.value = false
+  startLine.value = undefined
   note.value = ''
   closePreview()
   previewError.value = ''
@@ -260,9 +263,10 @@ watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
   site.setTitle(file.value?.title)
   if (!historical.value) checkDraft()
   if (route.query.mode === 'split') {
-    const { mode: _ignored, ...rest } = route.query
+    const { mode: _ignored, line, ...rest } = route.query
     void router.replace({ query: rest })
     if (canEdit.value) {
+      startLine.value = typeof line === 'string' && /^\d+$/.test(line) ? Number(line) : undefined
       focusEditor.value = true
       setMode('split')
     }
@@ -705,7 +709,7 @@ onBeforeUnmount(() => {
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage" :document-id="file.id" :category-id="file.category"
+              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :start-line="startLine" :upload-image="uploadImage" :document-id="file.id" :category-id="file.category"
                 :upload-video="uploadVideo" @notify="notify" @uploading="uploadsRunning = $event"
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
