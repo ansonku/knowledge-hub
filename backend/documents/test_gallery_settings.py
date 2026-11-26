@@ -6,7 +6,7 @@ from .models import SiteSettings
 
 URL = "/api/site/gallery/"
 STANDARD = {"effect": "center", "speed": "normal", "backdrop": 92, "layout": "justified", "member_download": True,
-            "respect_reduced_motion": True}
+            "respect_reduced_motion": True, "interval": 5}
 
 
 class GallerySettingsTests(TestCase):
@@ -28,7 +28,7 @@ class GallerySettingsTests(TestCase):
                              "respect_reduced_motion": False})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["gallery"], {"effect": "zoom", "speed": "fast", "backdrop": 100, "layout": "masonry", "member_download": False,
-                                                      "respect_reduced_motion": False})
+                                                      "respect_reduced_motion": False, "interval": 5})
         self.assertEqual(SiteSettings.current().lightbox_reduced_motion, False)
         self.assertEqual(Client().get("/api/site/").json()["gallery"]["layout"], "masonry")
         entry = AuditLog.objects.get(action="site_gallery_updated")
@@ -50,7 +50,29 @@ class GallerySettingsTests(TestCase):
         self.assertEqual(SiteSettings.current().lightbox_speed, "normal")
 
     def test_values_are_checked(self):
-        for bad in ({"effect": "spin"}, {"speed": "warp"}, {"backdrop": 59}, {"backdrop": 101}, {"layout": ""}, {"layout": "gird"}):
+        for bad in ({"effect": "spin"}, {"speed": "warp"}, {"backdrop": 59}, {"backdrop": 101}, {"layout": ""}, {"layout": "gird"},
+                    {"interval": 4}, {"interval": 0}, {"interval": "5s"}):
             with self.subTest(bad):
                 self.assertEqual(self.put({**STANDARD, **bad}).status_code, 400)
         self.assertEqual(self.put({"effect": "zoom"}).status_code, 400)  # every field is required
+
+
+class SlideshowIntervalTests(TestCase):
+    """P20: the slideshow interval — one of 3, 5, 8 or 12 seconds, audited, optional for older pages."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user("admin", "admin@example.test", role=User.Role.ADMIN)
+        self.client.force_login(self.admin)
+
+    def test_change_is_saved_public_and_audited(self):
+        response = self.client.put(URL, {**STANDARD, "interval": 8}, content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(Client().get("/api/site/").json()["gallery"]["interval"], 8)
+        self.assertEqual(AuditLog.objects.get(action="site_gallery_updated").metadata["gallery"], {"interval": {"from": 5, "to": 8}})
+
+    def test_left_out_it_stays(self):
+        self.client.put(URL, {**STANDARD, "interval": 12}, content_type="application/json")
+        older = {key: value for key, value in STANDARD.items() if key != "interval"}
+        response = self.client.put(URL, {**older, "speed": "slow"}, content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual((SiteSettings.current().lightbox_interval, SiteSettings.current().lightbox_speed), (12, "slow"))

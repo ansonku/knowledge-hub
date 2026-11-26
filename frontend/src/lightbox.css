@@ -34,3 +34,11 @@
   .hub-pswp-thumbs button { width: 60px; height: 42px; }
   .hub-pswp-caption { bottom: 74px; font-size: .88rem; }
 }
+
+/* P20: slideshow button and the bar counting down to the next picture. */
+.pswp__button--slideshow { display: grid; place-items: center; }
+.pswp__button--slideshow .pswp__icn { position: static; color: var(--pswp-icon-color); filter: drop-shadow(0 0 1px rgb(0 0 0 / .6)); width: 22px; height: 22px; fill: currentColor; stroke: none; }
+.pswp__button--slideshow[aria-pressed="true"] .pswp__icn { fill: none; stroke: currentColor; stroke-width: 3; }
+.hub-pswp-progress { position: absolute; left: 0; right: 0; bottom: 0; z-index: 12; height: 3px; background: rgb(255 255 255 / .15); pointer-events: none; }
+.hub-pswp-progress[hidden] { display: none; }
+.hub-pswp-progress span { display: block; height: 100%; background: rgb(255 255 255 / .85); transform: scaleX(0); transform-origin: left; }
