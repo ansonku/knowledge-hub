@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import HighlightText from '../../HighlightText.vue'
+import { matchedFields, searchTerms } from '../../searchTerms'
 import { api } from '../../api'
 import { useSession } from '../../stores/session'
 import { useTaxonomy } from '../../stores/taxonomy'
@@ -16,7 +18,7 @@ const session = useSession()
 const taxonomy = useTaxonomy()
 const theme = useTheme()
 
-type Command = { id: string; group: string; label: string; hint?: string; icon: IconName; run: () => void }
+type Command = { id: string; group: string; label: string; hint?: string; snippet?: string; icon: IconName; run: () => void }
 
 const query = ref('')
 const active = ref(0)
@@ -52,12 +54,15 @@ const actions = computed<Command[]>(() => [
   },
 ])
 
-function documentCommand(row: DocumentRow, group: string): Command {
+function documentCommand(row: DocumentRow, group: string, words: string[] = []): Command {
   return {
     id: `doc-${group}-${row.id}`, group, label: row.title, hint: taxonomy.pathLabel(row.category), icon: 'files',
-    run: () => go({ name: 'app-document', params: { id: row.id } }),
+    // P16b: a search result shows where it matched and opens with the words marked.
+    snippet: row.matches?.snippets[0] ?? (matchedFields(row.matches) || undefined),
+    run: () => go({ name: 'app-document', params: { id: row.id }, query: words.length ? { hl: words.join(' ') } : {} }),
   }
 }
+const words = computed(() => searchTerms(query.value))
 
 const results = computed<Command[]>(() => {
   const term = query.value.trim().toLowerCase()
@@ -73,7 +78,7 @@ const results = computed<Command[]>(() => {
   // not open a document that merely mentions the words.
   return [
     ...[...actions.value, ...navigation.value].filter(command => matches(command.label)),
-    ...documents.value.map(row => documentCommand(row, '文件')),
+    ...documents.value.map(row => documentCommand(row, '文件', words.value)),
     ...collections,
   ]
 })
@@ -167,7 +172,11 @@ watch(active, async index => {
               :class="{ active: item.index === active }" :aria-selected="item.index === active"
               @mousemove="active = item.index" @click="item.run()">
               <UiIcon :name="item.icon" :size="16" />
-              <span class="label">{{ item.label }}</span>
+              <span v-if="item.snippet" class="label stacked">
+                <span class="label-title"><HighlightText :text="item.label" :terms="words" /></span>
+                <span class="snippet"><HighlightText :text="item.snippet" :terms="words" /></span>
+              </span>
+              <span v-else class="label">{{ item.label }}</span>
               <span v-if="item.hint" class="hint">{{ item.hint }}</span>
               <UiIcon v-if="item.index === active" name="enter" :size="14" class="enter" />
             </li>
@@ -204,6 +213,9 @@ kbd { font-family: var(--ui-font-sans); font-size: .6875rem; padding: 1px 5px; b
 .option.active { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
 .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text); font-weight: 500; }
 .option.active .label { color: inherit; }
+.label.stacked { display: grid; min-width: 0; }
+.label-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snippet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 400; }
 .hint { color: var(--ui-text-muted); font-size: var(--ui-text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .enter { color: inherit; }
 .empty { padding: var(--ui-space-6) var(--ui-space-3); color: var(--ui-text-muted); text-align: center; }

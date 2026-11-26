@@ -16,6 +16,8 @@ import { useSession } from '../stores/session'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import BulkDialog, { type BulkAction } from './components/BulkDialog.vue'
 import { editCollection } from './collectionEditor'
+import HighlightText from '../HighlightText.vue'
+import { matchedFields, searchTerms } from '../searchTerms'
 import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
@@ -49,11 +51,21 @@ const visibility = computed<Visibility | ''>(() => {
   if (preset.value === 'published') return value === 'lagging' ? 'lagging' : 'public'
   return value === 'public' || value === 'private' || value === 'lagging' ? value : ''
 })
-const ordering = computed(() => queryText('ordering') || '-updated_at')
-const sortOptions = [
+// P16: with search words the default order is 最相關; without them it is not offered.
+const terms = computed(() => searchTerms(keywords.value))
+const defaultOrdering = computed(() => terms.value.length ? 'relevance' : '-updated_at')
+const ordering = computed(() => {
+  const chosen = queryText('ordering')
+  if (chosen === 'relevance' && !terms.value.length) return '-updated_at'
+  return chosen || defaultOrdering.value
+})
+const sortOptions = computed(() => [
+  ...(terms.value.length ? [{ id: 'relevance', name: '最相關' }] : []),
   { id: '-updated_at', name: '最近更新' }, { id: 'updated_at', name: '最早更新' },
   { id: 'title', name: '標題 A → Z' }, { id: '-title', name: '標題 Z → A' },
-]
+])
+/** Opening a result from a search marks the words in the document (P16c). */
+const documentLink = (id: string) => ({ name: 'app-document', params: { id }, query: terms.value.length ? { hl: terms.value.join(' ') } : {} })
 const visibilityOptions = [{ id: 'public', name: '公開' }, { id: 'lagging', name: '公開 · 落後' }, { id: 'private', name: '私人' }]
 const page = computed(() => Math.max(1, Number.parseInt(queryText('page') || '1', 10) || 1))
 
@@ -105,7 +117,7 @@ async function load() {
   if (tag.value) params.set('tag', tag.value)
   if (preset.value === 'favorites') params.set('favorite', '1')
   if (visibility.value) params.set('visibility', visibility.value)
-  if (ordering.value !== '-updated_at') params.set('ordering', ordering.value)
+  if (ordering.value !== defaultOrdering.value) params.set('ordering', ordering.value)
   try {
     const data = await api<DocumentPage>(`/api/documents/?${params}`)
     if (current !== request) return
@@ -337,7 +349,7 @@ function onSaved() {
       <label class="search-box">
         <span class="ui-visually-hidden">搜尋文件</span>
         <UiIcon name="search" :size="16" />
-        <input id="library-search" v-model="searchText" type="search" maxlength="240" placeholder="搜尋標題、集合、標籤或全文">
+        <input id="library-search" v-model="searchText" type="search" maxlength="240" placeholder="搜尋標題、集合、標籤或全文，多個詞用空白分開">
       </label>
       <Select :model-value="format || null" :options="formatOptions" option-label="name" option-value="id" show-clear
         placeholder="所有格式" aria-label="依格式篩選" class="facet" @update:model-value="value => setQuery({ format: value ?? '' })" />
@@ -348,7 +360,7 @@ function onSaved() {
       <Button v-if="hasFilters" label="清除篩選" text severity="secondary" @click="clearFilters" />
       <span class="toolbar-spacer" />
       <Select :model-value="ordering" :options="sortOptions" option-label="name" option-value="id" aria-label="排序方式"
-        class="facet sort" @update:model-value="value => setQuery({ ordering: value === '-updated_at' ? '' : value })" />
+        class="facet sort" @update:model-value="value => setQuery({ ordering: value === defaultOrdering ? '' : value })" />
     </div>
 
     <div v-if="selected.length" class="bulk" role="toolbar" aria-label="批次操作">
@@ -401,14 +413,18 @@ function onSaved() {
               <div class="doc">
                 <span class="format" :class="row.format" :title="formatLabel(row.format)">{{ row.format === 'html' ? 'HTML' : 'MD' }}</span>
                 <div class="doc-text">
-                  <RouterLink :to="{ name: 'app-document', params: { id: row.id } }" class="doc-title">{{ row.title }}</RouterLink>
+                  <RouterLink :to="documentLink(row.id)" class="doc-title"><HighlightText :text="row.title" :terms="terms" /></RouterLink>
                   <span class="doc-path">{{ taxonomy.pathLabel(row.category) }}</span>
+                  <template v-if="row.matches">
+                    <span v-for="(piece, index) in row.matches.snippets" :key="index" class="doc-snippet"><HighlightText :text="piece" :terms="terms" /></span>
+                    <span v-if="!row.matches.snippets.length && matchedFields(row.matches)" class="doc-fields">{{ matchedFields(row.matches) }}</span>
+                  </template>
                 </div>
               </div>
             </td>
             <td class="cell-tags" :class="{ 'no-tags': !row.tags.length }">
               <div class="tags">
-                <span v-for="item in row.tags" :key="item.id" class="tag">{{ item.name }}</span>
+                <span v-for="item in row.tags" :key="item.id" class="tag"><HighlightText :text="item.name" :terms="terms" /></span>
                 <span v-if="!row.tags.length" class="none">—</span>
               </div>
             </td>
@@ -512,6 +528,8 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 .doc-title { color: var(--ui-text); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
 .doc-title:hover { color: var(--ui-accent); text-decoration: underline; text-underline-offset: .18em; }
 .doc-path { color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
+.doc-snippet { margin-top: 2px; color: var(--ui-text-secondary); font-size: var(--ui-text-sm); line-height: 1.55; overflow-wrap: anywhere; }
+.doc-fields { margin-top: 2px; color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .tags { display: flex; flex-wrap: wrap; gap: var(--ui-space-1); }
 .tag { padding: 2px var(--ui-space-2); border-radius: var(--ui-radius-pill); background: var(--ui-bg-muted); color: var(--ui-text-secondary); font-size: var(--ui-text-xs); white-space: nowrap; }
 .none { color: var(--ui-text-muted); }

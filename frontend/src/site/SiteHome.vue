@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import Skeleton from 'primevue/skeleton'
+import HighlightText from '../HighlightText.vue'
+import { searchTerms } from '../searchTerms'
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
@@ -19,6 +21,7 @@ const portal = usePublicNav(mode)
 
 const queryText = (key: string) => typeof route.query[key] === 'string' ? route.query[key] as string : ''
 const keywords = computed(() => queryText('q').trim())
+const terms = computed(() => searchTerms(keywords.value))
 const collection = computed(() => queryText('collection'))
 const showAll = computed(() => queryText('view') === 'all')
 const page = computed(() => Math.max(1, Number.parseInt(queryText('page') || '1', 10) || 1))
@@ -271,7 +274,8 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
       <p v-if="error" class="state" role="alert">{{ error }} <button type="button" class="link" @click="loadArticles">重試</button></p>
       <div v-else-if="loading && !data" class="cards"><Skeleton v-for="index in 6" :key="index" height="10rem" border-radius="14px" /></div>
       <div v-else-if="data?.results.length" class="cards" :class="{ stale: loading }">
-        <RouterLink v-for="card in data.results" :key="card.document_id" :to="{ name: names.articleRoute, params: { id: card.document_id } }"
+        <RouterLink v-for="card in data.results" :key="card.document_id"
+          :to="{ name: names.articleRoute, params: { id: card.document_id }, query: terms.length ? { hl: terms.join(' ') } : {} }"
           class="card" :style="collectionStyle(card.collection)">
           <span class="card-meta">
             <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
@@ -279,8 +283,12 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
                 <time :datetime="cardDate(card)">{{ publicDate(cardDate(card)) }}</time>
             <span aria-hidden="true">·</span><span>約 {{ card.reading_minutes }} 分鐘</span>
           </span>
-          <span class="card-title">{{ card.title }}</span>
-          <span v-if="card.excerpt" class="card-excerpt">{{ card.excerpt }}</span>
+          <span class="card-title"><HighlightText :text="card.title" :terms="terms" /></span>
+          <!-- P16b: a search shows where each result matched instead of its opening lines. -->
+          <span v-if="card.matches?.snippets.length" class="card-excerpt card-snippet">
+            <template v-for="(piece, index) in card.matches.snippets" :key="index"><HighlightText :text="piece" :terms="terms" /><br v-if="index < card.matches.snippets.length - 1"></template>
+          </span>
+          <span v-else-if="card.excerpt" class="card-excerpt">{{ card.excerpt }}</span>
         </RouterLink>
       </div>
       <div v-else class="empty">

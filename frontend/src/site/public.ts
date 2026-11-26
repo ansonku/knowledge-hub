@@ -1,3 +1,4 @@
+import type { SearchMatches } from '../searchTerms'
 import { computed, ref, type Ref } from 'vue'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import type { CollectionColor, Format } from '../app/types'
@@ -18,6 +19,8 @@ export type PublicCard = {
   updated_at?: string
   public?: boolean
   excerpt: string
+  /** P16: present when the list was searched. */
+  matches?: SearchMatches
   reading_minutes: number
   collection: PublicCollection | null
   path: PublicCollection[]
