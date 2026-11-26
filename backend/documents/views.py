@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
@@ -95,11 +97,18 @@ def documents(request):
         document = services.add_upload(request.user, form.validated_data)
         return Response(DocumentSerializer(document).data, status=201)
     filters = request.query_params
-    ordering = serializers.ChoiceField(list(ORDERING)).run_validation(filters.get("ordering", "-updated_at"))
-    query = with_member_fields(document_list(), request.user).order_by(*ORDERING[ordering])
-    if keywords := filters.get("q"):
-        keywords = serializers.CharField(max_length=240, allow_blank=True).run_validation(keywords)
+    keywords = serializers.CharField(max_length=240, allow_blank=True).run_validation(filters.get("q", ""))
+    terms = search.terms_of(keywords)
+    # P16a: with search words the default order is relevance; any order can still be asked for.
+    ordering = serializers.ChoiceField([*ORDERING, "relevance"]).run_validation(
+        filters.get("ordering") or ("relevance" if terms else "-updated_at"))
+    query = with_member_fields(document_list(), request.user)
+    if terms:
         query = search.filter_documents(query, keywords)
+    if ordering == "relevance" and terms:
+        query = query.annotate(relevance=search.document_relevance(terms)).order_by("-relevance", "-updated_at", "id")
+    else:
+        query = query.order_by(*ORDERING.get(ordering, ORDERING["-updated_at"]))
     if category := filters.get("category"):
         if category == "uncategorized":
             query = query.filter(category__isnull=True)
@@ -123,11 +132,17 @@ def documents(request):
     page = serializers.IntegerField(min_value=1, max_value=1_000_000).run_validation(filters.get("page", 1))
     size = 25
     count = query.count()
+    results = DocumentListSerializer(query[(page - 1) * size:page * size], many=True).data
+    if terms:
+        matches = search.document_matches([row["id"] for row in results], terms)
+        for row in results:
+            row["matches"] = matches.get(UUID(str(row["id"])), {"fields": [], "snippets": []})
     return Response({
         "count": count,
         "page": page,
         "page_size": size,
-        "results": DocumentListSerializer(query[(page - 1) * size:page * size], many=True).data,
+        "ordering": ordering,
+        "results": results,
         "limits": {"bytes": settings.DOCUMENT_MAX_BYTES, "batch": settings.DOCUMENT_MAX_BATCH},
     })
 

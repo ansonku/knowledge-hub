@@ -238,17 +238,26 @@ def article_card(row, index):
 @permission_classes([AllowAny])
 def public_articles(request):
     articles = published_articles()
-    for term in search.normalize(request.query_params.get("q", "")[:240]).split():
+    terms = search.terms_of(request.query_params.get("q", "")[:240])
+    for term in terms:
         articles = articles.filter(Q(title__icontains=term) | Q(search_text__icontains=term))
     index = category_index()
     if request.query_params.get("collection"):
         collection = serializers.UUIDField().run_validation(request.query_params["collection"])
         # A collection's page lists its sub-collections' articles too.
         articles = articles.filter(document__category_id__in=subtree_ids(collection, index))
-    paginator = Paginator(presented(articles.order_by("-published_at", "document_id")), 20)
+    # P16a: search results come most relevant first, with the matching pieces of the published text.
+    ordered = articles.annotate(relevance=search.publication_relevance(terms)).order_by("-relevance", "-published_at", "document_id") \
+        if terms else articles.order_by("-published_at", "document_id")
+    paginator = Paginator(presented(ordered), 20)
     page = paginator.get_page(request.query_params.get("page"))
+    matches = search.publication_matches([row["document_id"] for row in page], terms)
+    cards = [article_card(row, index) for row in page]
+    if terms:
+        for card in cards:
+            card["matches"] = matches.get(card["document_id"], {"fields": [], "snippets": []})
     return Response({
-        "results": [article_card(row, index) for row in page], "page": page.number, "pages": paginator.num_pages,
+        "results": cards, "page": page.number, "pages": paginator.num_pages,
         "count": paginator.count,
     })
 

@@ -27,6 +27,9 @@ import { incomingLinks } from './links'
 import { draftImageIds, readDraft, removeDraft, writeDraft, type Draft, type DraftWrite } from './drafts'
 import InfoTab from './inspector/InfoTab.vue'
 import OutlineNav from '../OutlineNav.vue'
+import SearchHighlightBar from '../SearchHighlightBar.vue'
+import { useSearchHighlight } from '../searchHighlight'
+import { searchTerms } from '../searchTerms'
 import ActivityTab from './inspector/ActivityTab.vue'
 import LinksTab from './inspector/LinksTab.vue'
 import PublishTab from './inspector/PublishTab.vue'
@@ -265,8 +268,25 @@ watch(() => [loading.value, file.value?.id] as const, ([busy]) => {
     }
   }
   const anchor = window.location.hash.slice(1)
-  if (/^section-\d+$/.test(anchor)) requestAnimationFrame(() => jumpToHeading(article.value, anchor, false))
+  // A search highlight scrolls to its first match instead.
+  if (/^section-\d+$/.test(anchor) && !highlightTerms.value.length) requestAnimationFrame(() => jumpToHeading(article.value, anchor, false))
 })
+
+// ---- P16c: words from a search (?hl=) marked in the article ------------------------------------
+const highlightTerms = computed(() => searchTerms(typeof route.query.hl === 'string' ? route.query.hl : ''))
+function dropHighlight() {
+  const { hl: _ignored, ...rest } = route.query
+  void router.replace({ query: rest, hash: route.hash })
+}
+const highlight = useSearchHighlight({
+  root: () => article.value,
+  terms: () => highlightTerms.value,
+  content: () => rendered.value.html,
+  enabled: () => file.value?.format === 'md' && mode.value === 'read',
+  onClose: dropHighlight,
+})
+// Editing has no marks to step through: leaving the reading view ends the search.
+watch(mode, next => { if (next !== 'read' && highlightTerms.value.length) dropHighlight() })
 
 const editorBar = ref<HTMLElement>()
 function setMode(next: Mode) {
@@ -659,6 +679,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <SearchHighlightBar v-if="highlightTerms.length && mode === 'read'" :terms="highlightTerms" :count="highlight.count.value"
+            :index="highlight.index.value" :unsupported="file.format !== 'md'" @previous="highlight.previous" @next="highlight.next"
+            @close="highlight.close" />
+
           <!-- Markdown: read -->
           <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading" :class="{ 'skip-title': leadingTitle }">
             <MarkdownBody :rendered="rendered" download doc-links />
@@ -875,6 +899,7 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
 .auto-preview { display: inline-flex; align-items: center; gap: var(--ui-space-2); margin-left: var(--ui-space-2); color: var(--ui-text-secondary); font-size: var(--ui-text-sm); }
 .auto-preview label { cursor: pointer; }
 .download { margin-left: auto; color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; }
+.content { --search-bar-top: calc(var(--ui-topbar-height) + .75rem); }  /* below the top bar, or the phone header (same height) */
 .html-frame { box-sizing: border-box; width: 100%; min-height: 72vh; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: #fff; }
 
 /* Inspector */

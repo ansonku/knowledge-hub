@@ -1,3 +1,4 @@
+import type { SearchMatches } from '../searchTerms'
 export type Format = 'html' | 'md'
 export type Label = { id: string; name: string }
 /** A tag from /api/tags/, with the number of non-trashed documents carrying it. */
@@ -24,6 +25,8 @@ export type DocumentRow = {
   /** Published version number, or null when the document is private. */
   published_version?: number | null
   updated_at: string
+  /** P16: present when the list was searched. */
+  matches?: SearchMatches
 }
 
 export type Visibility = 'public' | 'private' | 'lagging'
@@ -44,6 +47,8 @@ export type DocumentPage = {
   page_size: number
   results: DocumentRow[]
   limits: { bytes: number; batch: number }
+  /** The order the server used (relevance only when searching). */
+  ordering?: string
 }
 
 export const formatLabel = (format: Format) => (format === 'html' ? 'HTML' : 'Markdown')

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import Skeleton from 'primevue/skeleton'
 import { computed, nextTick, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import UiIcon from '../app/components/UiIcon.vue'
 import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import type { GalleryLayout } from '../gallery'
 import { jumpToHeading } from '../headings'
 import OutlineNav from '../OutlineNav.vue'
+import SearchHighlightBar from '../SearchHighlightBar.vue'
+import { useSearchHighlight } from '../searchHighlight'
+import { searchTerms } from '../searchTerms'
 import { cardDate, collectionStyle, colorClass, portalMode, portals, publicApi, publicDate, usePublicNav, type PublicArticle } from './public'
 import { useSession } from '../stores/session'
 import { useSite } from '../stores/site'
@@ -15,6 +18,7 @@ import { useSite } from '../stores/site'
 const site = useSite()
 const session = useSession()
 const route = useRoute()
+const router = useRouter()
 const id = computed(() => String(route.params.id))
 const article = ref<PublicArticle>()
 const loading = ref(true)
@@ -40,6 +44,8 @@ async function load() {
     site.setTitle(result.title)
     await nextTick()
     const anchor = window.location.hash.slice(1)
+    // A search highlight (?hl=) scrolls to its first match instead.
+    if (highlightTerms.value.length && rendered.value) return
     if (/^section-\d+$/.test(anchor)) requestAnimationFrame(() => jumpToHeading(content.value, anchor, false))
     else window.scrollTo({ top: 0 })
   } catch (cause) {
@@ -89,6 +95,19 @@ const headings = computed(() => {
 function jump(target: string) {
   jumpToHeading(content.value, target)
 }
+
+// ---- P16c: words from a search (?hl=) marked in the article ------------------------------------
+const highlightTerms = computed(() => searchTerms(typeof route.query.hl === 'string' ? route.query.hl : ''))
+const highlight = useSearchHighlight({
+  root: () => content.value,
+  terms: () => highlightTerms.value,
+  content: () => rendered.value?.html,
+  enabled: () => Boolean(rendered.value),
+  onClose: () => {
+    const { hl: _ignored, ...rest } = route.query
+    void router.replace({ query: rest, hash: route.hash })
+  },
+})
 
 // ---- HTML: static, script-free reading copy (sandbox="" and a restrictive CSP) --------------------
 const htmlDocument = computed(() => `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
@@ -166,6 +185,9 @@ async function copyLink() {
 
       <div class="columns">
         <article class="body" :aria-busy="loading">
+          <SearchHighlightBar v-if="highlightTerms.length && article" :terms="highlightTerms" :count="highlight.count.value"
+            :index="highlight.index.value" :unsupported="!rendered" @previous="highlight.previous" @next="highlight.next"
+            @close="highlight.close" />
           <div v-if="rendered" ref="content" class="reading" :class="{ 'skip-title': leadingTitle }">
             <!-- Signed-in members also get the lightbox download button; visitors do not. -->
             <MarkdownBody :rendered="rendered" :download="session.status === 'member'"
@@ -218,6 +240,7 @@ a.copy { text-decoration: none; }
 .columns { display: flex; align-items: flex-start; justify-content: space-between; gap: clamp(2rem, 4vw, 3rem); padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1rem, 3.5vw, 3.5rem) clamp(2.5rem, 5vw, 4rem); }
 /* Markdown and HTML share the title band's 74rem column, here and on the workspace document page. */
 .body { flex: 1 1 auto; min-width: 0; max-width: 74rem; }
+.body { --search-bar-top: 5rem; }
 .reading { color: var(--ui-text-reading-color); font-size: var(--ui-text-reading); line-height: var(--ui-leading-reading); overflow-wrap: anywhere; }
 .reading :deep(.markdown-body > div > *:first-child) { margin-top: 0; }
 .reading.skip-title :deep(.markdown-body > div > h1:first-child) { display: none; }

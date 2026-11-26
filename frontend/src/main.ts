@@ -8,6 +8,7 @@ import ToastService from 'primevue/toastservice'
 import { createApp, h } from 'vue'
 import { createRouter, createWebHistory, RouterView } from 'vue-router'
 import './styles/tokens.css'
+import './styles/search.css'
 import { themeOptions } from './theme'
 
 const router = createRouter({

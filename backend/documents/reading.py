@@ -63,15 +63,21 @@ def read_nav(request):
 @permission_classes([CanReadLibrary])
 def read_articles(request):
     index = category_index()
-    documents = search.filter_documents(readable(), request.query_params.get("q", "")[:240])
+    keywords = request.query_params.get("q", "")[:240]
+    terms = search.terms_of(keywords)
+    documents = search.filter_documents(readable(), keywords)
     if request.query_params.get("collection"):
         collection = serializers.UUIDField().run_validation(request.query_params["collection"])
         documents = documents.filter(category_id__in=subtree_ids(collection, index))
-    rows = documents.order_by("-updated_at", "pk").annotate(
+    # P16a: search results come most relevant first.
+    documents = documents.annotate(relevance=search.document_relevance(terms)).order_by("-relevance", "-updated_at", "pk") \
+        if terms else documents.order_by("-updated_at", "pk")
+    rows = documents.annotate(
         sample=Left("current_version__search_text", SAMPLE_LENGTH), text_length=Length("current_version__search_text"),
     ).values("pk", "title", "format", "updated_at", "category_id", "public", "sample", "text_length")
     paginator = Paginator(rows, PAGE_SIZE)
     page = paginator.get_page(request.query_params.get("page"))
+    matches = search.document_matches([row["pk"] for row in page], terms)
     return Response({
         "results": [
             {
@@ -80,6 +86,7 @@ def read_articles(request):
                 "reading_minutes": reading_minutes(row["sample"] or "", row["text_length"] or 0),
                 "collection": collection_ref(row["category_id"], index), "path": path_of(row["category_id"], index),
                 "public": row["public"],
+                **({"matches": matches.get(row["pk"], {"fields": [], "snippets": []})} if terms else {}),
             }
             for row in page
         ],
