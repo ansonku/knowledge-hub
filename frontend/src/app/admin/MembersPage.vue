@@ -115,7 +115,6 @@ const pageCount = computed(() => listing.value?.page_count ?? 1)
   <div class="page">
     <header class="page-head">
       <div>
-        <p class="eyebrow">管理</p>
         <h1>成員</h1>
         <p class="subtitle" aria-live="polite">{{ loading && !listing ? '正在載入…' : `${listing?.count ?? 0} 位成員` }}</p>
       </div>

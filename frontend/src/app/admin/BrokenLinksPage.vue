@@ -66,7 +66,6 @@ const time = (date?: Date) => date?.toLocaleTimeString('zh-Hant', { hour: '2-dig
 <template>
   <div class="page">
     <header class="page-head">
-      <p class="eyebrow">管理</p>
       <h1>失效連結</h1>
       <p class="subtitle">檢查每份 Markdown 文件目前版本中，連到本站文件、圖片與影片的連結。外部網址與 HTML 文件不檢查，也不會自動修改任何內容。</p>
     </header>
@@ -156,7 +155,7 @@ const time = (date?: Date) => date?.toLocaleTimeString('zh-Hant', { hour: '2-dig
             圖片 {{ report.storage.unused.images }} 張、影片 {{ report.storage.unused.videos }} 支，共 {{ size(report.storage.unused.bytes) }}。
             通常是貼上後沒有儲存；上傳 24 小時後會自動清理。
           </p>
-          <p class="storage-note">硬碟與資料庫對不上的檔案，請看<RouterLink v-if="session.isAdmin" :to="{ name: 'app-system' }">系統狀態</RouterLink><template v-else>系統狀態（Admin）</template>的「一致性檢查」。</p>
+          <p class="storage-note">硬碟與資料庫對不上的檔案，請看<RouterLink v-if="session.isAdmin" :to="{ name: 'app-maintenance' }">維護與備份</RouterLink><template v-else>維護與備份（Admin）</template>的「一致性檢查」。</p>
         </section>
       </template>
     </template>

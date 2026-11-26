@@ -97,7 +97,6 @@ function moveFeatured(index: number, step: -1 | 1) {
   <div class="page">
     <header class="page-head">
       <div>
-        <p class="eyebrow">管理</p>
         <h1>公開站總覽</h1>
         <p class="subtitle">對外文章的瀏覽情況與待處理事項。瀏覽數只記次數，不記訪客身分；數字僅供參考。</p>
       </div>
