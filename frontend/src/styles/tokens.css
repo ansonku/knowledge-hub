@@ -38,7 +38,7 @@
   --ui-shadow-lg: 0 12px 32px rgb(16 24 40 / .16);
 
   /* Layout */
-  --ui-sidebar-width: 15rem;
+  --ui-sidebar-width: 16.5rem;
   --ui-inspector-width: 20rem;
   --ui-topbar-height: 3.5rem;
   --ui-target: 2.75rem; /* minimum touch target */
@@ -190,6 +190,8 @@ body:has(.hub-app) .p-dialog-content {
   font-size: var(--ui-text-md);
 }
 body:has(.hub-app) .p-dialog-title { font-size: 1.125rem; }
+/* Confirmations may add a second line (e.g. links that break when a document goes to the trash). */
+body:has(.hub-app) .p-confirmdialog-message { white-space: pre-line; }
 
 /* Collection colour marks (Category.color). Text pairs keep 4.5:1 on their background. */
 :root {

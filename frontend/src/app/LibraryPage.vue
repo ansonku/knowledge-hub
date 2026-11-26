@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { incomingLinks } from './links'
 import Button from 'primevue/button'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
@@ -195,10 +196,12 @@ function openUpload(target: DocumentRow) {
   uploadOpen.value = true
 }
 
-function moveToTrash(row: DocumentRow) {
+async function moveToTrash(row: DocumentRow) {
+  const linked = (await incomingLinks([row.id]))[row.id] ?? 0
   confirm.require({
     header: '移入回收桶',
-    message: `「${row.title}」與所有版本會移入回收桶，之後可以從回收桶還原。`,
+    message: `「${row.title}」與所有版本會移入回收桶，之後可以從回收桶還原。`
+      + (linked ? `\n有 ${linked} 份文件連到這份文件，移入回收桶後這些連結會失效。` : ''),
     acceptProps: { label: '移入回收桶', severity: 'danger' },
     rejectProps: { label: '取消', severity: 'secondary', text: true },
     accept: async () => {
@@ -261,11 +264,14 @@ function bulkDone() {
   void load()
   window.dispatchEvent(new CustomEvent('hub:documents-changed'))
 }
-function bulkTrash() {
+async function bulkTrash() {
   const ids = [...selected.value]
+  const counts = await incomingLinks(ids)
+  const linked = Object.values(counts).filter(count => count > 0).length
   confirm.require({
     header: '移入回收桶',
-    message: `${ids.length} 份文件與所有版本會移入回收桶，公開中的文章會一併下架。之後可以從回收桶還原。`,
+    message: `${ids.length} 份文件與所有版本會移入回收桶，公開中的文章會一併下架。之後可以從回收桶還原。`
+      + (linked ? `\n其中 ${linked} 份有其他文件連到，移入回收桶後那些連結會失效。` : ''),
     acceptProps: { label: '移入回收桶', severity: 'danger' },
     rejectProps: { label: '取消', severity: 'secondary', text: true },
     accept: async () => {

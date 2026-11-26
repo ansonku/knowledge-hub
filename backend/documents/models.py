@@ -369,3 +369,14 @@ class VersionVideo(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["version", "video"], name="unique_version_video")]
+
+
+class VersionLink(models.Model):
+    """P13: a version's Markdown links to another document. The target is kept as a bare id (no foreign key),
+    so a link to a document that was permanently deleted still shows up as broken."""
+
+    version = models.ForeignKey(Version, on_delete=models.CASCADE, related_name="link_references")
+    target_id = models.UUIDField(db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["version", "target_id"], name="unique_version_link")]

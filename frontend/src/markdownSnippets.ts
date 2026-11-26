@@ -10,7 +10,7 @@ export type Snippet = {
   description: string
   /** Snippet text, or an action the editor performs (opening its picture or video picker). */
   insert?: string
-  action?: 'image' | 'video'
+  action?: 'image' | 'video' | 'doclink'
   /** What the help panel shows, when it differs from the inserted text. */
   example?: string
   /** Starts on its own line (block syntax); inline syntax goes in at the cursor. */
@@ -22,6 +22,11 @@ export const SNIPPETS: Snippet[] = [
   { id: 'h3', label: '標題 3', keywords: 'heading h3 subtitle', group: '文字', description: '小節標題', insert: '### ${1:標題}', block: true },
   { id: 'bold', label: '粗體', keywords: 'bold strong', group: '文字', description: '強調文字（Ctrl+B）', insert: '**${1:文字}**', block: false },
   { id: 'link', label: '連結', keywords: 'link url', group: '文字', description: '文字連結（Ctrl+K）', insert: '[${1:文字}](${2:https://})', block: false },
+  {
+    id: 'doclink', label: '連結文件', keywords: 'link document wiki 文件 連結 [[', group: '文字',
+    description: '搜尋知識庫中的文件並插入連結；也可以直接輸入 [[，或貼上文件網址', action: 'doclink',
+    example: '[文件標題](/app/docs/…/)', block: false,
+  },
   { id: 'quote', label: '引用', keywords: 'quote blockquote', group: '文字', description: '引用一段文字', insert: '> ${1:引用文字}', block: true },
   { id: 'bullet', label: '項目清單', keywords: 'list bullet ul', group: '文字', description: '按 Enter 接續下一項，Tab 縮排', insert: '- ${1:項目}', block: true },
   { id: 'ordered', label: '編號清單', keywords: 'list ordered number ol', group: '文字', description: '自動接續編號', insert: '1. ${1:項目}', block: true },
@@ -50,6 +55,7 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: 'Ctrl+/', label: '開關這個語法說明' },
   { keys: 'Tab／Shift+Tab', label: '清單縮排／取消縮排' },
   { keys: '行首輸入 /', label: '快速插入（例如 /相簿、/表格、/影片）' },
+  { keys: '[[', label: '搜尋並插入文件連結' },
   { keys: 'Ctrl+Z／Ctrl+Y', label: '復原／重做' },
 ]
 

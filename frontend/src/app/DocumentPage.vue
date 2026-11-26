@@ -23,9 +23,11 @@ import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
 import UploadDialog from './components/UploadDialog.vue'
 import { useDocument, type DocumentDetails, type PublicationStatus } from './composables/useDocument'
+import { incomingLinks } from './links'
 import { draftImageIds, readDraft, removeDraft, writeDraft, type Draft, type DraftWrite } from './drafts'
 import InfoTab from './inspector/InfoTab.vue'
 import ActivityTab from './inspector/ActivityTab.vue'
+import LinksTab from './inspector/LinksTab.vue'
 import PublishTab from './inspector/PublishTab.vue'
 import VersionsTab from './inspector/VersionsTab.vue'
 import { formatLabel, longDateTime, shortDate, type DocumentRow } from './types'
@@ -33,7 +35,7 @@ import { useSite } from '../stores/site'
 
 const site = useSite()
 type Mode = 'read' | 'edit' | 'split'
-type Tab = 'info' | 'versions' | 'activity' | 'publish'
+type Tab = 'info' | 'versions' | 'links' | 'activity' | 'publish'
 
 const route = useRoute()
 const router = useRouter()
@@ -426,6 +428,7 @@ const tab = ref<Tab>(requestedTab ?? 'info')
 const tabs = computed(() => [
   { value: 'info' as const, label: '資訊' },
   { value: 'versions' as const, label: '版本' },
+  { value: 'links' as const, label: '連結' },
   { value: 'activity' as const, label: '活動' },
   ...(session.isAdmin ? [{ value: 'publish' as const, label: '公開' }] : []),
 ])
@@ -468,12 +471,14 @@ const menuItems = computed<MenuItem[]>(() => {
   return items
 })
 
-function moveToTrash() {
+async function moveToTrash() {
   const current = file.value
   if (!current) return
+  const linked = (await incomingLinks([current.id]))[current.id] ?? 0
   confirm.require({
     header: '移入回收桶',
-    message: `「${current.title}」與所有版本會移入回收桶${publishedNumber.value ? '，公開網址也會立即失效' : ''}。之後可從回收桶還原。`,
+    message: `「${current.title}」與所有版本會移入回收桶${publishedNumber.value ? '，公開網址也會立即失效' : ''}。之後可從回收桶還原。`
+      + (linked ? `\n有 ${linked} 份文件連到這份文件，移入回收桶後這些連結會失效。` : ''),
     acceptProps: { label: '移入回收桶', severity: 'danger' },
     rejectProps: { label: '取消', severity: 'secondary', text: true },
     accept: async () => {
@@ -638,7 +643,7 @@ onBeforeUnmount(() => {
 
           <!-- Markdown: read -->
           <div v-if="file.format === 'md' && mode === 'read'" ref="article" class="reading" :class="{ 'skip-title': leadingTitle }">
-            <MarkdownBody :rendered="rendered" download />
+            <MarkdownBody :rendered="rendered" download doc-links />
           </div>
 
           <!-- Markdown: edit / split -->
@@ -658,7 +663,7 @@ onBeforeUnmount(() => {
             </form>
             <Message v-if="saveError" severity="error" size="small" class="save-error">{{ saveError }}</Message>
             <div class="panes" :class="{ split: mode === 'split' }">
-              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage"
+              <Monaco v-model="draft" :readonly="saving" :autofocus="focusEditor" :upload-image="uploadImage" :document-id="file.id"
                 :upload-video="uploadVideo" @notify="notify" @uploading="uploadsRunning = $event"
                 @save="focusNote" @scroll-line="syncPreview" />
               <div v-if="mode === 'split'" ref="previewPane" class="preview" aria-label="即時預覽">
@@ -667,7 +672,7 @@ onBeforeUnmount(() => {
                   閱讀頁與公開文章以「相簿模式」呈現（{{ albumLayoutLabel }}）：所有圖片集中成一本相簿，文字放在上方當作說明。
                   每張圖片的說明請寫在 <code>![說明]</code> 裡。
                 </p>
-                <MarkdownBody :rendered="preview" download />
+                <MarkdownBody :rendered="preview" download doc-links />
               </div>
             </div>
           </div>
@@ -713,6 +718,7 @@ onBeforeUnmount(() => {
           <VersionsTab v-else-if="tab === 'versions'" :document="file" :shown-id="historical?.id" :can-restore="session.canEdit"
             :can-delete="session.isAdmin"
             :published-number="publishedNumber" @restored="onRestored" />
+          <LinksTab v-else-if="tab === 'links'" :document-id="file.id" :revision="`${file.current_version.id}-${file.updated_at}`" />
           <ActivityTab v-else-if="tab === 'activity'" :document-id="file.id" :revision="`${file.current_version.id}-${file.updated_at}`" />
           <PublishTab v-else :document="file" :status="publication" :error="publicationError"
             @changed="status => { publication = status }" />

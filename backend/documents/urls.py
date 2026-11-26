@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
-from . import featured, images, popularity, preview, publication, reading, videos, views
+from . import featured, images, links, popularity, preview, publication, reading, videos, views
 
 router = SimpleRouter()
 router.register("categories", views.CategoryViewSet)
@@ -46,6 +46,9 @@ urlpatterns = [
     path("documents/<uuid:document_id>/images/", images.upload_image),
     path("images/<uuid:image_id>/", images.serve_image),
     path("documents/<uuid:document_id>/image-sizes/", images.document_image_sizes),
+    path("documents/<uuid:document_id>/links/", links.document_links),
+    path("documents/resolve/", links.resolve_links),
+    path("documents/incoming-links/", links.incoming_counts),
     path("documents/<uuid:document_id>/videos/", videos.upload_video),
     path("videos/<uuid:video_id>/", videos.serve_video),
     path("documents/<uuid:document_id>/markdown/", views.new_version, {"edit": True}),
