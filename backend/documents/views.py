@@ -114,7 +114,10 @@ def documents(request):
             query = query.filter(category__isnull=True)
         else:
             category_id = serializers.UUIDField().run_validation(category)
-            query = query.filter(category_id__in=ids_in_subtree(category_id))
+            # P17: the document picker lists one level at a time; sub-collections are opened in its tree.
+            scope = serializers.ChoiceField(["subtree", "direct"]).run_validation(filters.get("category_scope", "subtree"))
+            query = query.filter(category_id=category_id) if scope == "direct" \
+                else query.filter(category_id__in=ids_in_subtree(category_id))
     if document_format := filters.get("file_format"):
         query = query.filter(format=serializers.ChoiceField(Document.Format.values).run_validation(document_format))
     if tag := filters.get("tag"):

@@ -11,7 +11,7 @@ import { editor, languages, Range } from './monaco'
 
 export type EditorHelpers = {
   readonly: () => boolean
-  pick: (kind: 'image' | 'video') => void
+  pick: (kind: 'image' | 'video' | 'docpicker') => void
   /** The document being edited: it is left out of the document link suggestions. */
   documentId: () => string | undefined
 }
@@ -57,7 +57,7 @@ async function searchDocuments(query: string) {
 export function registerMarkdownHelpers() {
   if (registered) return
   registered = true
-  editor.registerCommand(PICK, (_accessor, uri: string, kind: 'image' | 'video') => helpers.get(uri)?.pick(kind))
+  editor.registerCommand(PICK, (_accessor, uri: string, kind: 'image' | 'video' | 'docpicker') => helpers.get(uri)?.pick(kind))
 
   languages.registerCompletionItemProvider('markdown', {
     triggerCharacters: ['/'],
@@ -76,6 +76,7 @@ export function registerMarkdownHelpers() {
           sortText: String(index).padStart(3, '0'),
           range,
           insertText: snippet.action === 'doclink' ? '[[' : snippet.insert ?? '',
+          // 選擇文件 removes the typed `/…` and opens its dialog through the command below.
           insertTextRules: snippet.insert ? languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
           // 連結文件 types `[[` and opens the document search right away.
           command: snippet.action === 'doclink' ? { id: 'editor.action.triggerSuggest', title: snippet.label }
@@ -108,15 +109,28 @@ export function registerMarkdownHelpers() {
       const label = (title: string) => title.replace(/[[\]]/g, '\\$&')
       return {
         incomplete: true,
-        suggestions: rows.filter(row => row.id !== current).slice(0, 12).map((row, index) => ({
-          label: { label: row.title, description: taxonomy.pathLabel(row.category) },
-          kind: languages.CompletionItemKind.Reference,
-          detail: query ? '插入文件連結' : '最近閱讀',
-          filterText: typed[0],
-          sortText: String(index).padStart(3, '0'),
-          range,
-          insertText: `[${label(row.title)}](/app/docs/${row.id}/)`,
-        })),
+        suggestions: [
+          ...rows.filter(row => row.id !== current).slice(0, 12).map((row, index) => ({
+            label: { label: row.title, description: taxonomy.pathLabel(row.category) },
+            kind: languages.CompletionItemKind.Reference,
+            detail: query ? '插入文件連結' : '最近閱讀',
+            filterText: typed[0],
+            sortText: String(index).padStart(3, '0'),
+            range,
+            insertText: `[${label(row.title)}](/app/docs/${row.id}/)`,
+          })),
+          // P17: always last; removes the typed `[[…` and opens the 選擇文件 dialog.
+          {
+            label: { label: '依集合瀏覽…', description: '選擇文件' },
+            kind: languages.CompletionItemKind.Folder,
+            detail: '依集合階層挑選文件',
+            filterText: typed[0],
+            sortText: '999',
+            range,
+            insertText: '',
+            command: { id: PICK, title: '選擇文件', arguments: [model.uri.toString(), 'docpicker'] },
+          },
+        ],
       }
     },
   })

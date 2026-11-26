@@ -10,7 +10,7 @@ export type Snippet = {
   description: string
   /** Snippet text, or an action the editor performs (opening its picture or video picker). */
   insert?: string
-  action?: 'image' | 'video' | 'doclink'
+  action?: 'image' | 'video' | 'doclink' | 'docpicker'
   /** What the help panel shows, when it differs from the inserted text. */
   example?: string
   /** Starts on its own line (block syntax); inline syntax goes in at the cursor. */
@@ -25,6 +25,11 @@ export const SNIPPETS: Snippet[] = [
   {
     id: 'doclink', label: '連結文件', keywords: 'link document wiki 文件 連結 [[', group: '文字',
     description: '搜尋知識庫中的文件並插入連結；也可以直接輸入 [[，或貼上文件網址', action: 'doclink',
+    example: '[文件標題](/app/docs/…/)', block: false,
+  },
+  {
+    id: 'docpicker', label: '選擇文件', keywords: 'link document browse collection pick 文件 集合 瀏覽', group: '文字',
+    description: '依集合瀏覽或搜尋文件，選好後插入連結；先選取文字時，選取的文字會成為連結文字', action: 'docpicker',
     example: '[文件標題](/app/docs/…/)', block: false,
   },
   { id: 'quote', label: '引用', keywords: 'quote blockquote', group: '文字', description: '引用一段文字', insert: '> ${1:引用文字}', block: true },

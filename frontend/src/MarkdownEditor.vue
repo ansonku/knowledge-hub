@@ -7,6 +7,8 @@ import { plainSnippet, SHORTCUTS, SNIPPETS, type Snippet } from './markdownSnipp
 import { helpers, inFence, registerMarkdownHelpers } from './markdownCompletions'
 import { DOC_LINK, resolveLinks } from './app/links'
 import { outlineOf, type OutlineEntry } from './markdown'
+import DocumentPicker from './DocumentPicker.vue'
+import type { DocumentRow } from './app/types'
 import {
   continueList, countWords, indentList, insertBlockStyle, insertGallery, insertLink, pasteAsLink, toggleInline, toggleLines,
   type BlockStyle, type InlineStyle, type LineStyle,
@@ -19,6 +21,8 @@ const props = defineProps<{
   autofocus?: boolean
   /** The document being edited (left out of document link suggestions). */
   documentId?: string
+  /** Its collection: the 選擇文件 dialog starts there (P17). */
+  categoryId?: string | null
   /** Uploads one image and resolves with its address; without it the editor takes no images or videos. */
   uploadImage?: (file: File) => Promise<{ url: string }>
   /** Uploads one video, reporting progress; aborting the signal cancels it. Without it the editor takes no videos. */
@@ -197,11 +201,37 @@ function toggleHelp(open = !helpOpen.value) {
   helpOpen.value = open
   if (!open) instance?.focus()
 }
-function pick(kind: 'image' | 'video') {
+function pick(kind: 'image' | 'video' | 'docpicker') {
   if (props.readonly) return
-  if (kind === 'image') picker.value?.click()
+  if (kind === 'docpicker') openDocPicker()
+  else if (kind === 'image') picker.value?.click()
   else if (props.uploadVideo) videoPicker.value?.click()
 }
+// ---- P17: 選擇文件 — pick a document by collection and insert a link where the cursor was ----
+const docPickerOpen = ref(false)
+let pickerSelection: Selection | null = null
+function openDocPicker() {
+  pickerSelection = instance?.getSelection() ?? null
+  docPickerOpen.value = true
+}
+/** Inserts the link at once; the dialog hands the focus back to the editor when it has finished closing. */
+function closeDocPicker(row?: DocumentRow) {
+  docPickerOpen.value = false
+  const ed = instance, current = ed?.getModel()
+  if (!ed || !current) return
+  ed.focus()
+  if (pickerSelection) ed.setSelection(pickerSelection)
+  if (!row || props.readonly) return
+  const sel = ed.getSelection() ?? pickerSelection
+  if (!sel) return
+  const selected = current.getValueInRange(sel)
+  // Selected text on one line becomes the link text; otherwise the title goes in after the selection.
+  const useSelection = selected.trim() && !selected.includes('\n')
+  const text = useSelection ? selected : row.title.replace(/[[\]]/g, '\\$&')
+  const range = useSelection ? sel : new Range(sel.endLineNumber, sel.endColumn, sel.endLineNumber, sel.endColumn)
+  ed.executeEdits('docpicker', [{ range, text: `[${text}](/app/docs/${row.id}/)`, forceMoveMarkers: true }])
+}
+
 type SnippetEditor = { insert: (template: string) => void }
 /** Types `[[` at the cursor and opens the document search (P13b). */
 function startDocLink() {
@@ -215,6 +245,7 @@ function insertSnippet(snippet: Snippet) {
   if (!ed || !model || !sel || props.readonly) return
   ed.focus()
   if (snippet.action === 'doclink') { startDocLink(); return }
+  if (snippet.action === 'docpicker') { openDocPicker(); return }
   if (snippet.action) { pick(snippet.action); return }
   if (snippet.block && model.getLineContent(sel.endLineNumber).trim()) {
     // Block syntax starts on a line of its own, after a blank line.
@@ -650,6 +681,8 @@ onBeforeUnmount(() => {
         </dl>
       </section>
     </aside>
+    <DocumentPicker :visible="docPickerOpen" :start-category="categoryId" :exclude-id="documentId"
+      @pick="closeDocPicker" @cancel="closeDocPicker()" @closed="instance?.focus()" />
     <div v-if="dragging" class="drop-hint" aria-hidden="true">
       <UiIcon :name="uploadVideo ? 'video' : 'image'" :size="20" />
       <span>{{ uploadVideo ? '放開即可插入圖片或影片' : '放開即可插入圖片（PNG、JPEG、GIF、WebP）' }}</span>
