@@ -103,3 +103,23 @@ class SearchApiTests(ImageFixture):
         self.assertNotIn("祕密", snippet)
         self.assertEqual(self.as_user().get("/api/public/articles/", {"q": "祕密"}).json()["count"], 0)
         self.assertNotIn("matches", self.as_user().get("/api/public/articles/").json()["results"][0])
+
+
+class CategoryScopeTests(ImageFixture):
+    """P17: category_scope=direct lists one level of a collection."""
+
+    def test_direct_leaves_out_sub_collections(self):
+        parent = Category.objects.create(name="上層")
+        child = Category.objects.create(name="下層", parent=parent)
+        top = self.create("# 上層文件\n", "上層文件.md")
+        below = self.create("# 下層文件\n", "下層文件.md")
+        self.client.patch(f"/api/documents/{top}/", {"category": str(parent.pk)}, content_type="application/json")
+        self.client.patch(f"/api/documents/{below}/", {"category": str(child.pk)}, content_type="application/json")
+
+        def ids(**params):
+            return {str(row["id"]) for row in self.client.get("/api/documents/", params).json()["results"]}
+
+        self.assertEqual(ids(category=str(parent.pk)), {top, below})
+        self.assertEqual(ids(category=str(parent.pk), category_scope="direct"), {top})
+        self.assertEqual(ids(category=str(child.pk), category_scope="direct"), {below})
+        self.assertEqual(self.client.get("/api/documents/", {"category": str(parent.pk), "category_scope": "all"}).status_code, 400)
