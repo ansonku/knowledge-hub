@@ -195,6 +195,8 @@ def collect_unused_images(*, dry_run=False):
             return len(victims), sum(row[3] for row in victims)
         DocumentImage.objects.filter(pk__in=[row[0] for row in victims]).delete()
         paths = [storage.root() / "images" / str(document) / f"{pk}.{fmt}" for pk, document, fmt, _ in victims]
+        # P21a: their thumbnails go too.
+        paths += [storage.root() / thumb_relative(document, pk) for pk, document, _, _ in victims]
         transaction.on_commit(lambda: remove_files(paths))
     total = sum(row[3] for row in victims)
     logger.info("Removed %d unused images (%d bytes).", len(victims), total)
@@ -210,7 +212,8 @@ def remove_files(paths):
         except OSError:
             # check_document_storage reports the leftover file; nothing refers to it any more.
             logger.error("Could not remove an unused image or video file.")
-    for folder in folders:
+    # Deepest first, so an emptied thumbs/ folder goes before its document folder.
+    for folder in sorted(folders, key=lambda item: len(item.parts), reverse=True):
         try:
             storage.sync_directory(folder)
             folder.rmdir()
@@ -295,6 +298,63 @@ def serve_image(request, image_id):
     response["X-Content-Type-Options"] = "nosniff"
     response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     # Bytes behind an id never change; access can, so keep it to the browser and only briefly.
+    response["Cache-Control"] = "private, max-age=600"
+    response["Vary"] = "Cookie"
+    return response
+
+
+# ---- P21a: thumbnails ------------------------------------------------------------------------------
+THUMB_WIDTH = 480
+THUMB_QUALITY = 80
+
+
+def thumb_relative(document_id, image_id):
+    return f"images/{document_id}/thumbs/{image_id}.webp"
+
+
+def make_thumbnail(image):
+    """A 480 px wide WebP of an image (never enlarged; the first frame of an animation), written once."""
+    destination = storage.root() / thumb_relative(image.document_id, image.pk)
+    if destination.is_file():
+        return destination
+    folder = destination.parent
+    folder.mkdir(mode=0o700, exist_ok=True)
+    with Image.open(storage.root() / image.path) as source:
+        source.seek(0)
+        frame = source.convert("RGBA" if source.mode in ("RGBA", "LA", "P") else "RGB")
+        if frame.width > THUMB_WIDTH:
+            frame = frame.resize((THUMB_WIDTH, max(1, round(frame.height * THUMB_WIDTH / frame.width))), Image.Resampling.LANCZOS)
+        buffer = io.BytesIO()
+        frame.save(buffer, "WEBP", quality=THUMB_QUALITY, method=4)
+    # Two readers asking at once both write a whole file; the rename makes either one the result.
+    with tempfile.NamedTemporaryFile(dir=folder, delete=False) as temporary:
+        temporary.write(buffer.getvalue())
+        temporary.flush()
+        os.fsync(temporary.fileno())
+    os.replace(temporary.name, destination)
+    storage.sync_directory(folder)
+    return destination
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def serve_thumbnail(request, image_id):
+    """The same access rules as the image itself; the size is fixed, so nobody can make the server produce others."""
+    image = DocumentImage.objects.select_related("document").filter(pk=image_id).first()
+    if image is None or not can_read(request.user, image):
+        raise Http404
+    try:
+        path, content_type = make_thumbnail(image), "image/webp"
+    except FileNotFoundError:
+        raise Http404 from None
+    except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+        # A picture Pillow cannot shrink: send the original rather than nothing.
+        logger.exception("Could not make a thumbnail for image %s.", image.pk)
+        path, content_type = storage.root() / image.path, CONTENT_TYPES[image.format]
+    response = FileResponse(path.open("rb"), content_type=content_type)
+    response["Content-Disposition"] = 'inline; filename="thumbnail.webp"'
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     response["Cache-Control"] = "private, max-age=600"
     response["Vary"] = "Cookie"
     return response

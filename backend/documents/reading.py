@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from users.permissions import CanReadLibrary
 
 from . import search
+from .covers import add_covers
 from .image_sizes import version_image_sizes
 from .links import readable_targets
 from .models import ArticlePublication, Document
@@ -55,7 +56,7 @@ def read_nav(request):
         for pk, title, category, updated in active_documents().order_by("-updated_at", "pk")
         .values_list("pk", "title", "category_id", "updated_at")[:NAV_LIMIT]
     ]
-    return Response({"collections": collection_tree(direct, index), "articles": articles})
+    return Response({"collections": collection_tree(direct, index), "articles": add_covers(articles, public=False)})
 
 
 @never_cache
@@ -79,7 +80,7 @@ def read_articles(request):
     page = paginator.get_page(request.query_params.get("page"))
     matches = search.document_matches([row["pk"] for row in page], terms)
     return Response({
-        "results": [
+        "results": add_covers([
             {
                 "document_id": row["pk"], "title": row["title"], "format": row["format"], "updated_at": row["updated_at"],
                 "excerpt": summarise(row["sample"] or "", row["title"], row["format"]),
@@ -89,7 +90,7 @@ def read_articles(request):
                 **({"matches": matches.get(row["pk"], {"fields": [], "snippets": []})} if terms else {}),
             }
             for row in page
-        ],
+        ], public=False),
         "page": page.number, "pages": paginator.num_pages, "count": paginator.count,
     })
 

@@ -16,6 +16,7 @@ from users.permissions import IsAdmin
 
 from . import activity
 from .models import FeaturedArticle, SiteSettings
+from .covers import add_covers
 from .publication import article_card, category_index, path_of, presented, published_articles
 
 MAX_FEATURED = 4
@@ -35,7 +36,7 @@ def public_featured(request):
     ids = featured_ids()
     rows = {row["document_id"]: row for row in presented(published_articles().filter(pk__in=ids))}
     index = category_index()
-    return Response({"results": [article_card(rows[pk], index) for pk in ids if pk in rows]})
+    return Response({"results": add_covers([article_card(rows[pk], index) for pk in ids if pk in rows], public=True)})
 
 
 class FeaturedInput(serializers.Serializer):

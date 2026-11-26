@@ -46,6 +46,7 @@ urlpatterns = [
     path("documents/<uuid:document_id>/versions/<uuid:version_id>/delete/", views.delete_version),
     path("documents/<uuid:document_id>/images/", images.upload_image),
     path("images/<uuid:image_id>/", images.serve_image),
+    path("images/<uuid:image_id>/thumb/", images.serve_thumbnail),
     path("documents/<uuid:document_id>/image-sizes/", images.document_image_sizes),
     path("documents/<uuid:document_id>/links/", links.document_links),
     path("documents/resolve/", links.resolve_links),
