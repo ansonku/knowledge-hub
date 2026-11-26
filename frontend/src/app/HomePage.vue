@@ -62,10 +62,23 @@ watch(scope, () => loadActivity())
 const roots = computed(() => taxonomy.tree.filter(node => node.depth === 0))
 const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 
+/** P18b: documents with broken links (Editors and Admins; warnings alone are not shown here). */
+const brokenDocuments = ref(0)
+async function loadBroken() {
+  if (!session.canEdit) return
+  try {
+    const report = await api<{ documents: { issues: { severity: string }[] }[] }>('/api/admin/broken-links/')
+    brokenDocuments.value = report.documents.filter(row => row.issues.some(item => item.severity === 'broken')).length
+  } catch {
+    brokenDocuments.value = 0
+  }
+}
+
 onMounted(async () => {
   site.setTitle()
   void workspace.refresh()
   void loadActivity()
+  void loadBroken()
   try {
     recent.value = (await api<{ results: DocumentRow[] }>('/api/me/recent/?limit=4')).results
   } catch {
@@ -154,9 +167,13 @@ onMounted(async () => {
       </section>
 
       <div class="side">
-        <section v-if="workspace.lagging || (session.canEdit && workspace.trash) || workspace.uncategorized" aria-labelledby="attention-heading" class="panel">
+        <section v-if="workspace.lagging || (session.canEdit && workspace.trash) || workspace.uncategorized || brokenDocuments" aria-labelledby="attention-heading" class="panel">
           <div class="panel-head"><h2 id="attention-heading">需要注意</h2></div>
           <div class="notices">
+            <RouterLink v-if="brokenDocuments" :to="{ name: 'app-broken-links' }" class="notice danger">
+              <UiIcon name="link" :size="18" />
+              <span><strong>{{ brokenDocuments }} 份文件有失效連結</strong><small>連到的文件、圖片或影片已經不在，可以逐一修正。</small></span>
+            </RouterLink>
             <RouterLink v-if="workspace.lagging" :to="{ name: 'app-published', query: { visibility: 'lagging' } }" class="notice warn">
               <UiIcon name="alert" :size="18" />
               <span><strong>{{ workspace.lagging }} 篇公開文章落後內部版本</strong><small>訪客讀到的仍是舊版，可檢視後發布新版本。</small></span>
@@ -252,6 +269,8 @@ h2 { margin: 0; font-size: .9375rem; font-weight: 600; }
 .notice small { color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .notice.warn { background: var(--ui-lagging-bg); color: var(--ui-lagging-text); }
 .notice.warn strong, .notice.warn small { color: var(--ui-lagging-text); }
+.notice.danger { background: var(--ui-danger-bg); color: var(--ui-danger); }
+.notice.danger strong, .notice.danger small { color: var(--ui-danger); }
 .collections { display: grid; padding: var(--ui-space-2); }
 .collection { display: flex; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-2); border-radius: var(--ui-radius-md); color: var(--ui-text); text-decoration: none; }
 .collection:hover { background: var(--ui-bg-subtle); }
