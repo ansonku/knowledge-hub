@@ -8,7 +8,9 @@ export type PublicCollection = { id: string; name: string; color: CollectionColo
 /** A collection on the path to a published article (decision 6, revised in P5b). */
 export type PublicNode = PublicCollection & { parent: string | null; depth: number; article_count: number; total_count: number }
 /** `date` is the publication date on the public site and the last update in the member portal. */
-export type PublicNavArticle = { document_id: string; title: string; collection_id: string | null; date: string }
+/** P21b: album articles' cover (a thumbnail; url is null for an album without pictures) and picture count. */
+export type AlbumCover = { url: string | null; count: number }
+export type PublicNavArticle = { document_id: string; title: string; collection_id: string | null; date: string; cover?: AlbumCover }
 export type PublicNav = { collections: PublicNode[]; articles: PublicNavArticle[] }
 export type PublicCard = {
   document_id: string
@@ -19,6 +21,7 @@ export type PublicCard = {
   updated_at?: string
   public?: boolean
   excerpt: string
+  cover?: AlbumCover
   /** P16: present when the list was searched. */
   matches?: SearchMatches
   reading_minutes: number

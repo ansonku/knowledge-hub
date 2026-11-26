@@ -118,7 +118,7 @@ SNIPPET_COUNT = 2
 SNIPPET_NOISE = [
     (re.compile(r"!\[([^\]]*)\]\([^)]*\)"), r" \1 "),     # images and videos: keep the alt text
     (re.compile(r"\[([^\]]*)\]\([^)]*\)"), r"\1"),         # links keep their text
-    (re.compile(r"(^|\s):::\s*gallery\b[\w-]*|(^|\s):::(?=\s|$)"), " "),  # gallery fences
+    (re.compile(r"(^|\s):::\s*gallery\b(?:[ \t]+(?:justified|grid|masonry|vertical|carousel)\b)?|(^|\s):::(?=\s|$)"), " "),  # gallery fences and their layout
     (re.compile(r"(^|\s)(?:```|~~~)[\w+-]*"), " "),          # code fence markers (the code stays searchable)
     (re.compile(r"(^|\s)#{1,6}\s+"), " "),                    # heading markers
     (re.compile(r"(^|\s)(?:>|[-*+]|\d+\.)\s+(?:\[[ xX]\]\s+)?"), " "),  # quotes, list and task markers

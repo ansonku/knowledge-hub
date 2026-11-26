@@ -20,6 +20,7 @@ from users.permissions import IsAdmin
 
 from .featured import MAX_FEATURED, featured_ids
 from .models import ArticleViewDaily, Document
+from .covers import add_covers
 from .publication import article_card, category_index, path_of, presented, published_articles
 
 WINDOW_DAYS = 30
@@ -83,7 +84,7 @@ def popular_articles(request):
     rows = {row["document_id"]: row for row in presented(published_articles().filter(pk__in=ranked))}
     index = category_index()
     # Counts stay private: the ranking is the only thing visitors see.
-    return Response({"results": [article_card(rows[pk], index) for pk in ranked if pk in rows]})
+    return Response({"results": add_covers([article_card(rows[pk], index) for pk in ranked if pk in rows], public=True)})
 
 
 @never_cache

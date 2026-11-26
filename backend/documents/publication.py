@@ -22,6 +22,7 @@ from rest_framework.response import Response
 from users.permissions import IsAdmin
 
 from . import activity, search, storage
+from .covers import add_covers
 from .image_sizes import version_image_sizes
 from .models import ArticlePublication, ArticlePublicationAudit, Category, Document, FeaturedArticle, SiteSettings
 from .public_html import readable_html
@@ -114,6 +115,7 @@ EXCERPT_LENGTH = 120
 SAMPLE_LENGTH = 2000
 CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]")
 MARKDOWN_NOISE = [
+    (re.compile(r"(^|\s):::\s*gallery\b(?:[ \t]+(?:justified|grid|masonry|vertical|carousel)\b)?|(^|\s):::(?=\s|$)"), " "),  # gallery fences and their layout (P21b)
     (re.compile(r"!\[[^\]]*\]\([^)]*\)"), " "),        # images
     (re.compile(r"\[([^\]]*)\]\([^)]*\)"), r"\1"),     # links keep their text
     (re.compile(r"```[^`]*```|~~~.*?~~~"), " "),         # fenced code
@@ -252,7 +254,7 @@ def public_articles(request):
     paginator = Paginator(presented(ordered), 20)
     page = paginator.get_page(request.query_params.get("page"))
     matches = search.publication_matches([row["document_id"] for row in page], terms)
-    cards = [article_card(row, index) for row in page]
+    cards = add_covers([article_card(row, index) for row in page], public=True)
     if terms:
         for card in cards:
             card["matches"] = matches.get(card["document_id"], {"fields": [], "snippets": []})
@@ -286,7 +288,7 @@ def public_nav(request):
         for pk, title, category, published in published_articles().order_by("-published_at", "document_id")
         .values_list("document_id", "title", "document__category_id", "published_at")[:NAV_LIMIT]
     ]
-    return Response({"collections": public_tree(index), "articles": articles})
+    return Response({"collections": public_tree(index), "articles": add_covers(articles, public=True)})
 
 
 @never_cache

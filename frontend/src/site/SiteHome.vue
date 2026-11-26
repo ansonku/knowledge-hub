@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Skeleton from 'primevue/skeleton'
 import HighlightText from '../HighlightText.vue'
+import AlbumThumb from './AlbumThumb.vue'
 import { searchTerms } from '../searchTerms'
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
@@ -152,6 +153,8 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
             </template>
             <RouterLink v-for="card in latest" v-else :key="card.document_id" :to="{ name: names.articleRoute, params: { id: card.document_id } }"
               class="card" :style="collectionStyle(card.collection)">
+              <AlbumThumb v-if="card.cover?.url" :cover="card.cover" variant="wide" class="card-cover" />
+              <span v-else class="card-cover card-band" aria-hidden="true" />
               <span class="card-meta">
                 <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
                 <span v-if="member" class="visibility" :class="{ public: card.public }">{{ card.public ? '公開' : '內部' }}</span>
@@ -174,6 +177,7 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
             <li v-for="(card, index) in popular" :key="card.document_id">
               <RouterLink :to="{ name: names.articleRoute, params: { id: card.document_id } }" class="popular-item">
                 <span class="rank" aria-hidden="true">{{ index + 1 }}</span>
+                <AlbumThumb v-if="card.cover" :cover="card.cover" />
                 <span class="popular-text">
                   <span class="popular-title">{{ card.title }}</span>
                   <span class="popular-meta">
@@ -194,6 +198,8 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
           <div class="featured">
             <RouterLink v-for="card in featured" :key="card.document_id" :to="{ name: names.articleRoute, params: { id: card.document_id } }"
               class="card featured-card" :style="collectionStyle(card.collection)">
+              <AlbumThumb v-if="card.cover?.url" :cover="card.cover" variant="wide" class="card-cover" />
+              <span v-else class="card-cover card-band" aria-hidden="true" />
               <span class="card-meta">
                 <UiIcon name="star" :size="15" filled class="featured-star" />
                 <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
@@ -234,6 +240,7 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
                 <ul class="tile-list">
                   <li v-for="article in item.articles" :key="article.document_id">
                     <RouterLink :to="{ name: names.articleRoute, params: { id: article.document_id } }" class="tile-link">
+                      <AlbumThumb v-if="article.cover" :cover="article.cover" class="tile-thumb" />
                       <span class="tile-link-title">{{ article.title }}<span v-if="article.sub" class="sub">{{ article.sub }}</span></span>
                       <time :datetime="article.date">{{ shortPublicDate(article.date) }}</time>
                     </RouterLink>
@@ -277,6 +284,8 @@ watch([listHeading, listing, () => site.name], () => site.setTitle(listing.value
         <RouterLink v-for="card in data.results" :key="card.document_id"
           :to="{ name: names.articleRoute, params: { id: card.document_id }, query: terms.length ? { hl: terms.join(' ') } : {} }"
           class="card" :style="collectionStyle(card.collection)">
+          <AlbumThumb v-if="card.cover?.url" :cover="card.cover" variant="wide" class="card-cover" />
+              <span v-else class="card-cover card-band" aria-hidden="true" />
           <span class="card-meta">
             <span v-if="card.path.length" class="tag" :class="colorClass(card.collection)">{{ cardPath(card) }}</span>
             <span v-if="member" class="visibility" :class="{ public: card.public }">{{ card.public ? '公開' : '內部' }}</span>
@@ -345,6 +354,9 @@ h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .chip-count { color: var(--ui-text-muted); }
 .tile-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--ui-border-subtle); }
 .tile-list li { border-bottom: 1px solid var(--ui-border-subtle); }
+.tile-thumb { width: 2.25rem; height: 2.25rem; border-radius: .375rem; align-self: center; }
+.tile-link:has(.tile-thumb) { align-items: center; }
+.tile-link:has(.tile-thumb) .tile-link-title { flex: 1; }
 .tile-link { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ui-space-3); padding: .625rem 0; color: var(--ui-text); font-size: .90625rem; text-decoration: none; }
 .tile-link:hover .tile-link-title { color: var(--ui-accent); text-decoration: underline; }
 .tile-link-title { min-width: 0; overflow-wrap: anywhere; }
@@ -359,6 +371,7 @@ h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .featured-star { color: #d99a00; }
 .featured-more { display: inline-flex; align-items: center; gap: var(--ui-space-1); margin-top: auto; color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; }
 .popular { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 14rem), calc((100% - 4 * var(--ui-space-3)) / 5)), 1fr)); gap: var(--ui-space-3); }
+.popular-item :deep(.album-thumb) { align-self: center; }
 .popular-item { display: flex; align-items: flex-start; gap: var(--ui-space-3); height: 100%; box-sizing: border-box; padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: .875rem; background: var(--ui-bg-surface); color: var(--ui-text); text-decoration: none; }
 .popular-item:hover { border-color: var(--ui-border-strong); box-shadow: var(--ui-shadow-sm); }
 .popular-item:hover .popular-title { color: var(--ui-accent); }
@@ -368,6 +381,13 @@ h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
 .popular-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); gap: var(--ui-space-4); }
 .cards.stale { opacity: .6; }
+/* P21b: an album's cover runs to the card's edges above its text. */
+.card .card-cover { margin: -1.25rem -1.375rem .25rem; max-width: none; align-self: stretch; }  /* wider than the padded box */
+/* Decision 39 (option 4): a card without a cover gets a plain band in its collection's colour, the same
+   height as a cover, so a row of cards lines up without empty space. No text inside. */
+.card-band { display: block; flex: none; aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, var(--col-bg, var(--ui-col-gray-bg)) 0%, color-mix(in srgb, var(--col-fg, var(--ui-col-gray-fg)) 22%, var(--col-bg, var(--ui-col-gray-bg))) 100%); }
+.card { overflow: hidden; }
 .card { display: flex; flex-direction: column; gap: .625rem; padding: 1.25rem 1.375rem; border: 1px solid var(--ui-border); border-radius: .875rem; background: var(--ui-bg-surface); color: var(--ui-text); text-decoration: none; transition: border-color .15s, box-shadow .15s; }
 .card:hover { border-color: var(--ui-border-strong); box-shadow: var(--ui-shadow-sm); }
 .card:hover .card-title { color: var(--ui-accent); }

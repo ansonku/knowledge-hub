@@ -8,6 +8,7 @@ import { renderMarkdown } from '../markdown'
 import type { GalleryLayout } from '../gallery'
 import { jumpToHeading } from '../headings'
 import OutlineNav from '../OutlineNav.vue'
+import AlbumThumb from './AlbumThumb.vue'
 import SearchHighlightBar from '../SearchHighlightBar.vue'
 import { useSearchHighlight } from '../searchHighlight'
 import { searchTerms } from '../searchTerms'
@@ -196,14 +197,20 @@ async function copyLink() {
           <iframe v-else :srcdoc="htmlDocument" sandbox="" referrerpolicy="no-referrer" title="HTML 文章正文" class="html-frame" />
 
           <nav v-if="newer || older" class="neighbours" aria-label="上一篇與下一篇">
-            <RouterLink v-if="newer" :to="{ name: names.articleRoute, params: { id: newer.document_id } }" class="neighbour">
-              <span class="neighbour-label"><UiIcon name="chevronLeft" :size="14" />上一篇</span>
-              <span class="neighbour-title">{{ newer.title }}</span>
+            <RouterLink v-if="newer" :to="{ name: names.articleRoute, params: { id: newer.document_id } }" class="neighbour" :class="{ 'with-thumb': newer.cover?.url }">
+              <AlbumThumb v-if="newer.cover" :cover="newer.cover" />
+              <span class="neighbour-text">
+                <span class="neighbour-label"><UiIcon name="chevronLeft" :size="14" />上一篇</span>
+                <span class="neighbour-title">{{ newer.title }}</span>
+              </span>
             </RouterLink>
             <span v-else />
-            <RouterLink v-if="older" :to="{ name: names.articleRoute, params: { id: older.document_id } }" class="neighbour next">
-              <span class="neighbour-label">下一篇<UiIcon name="chevronRight" :size="14" /></span>
-              <span class="neighbour-title">{{ older.title }}</span>
+            <RouterLink v-if="older" :to="{ name: names.articleRoute, params: { id: older.document_id } }" class="neighbour next" :class="{ 'with-thumb': older.cover?.url }">
+              <AlbumThumb v-if="older.cover" :cover="older.cover" />
+              <span class="neighbour-text">
+                <span class="neighbour-label">下一篇<UiIcon name="chevronRight" :size="14" /></span>
+                <span class="neighbour-title">{{ older.title }}</span>
+              </span>
             </RouterLink>
           </nav>
         </article>
@@ -268,6 +275,11 @@ a.copy { text-decoration: none; }
 .neighbour.next { text-align: right; justify-items: end; }
 .neighbour-label { display: inline-flex; align-items: center; gap: var(--ui-space-1); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .neighbour-title { font-weight: 600; overflow-wrap: anywhere; }
+.neighbour-text { display: grid; gap: var(--ui-space-1); min-width: 0; }
+.neighbour.next .neighbour-text { justify-items: end; }
+/* P21b: an album neighbour shows its cover beside the text (on the outer side for 下一篇). */
+.neighbour.with-thumb { display: flex; align-items: center; gap: var(--ui-space-3); }
+.neighbour.next.with-thumb { flex-direction: row-reverse; }
 
 .toc { flex: 0 0 15rem; margin-left: auto; position: sticky; top: 5.5rem; max-height: calc(100vh - 7rem); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: var(--ui-text-sm); }
 .toc-foot { margin: var(--ui-space-5) 0 0; padding-top: var(--ui-space-4); border-top: 1px solid var(--ui-border-subtle); color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.6; }
@@ -285,6 +297,8 @@ a.copy { text-decoration: none; }
 @media (max-width: 560px) {
   .neighbours { grid-template-columns: 1fr; }
   .neighbour.next { text-align: left; justify-items: start; }
+  .neighbour.next .neighbour-text { justify-items: start; }
+  .neighbour.next.with-thumb { flex-direction: row; }
   .spacer { display: none; }
 }
 </style>
