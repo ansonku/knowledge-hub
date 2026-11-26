@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { editor, KeyCode, KeyMod, Range, Selection } from './monaco'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import UiIcon, { type IconName } from './app/components/UiIcon.vue'
 import { GALLERY_LAYOUTS, LAYOUT_LABELS } from './gallery'
 import { plainSnippet, SHORTCUTS, SNIPPETS, type Snippet } from './markdownSnippets'
 import { helpers, inFence, registerMarkdownHelpers } from './markdownCompletions'
 import { DOC_LINK, resolveLinks } from './app/links'
+import { outlineOf, type OutlineEntry } from './markdown'
 import {
   continueList, countWords, indentList, insertBlockStyle, insertGallery, insertLink, pasteAsLink, toggleInline, toggleLines,
   type BlockStyle, type InlineStyle, type LineStyle,
@@ -50,6 +51,7 @@ type Tool = Look & (
   | { kind: 'image' }
   | { kind: 'video' }
   | { kind: 'gallery' }
+  | { kind: 'outline' }
   | { kind: 'help' })
 const groups: Tool[][] = [
   [
@@ -77,12 +79,13 @@ const groups: Tool[][] = [
     { kind: 'block', style: 'table', icon: 'table', label: '表格' },
     { kind: 'block', style: 'rule', icon: 'rule', label: '分隔線' },
   ],
-  [{ kind: 'help', icon: 'help', label: '語法說明', keys: '/' }],
+  [{ kind: 'outline', icon: 'outline', label: '大綱', keys: 'Shift+O' }, { kind: 'help', icon: 'help', label: '語法說明', keys: '/' }],
 ]
 function title(tool: Tool) {
   return tool.keys ? `${tool.label}（${mod}${tool.keys}）` : tool.label
 }
 function apply(tool: Tool) {
+  if (tool.kind === 'outline') { toggleOutline(); return }
   if (!instance || props.readonly) return
   if (tool.kind === 'inline') toggleInline(instance, tool.style)
   else if (tool.kind === 'line') toggleLines(instance, tool.style)
@@ -113,6 +116,77 @@ function closeGalleryMenu(event: Event) {
     instance?.focus()
   }
 }
+// ---- Outline (P14b): the headings of the text being edited; choosing one moves the cursor there ----
+const outlineOpen = ref(false)
+const outlineAt = ref({ left: '0px', top: '0px' })
+const outlineFilter = ref('')
+const outlineEntries = ref<OutlineEntry[]>([])
+const outlineIndex = ref(0)
+const outlineInput = ref<HTMLInputElement>()
+const outlineList = ref<HTMLElement>()
+const outlineTop = computed(() => Math.min(...outlineEntries.value.map(entry => entry.level), 6))
+const outlineShown = computed(() => {
+  const words = outlineFilter.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  return outlineEntries.value.filter(entry => words.every(word => entry.text.toLowerCase().includes(word)))
+})
+function refreshOutline() {
+  outlineEntries.value = model ? outlineOf(model.getValue()) : []
+}
+function toggleOutline(open = !outlineOpen.value) {
+  if (!open) {
+    outlineOpen.value = false
+    instance?.focus()
+    return
+  }
+  const button = root.value?.querySelector<HTMLElement>('.tool[data-kind="outline"]')
+  const box = root.value
+  if (button && box) {
+    // End under the button's right edge when there is room; always stay inside the editor (the toolbar may wrap).
+    const width = Math.min(352, box.clientWidth - 16)
+    const left = Math.min(Math.max(8, button.offsetLeft + button.offsetWidth - width), box.clientWidth - width - 8)
+    outlineAt.value = { left: `${left}px`, top: `${button.offsetTop + button.offsetHeight + 4}px` }
+  }
+  refreshOutline()
+  outlineFilter.value = ''
+  // Start at the section holding the cursor.
+  const line = instance?.getPosition()?.lineNumber ?? 1
+  const current = outlineEntries.value.reduce((found, entry, index) => entry.line <= line ? index : found, 0)
+  outlineIndex.value = current
+  outlineOpen.value = true
+  void nextTick(() => { outlineInput.value?.focus(); revealOutlineChoice() })
+}
+function revealOutlineChoice() {
+  outlineList.value?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+}
+function goToHeading(entry: OutlineEntry | undefined) {
+  const ed = instance, current = ed?.getModel()
+  if (!ed || !current || !entry) return
+  outlineOpen.value = false
+  const line = Math.min(entry.line, current.getLineCount())
+  ed.setPosition({ lineNumber: line, column: current.getLineMaxColumn(line) })
+  ed.revealLineNearTop(line)
+  ed.focus()
+}
+function onOutlineKey(event: KeyboardEvent) {
+  if (event.isComposing) return
+  const count = outlineShown.value.length
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (count) outlineIndex.value = (outlineIndex.value + (event.key === 'ArrowDown' ? 1 : count - 1)) % count
+    void nextTick(revealOutlineChoice)
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    goToHeading(outlineShown.value[outlineIndex.value])
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    toggleOutline(false)
+  }
+}
+function closeOutline(event: MouseEvent) {
+  if (outlineOpen.value && !(event.target as Element).closest('.outline-menu, .tool[data-kind="outline"]')) outlineOpen.value = false
+}
+
 // ---- Syntax help (P11e): a side panel (Ctrl+/) and a slash menu at the start of a line ----
 const helpOpen = ref(false)
 const helpGroups = computed(() => ['文字', '區塊', '圖片與影片'].map(name => ({
@@ -429,6 +503,7 @@ onMounted(() => {
   ed.addAction({ id: 'md.link', label: '連結', keybindings: [KeyMod.CtrlCmd | KeyCode.KeyK], run: unlessReadonly(() => insertLink(ed)) })
   ed.addAction({ id: 'md.save', label: '儲存', keybindings: [KeyMod.CtrlCmd | KeyCode.KeyS], run: () => emit('save') })
   ed.addAction({ id: 'md.help', label: '語法說明', keybindings: [KeyMod.CtrlCmd | KeyCode.Slash], run: () => toggleHelp() })
+  ed.addAction({ id: 'md.outline', label: '大綱', keybindings: [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyO], run: () => toggleOutline() })
   registerMarkdownHelpers()
   // The document search after `[[` (P13b) closes in several ways Monaco does not undo by itself: a space ends
   // the session, an input method composing Chinese hides the list, and switching input methods can take the focus
@@ -480,6 +555,7 @@ onMounted(() => {
   root.value?.addEventListener('drop', onDrop, true)
   root.value?.addEventListener('dragleave', onDragLeave, true)
   document.addEventListener('mousedown', closeGalleryMenu)
+  document.addEventListener('mousedown', closeOutline)
   document.addEventListener('keydown', closeGalleryMenu)
   window.addEventListener('dragend', onDragEnd, true)
   updateCounts()
@@ -497,6 +573,7 @@ onBeforeUnmount(() => {
   root.value?.removeEventListener('drop', onDrop, true)
   root.value?.removeEventListener('dragleave', onDragLeave, true)
   document.removeEventListener('mousedown', closeGalleryMenu)
+  document.removeEventListener('mousedown', closeOutline)
   document.removeEventListener('keydown', closeGalleryMenu)
   window.removeEventListener('dragend', onDragEnd, true)
   // Leaving the editor stops uploads that would only land in a draft nobody sees.
@@ -513,9 +590,11 @@ onBeforeUnmount(() => {
       <template v-for="(group, index) in visibleGroups" :key="index">
         <span v-if="index" class="sep" aria-hidden="true" />
         <!-- mousedown.prevent keeps the selection in the editor while the button is pressed. -->
-        <button v-for="tool in group" :key="tool.label" type="button" class="tool" :class="{ text: !tool.icon, pressed: tool.kind === 'gallery' && galleryMenu }"
-          :data-kind="tool.kind" :aria-haspopup="tool.kind === 'gallery' ? 'menu' : undefined" :aria-expanded="tool.kind === 'gallery' ? galleryMenu : undefined"
-          :aria-label="title(tool)" :title="title(tool)" :disabled="readonly" @mousedown.prevent @click="apply(tool)">
+        <button v-for="tool in group" :key="tool.label" type="button" class="tool"
+          :class="{ text: !tool.icon, pressed: (tool.kind === 'gallery' && galleryMenu) || (tool.kind === 'outline' && outlineOpen) }"
+          :data-kind="tool.kind" :aria-haspopup="tool.kind === 'gallery' ? 'menu' : tool.kind === 'outline' ? 'dialog' : undefined"
+          :aria-expanded="tool.kind === 'gallery' ? galleryMenu : tool.kind === 'outline' ? outlineOpen : undefined"
+          :aria-label="title(tool)" :title="title(tool)" :disabled="readonly && tool.kind !== 'outline'" @mousedown.prevent @click="apply(tool)">
           <UiIcon v-if="tool.icon" :name="tool.icon" :size="17" />
           <span v-else aria-hidden="true">{{ tool.text }}</span>
         </button>
@@ -524,6 +603,19 @@ onBeforeUnmount(() => {
     <div v-if="galleryMenu" class="gallery-menu" role="menu" aria-label="相簿版面" :style="galleryMenuAt">
       <button v-for="choice in galleryChoices" :key="choice.value" type="button" role="menuitem" @mousedown.prevent
         @click="chooseGallery(choice.value)">{{ choice.label }}</button>
+    </div>
+    <div v-if="outlineOpen" class="outline-menu" role="dialog" aria-label="大綱" :style="outlineAt">
+      <input ref="outlineInput" v-model="outlineFilter" class="outline-filter" type="search" placeholder="篩選標題"
+        aria-label="篩選標題" role="combobox" aria-controls="md-outline-list" aria-autocomplete="list" :aria-expanded="true"
+        :aria-activedescendant="outlineShown.length ? `md-outline-${outlineIndex}` : undefined" @keydown="onOutlineKey" @input="outlineIndex = 0">
+      <ul v-if="outlineShown.length" id="md-outline-list" ref="outlineList" class="outline-list" role="listbox" aria-label="標題">
+        <li v-for="(entry, index) in outlineShown" :id="`md-outline-${index}`" :key="`${entry.line}-${index}`" role="option"
+          :aria-selected="index === outlineIndex" :style="{ paddingInlineStart: `${.5 + Math.min(Math.max(0, entry.level - outlineTop), 3) * .75}rem` }"
+          @mousedown.prevent @mousemove="outlineIndex = index" @click="goToHeading(entry)">
+          <span class="outline-text">{{ entry.text }}</span><span class="outline-line">{{ entry.line }}</span>
+        </li>
+      </ul>
+      <p v-else class="outline-empty">{{ outlineEntries.length ? '沒有符合的標題。' : '還沒有標題。輸入 # 加空白開始一個標題。' }}</p>
     </div>
     <input ref="picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
       aria-hidden="true" tabindex="-1" @change="onPicked">
@@ -621,6 +713,24 @@ onBeforeUnmount(() => {
 }
 .gallery-menu button { padding: .45rem .7rem; border: 0; border-radius: .35rem; background: none; color: var(--ui-text); font: inherit; text-align: left; cursor: pointer; }
 .gallery-menu button:hover, .gallery-menu button:focus-visible { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
+.outline-menu {
+  position: absolute; z-index: 10; display: flex; flex-direction: column; width: min(22rem, calc(100% - 1rem)); max-height: min(24rem, 70%);
+  border: 1px solid var(--ui-border); border-radius: .5rem; background: var(--ui-bg-surface); box-shadow: var(--ui-shadow-lg); overflow: hidden;
+}
+.outline-filter {
+  margin: .4rem; padding: .4rem .6rem; border: 1px solid var(--ui-border); border-radius: .35rem; background: var(--ui-bg-surface);
+  color: var(--ui-text); font: inherit; font-size: var(--ui-text-sm);
+}
+.outline-filter:focus { outline: 2px solid var(--ui-accent); outline-offset: -1px; }
+.outline-list { flex: 1; min-height: 0; list-style: none; margin: 0; padding: 0 .3rem .3rem; overflow-y: auto; }
+.outline-list li {
+  display: flex; gap: var(--ui-space-2); align-items: baseline; padding-block: .35rem; padding-inline-end: .5rem; border-radius: .35rem;
+  color: var(--ui-text); font-size: var(--ui-text-sm); cursor: pointer;
+}
+.outline-list li[aria-selected="true"] { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
+.outline-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.outline-line { color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-variant-numeric: tabular-nums; }
+.outline-empty { margin: 0; padding: .5rem .75rem .75rem; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .tool.pressed { background: var(--ui-accent-soft); color: var(--ui-accent-on-soft); }
 .md-editor.dragging { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-accent-soft); }
 .drop-hint {

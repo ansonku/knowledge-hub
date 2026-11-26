@@ -53,6 +53,7 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: 'Ctrl+K', label: '連結' },
   { keys: 'Ctrl+S', label: '跳到「更新說明」，再按 Enter 儲存' },
   { keys: 'Ctrl+/', label: '開關這個語法說明' },
+  { keys: 'Ctrl+Shift+O', label: '大綱：列出標題並跳到那一行' },
   { keys: 'Tab／Shift+Tab', label: '清單縮排／取消縮排' },
   { keys: '行首輸入 /', label: '快速插入（例如 /相簿、/表格、/影片）' },
   { keys: '[[', label: '搜尋並插入文件連結' },
