@@ -14,6 +14,8 @@ export type LightboxLook = {
   backdrop: number
   /** Follow the browser's reduced-motion preference (no animation). Off: always animate. Default on. */
   respectReducedMotion?: boolean
+  /** P20: seconds between pictures in the slideshow. Default 5. */
+  interval?: number
 }
 /** The "standard" look picked on the comparison page (UI_REDESIGN.md 10.11). */
 export const STANDARD_LOOK: LightboxLook = { effect: 'center', speed: 1, backdrop: 0.92 }
@@ -189,7 +191,104 @@ export async function openLightbox(images: HTMLImageElement[], index: number, op
     })
   })
 
+  if (items.length > 1) slideshow(pswp, items.length, (look.interval ?? 5) * 1000, still)
+
   const closed = new Promise<void>(resolve => pswp.on('destroy', () => resolve()))
   pswp.init()
   return closed
+}
+
+const PLAY = icon('M8 5v14l11-7z')
+const PAUSE = icon('M8 5v14M16 5v14')
+
+/**
+ * P20: play the pictures one after another. Stops at the last picture; anything the reader does (moving to
+ * another picture, dragging, zooming, the thumbnails) or leaving the browser tab pauses it. Space toggles it.
+ */
+function slideshow(pswp: PhotoSwipe, count: number, interval: number, still: boolean) {
+  let playing = false
+  let timer = 0
+  let moving = false  // a change made by the slideshow itself, not by the reader
+  let button: HTMLElement | undefined
+  let bar: HTMLElement | undefined
+  let progress: Animation | undefined
+
+  const show = () => {
+    if (!button) return
+    button.innerHTML = playing ? PAUSE : PLAY
+    const label = playing ? '暫停（空白鍵）' : '播放（空白鍵）'
+    button.title = label
+    button.setAttribute('aria-label', label)
+    button.setAttribute('aria-pressed', String(playing))
+    bar?.parentElement?.toggleAttribute('hidden', !playing)
+  }
+  const step = () => {
+    window.clearTimeout(timer)
+    progress?.cancel()
+    // Reduced motion: no moving bar, the pictures still change.
+    if (bar && !still) progress = bar.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: interval, easing: 'linear', fill: 'forwards' })
+    timer = window.setTimeout(advance, interval)
+  }
+  const advance = () => {
+    if (!playing) return
+    moving = true
+    pswp.next()
+    moving = false
+    if (pswp.currIndex >= count - 1) stop()
+    else step()
+  }
+  const start = () => {
+    playing = true
+    if (pswp.currIndex >= count - 1) {
+      // From the last picture, start again at the first.
+      moving = true
+      pswp.goTo(0)
+      moving = false
+    }
+    show()
+    step()
+  }
+  function stop() {
+    playing = false
+    window.clearTimeout(timer)
+    progress?.cancel()
+    show()
+  }
+  const toggle = () => (playing ? stop() : start())
+
+  pswp.on('change', () => { if (playing && !moving) stop() })
+  pswp.on('pointerDown', event => {
+    const target = event.originalEvent.target as Element | null
+    if (playing && !target?.closest('.pswp__button--slideshow')) stop()
+  })
+  pswp.on('wheel', () => { if (playing) stop() })
+  pswp.on('keydown', event => {
+    if (event.originalEvent.key !== ' ' || event.originalEvent.repeat) return
+    event.preventDefault()
+    event.originalEvent.preventDefault()
+    toggle()
+  })
+  const leave = () => { if (document.hidden && playing) stop() }
+  document.addEventListener('visibilitychange', leave)
+  pswp.on('destroy', () => {
+    window.clearTimeout(timer)
+    document.removeEventListener('visibilitychange', leave)
+  })
+
+  pswp.on('uiRegister', () => {
+    pswp.ui?.registerElement({
+      name: 'slideshow', order: 7, isButton: true, html: PLAY,
+      onInit: element => { button = element; show() },
+      onClick: toggle,
+    })
+    pswp.ui?.registerElement({
+      name: 'slideshow-progress', appendTo: 'root', className: 'hub-pswp-progress',
+      onInit: element => {
+        element.setAttribute('aria-hidden', 'true')
+        element.hidden = true
+        bar = document.createElement('span')
+        element.append(bar)
+      },
+    })
+  })
 }

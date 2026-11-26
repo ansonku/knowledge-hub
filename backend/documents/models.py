@@ -248,6 +248,8 @@ class SiteSettings(models.Model):
     # Skip the animation when the browser asks for reduced motion. Off for sites whose readers sit on virtual
     # desktops, where browsers often report reduced motion although nobody asked for it.
     lightbox_reduced_motion = models.BooleanField(default=True)
+    # P20: seconds between pictures when the lightbox plays them as a slideshow.
+    lightbox_interval = models.PositiveSmallIntegerField(default=5, choices=[(3, "3 秒"), (5, "5 秒"), (8, "8 秒"), (12, "12 秒")])
 
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]

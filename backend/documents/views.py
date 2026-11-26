@@ -518,7 +518,7 @@ def gallery_payload(site):
     return {
         "effect": site.lightbox_effect, "speed": site.lightbox_speed, "backdrop": site.lightbox_backdrop,
         "layout": site.gallery_layout, "member_download": site.member_download,
-        "respect_reduced_motion": site.lightbox_reduced_motion,
+        "respect_reduced_motion": site.lightbox_reduced_motion, "interval": site.lightbox_interval,
     }
 
 
@@ -578,11 +578,13 @@ class GallerySettingsInput(serializers.Serializer):
     layout = serializers.ChoiceField([value for value in Document.GalleryLayout.values if value])
     member_download = serializers.BooleanField()
     respect_reduced_motion = serializers.BooleanField()
+    # P20. Optional so that older pages saving the other settings keep working; left out, it stays as it is.
+    interval = serializers.ChoiceField([3, 5, 8, 12], required=False)
 
 
 GALLERY_FIELDS = {"effect": "lightbox_effect", "speed": "lightbox_speed", "backdrop": "lightbox_backdrop",
                   "layout": "gallery_layout", "member_download": "member_download",
-                  "respect_reduced_motion": "lightbox_reduced_motion"}
+                  "respect_reduced_motion": "lightbox_reduced_motion", "interval": "lightbox_interval"}
 
 
 @never_cache
@@ -596,6 +598,8 @@ def site_gallery(request):
         site, _ = SiteSettings.objects.select_for_update().get_or_create(pk=1)
         changes = {}
         for key, field in GALLERY_FIELDS.items():
+            if key not in payload.validated_data:
+                continue
             value = payload.validated_data[key]
             if getattr(site, field) != value:
                 changes[key] = {"from": getattr(site, field), "to": value}

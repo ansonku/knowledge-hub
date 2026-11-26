@@ -10,9 +10,10 @@ function show(key: string, value: unknown) {
   if (key === 'backdrop') return (Number(value) / 100).toFixed(2)
   if (key === 'layout') return LAYOUT_LABELS[value as GalleryLayout] ?? String(value)
   if (key === 'member_download' || key === 'respect_reduced_motion') return value ? '開' : '關'
+  if (key === 'interval') return `${String(value)} 秒`
   return String(value)
 }
-const NAMES: Record<string, string> = { effect: '燈箱效果', speed: '動畫速度', backdrop: '背景暗度', layout: '預設相簿版面', member_download: '成員下載', respect_reduced_motion: '配合減少動態效果' }
+const NAMES: Record<string, string> = { effect: '燈箱效果', speed: '動畫速度', backdrop: '背景暗度', layout: '預設相簿版面', member_download: '成員下載', respect_reduced_motion: '配合減少動態效果', interval: '自動播放間隔' }
 
 /** e.g. "燈箱效果：淡入 → 從縮圖放大；預設相簿版面：齊邊 → 瀑布流" */
 export function gallerySummary(changes: Record<string, { from: unknown; to: unknown }>) {

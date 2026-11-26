@@ -106,6 +106,7 @@ const effects: { value: GallerySettings['effect']; label: string }[] = [
 const speeds: { value: GallerySettings['speed']; label: string }[] = [
   { value: 'fast', label: '快' }, { value: 'normal', label: '標準' }, { value: 'slow', label: '慢' },
 ]
+const intervals: GallerySettings['interval'][] = [3, 5, 8, 12]
 const layoutChoices = GALLERY_LAYOUTS.map(value => ({ value, label: LAYOUT_LABELS[value] }))
 const galleryForm = ref<GallerySettings>({ ...site.gallery })
 const galleryTouched = ref(false)
@@ -165,7 +166,8 @@ async function previewLightbox(index: number) {
   const form = galleryForm.value
   void openLightbox(images, index, {
     download: false,
-    look: { effect: form.effect, speed: SPEED_FACTORS[form.speed], backdrop: form.backdrop / 100, respectReducedMotion: form.respect_reduced_motion },
+    look: { effect: form.effect, speed: SPEED_FACTORS[form.speed], backdrop: form.backdrop / 100, respectReducedMotion: form.respect_reduced_motion,
+      interval: form.interval },
   })
 }
 
@@ -289,6 +291,14 @@ onMounted(() => {
                 <button v-for="item in speeds" :key="item.value" type="button" class="level" :class="{ on: galleryForm.speed === item.value }"
                   :aria-pressed="galleryForm.speed === item.value" @click="pickGallery('speed', item.value)">{{ item.label }}</button>
               </div>
+            </fieldset>
+            <fieldset class="field levels">
+              <legend>自動播放間隔</legend>
+              <div class="level-buttons">
+                <button v-for="seconds in intervals" :key="seconds" type="button" class="level" :class="{ on: galleryForm.interval === seconds }"
+                  :aria-pressed="galleryForm.interval === seconds" @click="pickGallery('interval', seconds)">{{ seconds }} 秒</button>
+              </div>
+              <p class="note">燈箱的「播放」按鈕每隔這麼久換到下一張，播到最後一張自動暫停。</p>
             </fieldset>
             <div class="field">
               <label for="gallery-backdrop">背景暗度 <span class="optional">{{ (galleryForm.backdrop / 100).toFixed(2) }}</span></label>
