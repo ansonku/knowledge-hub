@@ -168,7 +168,7 @@ AuditLog(id UUID, actor_id, action, target_type, target_id,
          redacted_metadata, created_at)
 ```
 
-`UNIQUE(document_id, version_number)`；自訂 User Model 必須在第一個 migration 前決定。建議路徑：`documents/<document_uuid>/versions/v0001.html`。版本檔案不可覆寫；以暫存檔 + 原子搬移、DB transaction、鎖定與失敗清理/對帳避免不一致。NAS 真實 bind mount 路徑須現場確認。
+`UNIQUE(document_id, version_number)`；自訂 User Model 必須在第一個 migration 前決定。建議路徑：`documents/<document_uuid>/versions/v0001.html`（實作改用 `versions/<文件 id>/<版本 id>`，見 ARCHITECTURE.md 的 File storage）。版本檔案不可覆寫；以暫存檔 + 原子搬移、DB transaction、鎖定與失敗清理/對帳避免不一致。NAS 真實 bind mount 路徑須現場確認。
 
 ## 9. API 介面建議（供 Codex 設計，非已固定 URL 合約）
 
