@@ -14,6 +14,9 @@ const props = withDefaults(defineProps<{
   download?: boolean
   /** Workspace: mark links to other documents with their current title, and broken ones (P13a). */
   docLinks?: boolean
+  /** Public site and reading portal (P13c): where links to documents lead, and which documents they may reach.
+   *  Links to any other document become plain text, so readers never land on a page they cannot open. */
+  siteLinks?: { base: '/articles' | '/read'; allowed: string[] }
 }>(), { lightbox: true, download: false, docLinks: false })
 const root = ref<HTMLElement>()
 const renderer = ref<HTMLIFrameElement>()
@@ -169,9 +172,28 @@ async function markDocLinks() {
       : `連到：${state.title}（${state.category_name ?? '未分類'}）`
   }
 }
+function rewriteSiteLinks() {
+  const target = props.siteLinks
+  if (!target || !root.value) return
+  const allowed = new Set(target.allowed.map(id => id.toLowerCase()))
+  for (const anchor of Array.from(root.value.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+    const id = linkedDocument(anchor)
+    if (!id) continue
+    if (allowed.has(id)) {
+      const hash = new URL(anchor.href).hash
+      anchor.setAttribute('href', `${target.base}/${id}/${hash}`)
+      anchor.classList.add('doc-link')
+    } else {
+      const plain = document.createElement('span')
+      plain.className = 'doc-link-plain'
+      plain.append(...Array.from(anchor.childNodes))
+      anchor.replaceWith(plain)
+    }
+  }
+}
 /** Links to documents stay inside the app instead of reloading the page. */
 function followDocLink(event: MouseEvent) {
-  if (!props.docLinks || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  if (!(props.docLinks || props.siteLinks) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
   const anchor = (event.target as Element | null)?.closest?.('a.doc-link') as HTMLAnchorElement | null
   if (!anchor || anchor.target) return
   const url = new URL(anchor.href)
@@ -211,11 +233,14 @@ function stopGalleries() {
 }
 
 watch(() => props.rendered, () => { keepPlayers(); stopGalleries(); revision.value++ }, { flush: 'sync' })
-watch(() => props.rendered, () => { restorePlayers(); renderDiagrams(); startGalleries(); prepareImages(); void markDocLinks() }, { flush: 'post' })
+watch(() => props.rendered, () => {
+  restorePlayers(); renderDiagrams(); startGalleries(); rewriteSiteLinks(); prepareImages(); void markDocLinks()
+}, { flush: 'post' })
 watch(renderer, () => { frameReady.value = false })
 onMounted(() => {
   window.addEventListener('message', showResults)
   startGalleries()
+  rewriteSiteLinks()
   prepareImages()
   void markDocLinks()
 })

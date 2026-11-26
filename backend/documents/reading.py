@@ -18,6 +18,7 @@ from users.permissions import CanReadLibrary
 
 from . import search
 from .image_sizes import version_image_sizes
+from .links import readable_targets
 from .models import ArticlePublication, Document
 from .publication import (
     SAMPLE_LENGTH, category_index, collection_tree, path_of, publication_body, reading_minutes, subtree_ids, summarise,
@@ -101,4 +102,5 @@ def read_article(request, document_id):
         "public": document.public, "siblings": [],
         "image_sizes": version_image_sizes(version) if document.format == Document.Format.MARKDOWN else {},
         "presentation": document.presentation, "gallery_layout": document.gallery_layout,
+        "linked_documents": readable_targets(version) if document.format == Document.Format.MARKDOWN else [],
     })

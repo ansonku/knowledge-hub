@@ -168,7 +168,8 @@ async function copyLink() {
         <article class="body" :aria-busy="loading">
           <div v-if="rendered" ref="content" class="reading" :class="{ 'skip-title': leadingTitle }">
             <!-- Signed-in members also get the lightbox download button; visitors do not. -->
-            <MarkdownBody :rendered="rendered" :download="session.status === 'member'" />
+            <MarkdownBody :rendered="rendered" :download="session.status === 'member'"
+              :site-links="{ base: member ? '/read' : '/articles', allowed: article.linked_documents ?? [] }" />
           </div>
           <iframe v-else :srcdoc="htmlDocument" sandbox="" referrerpolicy="no-referrer" title="HTML 文章正文" class="html-frame" />
 

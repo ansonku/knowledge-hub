@@ -111,3 +111,37 @@ class LinkTests(ImageFixture):
         importlib.import_module("documents.migrations.0020_version_links").backfill_links(apps, None)
         self.assertEqual(VersionLink.objects.get().target_id.hex, self.target.replace("-", ""))
         self.assertEqual(Document.objects.count(), 3)
+
+
+class PublicLinkTests(ImageFixture):
+    """P13c: public articles only expose links to documents that are published too."""
+
+    def setUp(self):
+        super().setUp()
+        self.published = self.create("# 公開\n", "published.md")
+        self.private = self.create("# 私人\n", "private.md")
+        self.publish(self.current(self.published), self.published)
+
+    def publish(self, version, document=None):
+        document = document or self.doc
+        title = self.client.get(f"/api/documents/{document}/").json()["title"]
+        response = self.as_user(self.admin).post(f"/api/documents/{document}/publication/", {"version": version, "title": title},
+                                                 content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_only_published_targets_and_only_the_published_version(self):
+        version = self.edit(f"[公開](/app/docs/{self.published}/) [私人](/app/docs/{self.private}/)\n")
+        self.publish(version)
+        self.edit("草稿裡沒有連結了\n")  # the public article still shows the published version's links
+        body = self.as_user().get(f"/api/public/articles/{self.doc}/").json()
+        self.assertEqual(body["linked_documents"], [self.published])
+        self.assertNotIn(self.private, str(body["linked_documents"]))
+        # Withdrawing the target removes it at once.
+        self.assertEqual(self.as_user(self.admin).delete(f"/api/documents/{self.published}/publication/").status_code, 204)
+        self.assertEqual(self.as_user().get(f"/api/public/articles/{self.doc}/").json()["linked_documents"], [])
+
+    def test_reading_portal_lists_readable_targets_of_the_current_version(self):
+        self.edit(f"[公開](/app/docs/{self.published}/) [私人](/app/docs/{self.private}/)\n")
+        self.assertEqual(self.client.delete(f"/api/documents/{self.private}/").status_code, 204)
+        body = self.as_user(self.viewer).get(f"/api/read/articles/{self.doc}/").json()
+        self.assertEqual(body["linked_documents"], [self.published])

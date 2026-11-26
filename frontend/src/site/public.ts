@@ -31,6 +31,8 @@ export type PublicArticle = {
   image_sizes?: Record<string, [number, number]>
   presentation?: 'article' | 'gallery'
   gallery_layout?: string
+  /** Linked documents the reader may open (published ones on the public site). */
+  linked_documents?: string[]
   published_at?: string
   updated_at?: string
   public?: boolean

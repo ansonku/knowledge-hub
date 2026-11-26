@@ -84,6 +84,20 @@ def incoming(document_ids, exclude=()):
     return services.active_documents().filter(Exists(links)).exclude(pk__in=[*document_ids, *exclude])
 
 
+def published_targets(version):
+    """Documents this version links to that are published right now (visitors may follow those links)."""
+    from .publication import published_articles  # publication imports this module's neighbours; import lazily
+
+    targets = VersionLink.objects.filter(version=version).values_list("target_id", flat=True)
+    return [str(pk) for pk in published_articles().filter(document_id__in=targets).values_list("document_id", flat=True)]
+
+
+def readable_targets(version):
+    """Documents this version links to that members can open (not in the trash)."""
+    targets = VersionLink.objects.filter(version=version).values_list("target_id", flat=True)
+    return [str(pk) for pk in services.active_documents().filter(pk__in=targets).values_list("pk", flat=True)]
+
+
 class IdList(serializers.Serializer):
     ids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=200)
 
