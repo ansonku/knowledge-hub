@@ -1,0 +1,8 @@
+/* P16: search words marked in result lists (HighlightText) and inside articles (searchHighlight). */
+/* Shared with the in-document highlights (P16c). */
+mark.search-hit { padding: 0 1px; border-radius: 3px; background: #fde68a; color: inherit; }
+.hub-dark mark.search-hit { background: rgb(250 204 21 / .32); }
+/* P16c: the match being looked at, inside an article. */
+mark.search-hit.current { background: #f59e0b; color: #111827; box-shadow: 0 0 0 2px #f59e0b; }
+.hub-dark mark.search-hit.current { background: #fbbf24; color: #111827; box-shadow: 0 0 0 2px #fbbf24; }
+@media (prefers-reduced-motion: no-preference) { mark.search-hit.in-doc { transition: background-color .15s; } }

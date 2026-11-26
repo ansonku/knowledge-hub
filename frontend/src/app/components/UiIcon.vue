@@ -14,6 +14,7 @@ const paths = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   chevronDown: 'M6 9l6 6 6-6',
+  chevronUp: 'M6 15l6-6 6 6',
   chevronRight: 'M9 6l6 6-6 6',
   chevronLeft: 'M15 6l-6 6 6 6',
   close: 'M6 6l12 12M18 6 6 18',
