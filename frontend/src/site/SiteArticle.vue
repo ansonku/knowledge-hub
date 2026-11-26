@@ -7,6 +7,7 @@ import MarkdownBody from '../MarkdownBody.vue'
 import { renderMarkdown } from '../markdown'
 import type { GalleryLayout } from '../gallery'
 import { jumpToHeading } from '../headings'
+import OutlineNav from '../OutlineNav.vue'
 import { cardDate, collectionStyle, colorClass, portalMode, portals, publicApi, publicDate, usePublicNav, type PublicArticle } from './public'
 import { useSession } from '../stores/session'
 import { useSite } from '../stores/site'
@@ -85,7 +86,6 @@ const headings = computed(() => {
   const list = rendered.value?.headings ?? []
   return leadingTitle.value ? list.slice(1) : list
 })
-const topLevel = computed(() => Math.min(...headings.value.map(heading => heading.level), 6))
 function jump(target: string) {
   jumpToHeading(content.value, target)
 }
@@ -186,10 +186,8 @@ async function copyLink() {
           </nav>
         </article>
 
-        <aside v-if="headings.length" class="toc" aria-label="本頁目錄">
-          <span class="toc-title">本頁目錄</span>
-          <a v-for="heading in headings" :key="heading.id" :href="`#${heading.id}`" class="toc-link"
-            :style="{ paddingLeft: `${(heading.level - topLevel) * .875 + .75}rem` }" @click.prevent="jump(heading.id)">{{ heading.text }}</a>
+        <aside v-if="headings.length" class="toc">
+          <OutlineNav :headings="headings" :root="content" title="本頁目錄" @jump="jump" />
           <p class="toc-foot">更新於 {{ publicDate(cardDate(article)) }}<br>{{ member ? '團隊內部文件庫' : '由團隊成員發布' }}</p>
         </aside>
       </div>
@@ -249,9 +247,6 @@ a.copy { text-decoration: none; }
 .neighbour-title { font-weight: 600; overflow-wrap: anywhere; }
 
 .toc { flex: 0 0 15rem; margin-left: auto; position: sticky; top: 5.5rem; max-height: calc(100vh - 7rem); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: var(--ui-text-sm); }
-.toc-title { margin-bottom: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-text-xs); font-weight: 600; }
-.toc-link { padding-top: .3125rem; padding-bottom: .3125rem; border-left: 2px solid var(--ui-border); color: var(--ui-text-secondary); text-decoration: none; line-height: 1.45; }
-.toc-link:hover { border-left-color: var(--ui-accent); color: var(--ui-accent); }
 .toc-foot { margin: var(--ui-space-5) 0 0; padding-top: var(--ui-space-4); border-top: 1px solid var(--ui-border-subtle); color: var(--ui-text-muted); font-size: var(--ui-text-xs); line-height: 1.6; }
 
 .state { display: grid; justify-items: center; gap: var(--ui-space-3); padding: var(--ui-space-7) var(--ui-space-4); color: var(--ui-text-muted); text-align: center; }

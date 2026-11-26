@@ -26,6 +26,7 @@ import { useDocument, type DocumentDetails, type PublicationStatus } from './com
 import { incomingLinks } from './links'
 import { draftImageIds, readDraft, removeDraft, writeDraft, type Draft, type DraftWrite } from './drafts'
 import InfoTab from './inspector/InfoTab.vue'
+import OutlineNav from '../OutlineNav.vue'
 import ActivityTab from './inspector/ActivityTab.vue'
 import LinksTab from './inspector/LinksTab.vue'
 import PublishTab from './inspector/PublishTab.vue'
@@ -35,7 +36,7 @@ import { useSite } from '../stores/site'
 
 const site = useSite()
 type Mode = 'read' | 'edit' | 'split'
-type Tab = 'info' | 'versions' | 'links' | 'activity' | 'publish'
+type Tab = 'outline' | 'info' | 'versions' | 'links' | 'activity' | 'publish'
 
 const route = useRoute()
 const router = useRouter()
@@ -424,8 +425,25 @@ function storedInspector() {
 const requestedTab: Tab | undefined = route.query.panel === 'versions' ? 'versions'
   : route.query.panel === 'publish' && session.isAdmin ? 'publish' : undefined
 const inspectorOpen = ref(Boolean(requestedTab) || (!narrow.matches && storedInspector()))
-const tab = ref<Tab>(requestedTab ?? 'info')
+// P14a: the last tab picked in the tab strip is remembered; a tab this document lacks falls back to
+// 目錄 (Markdown with at least two headings) or 資訊, without forgetting the remembered choice.
+const tabKey = 'knowledge-hub.app.inspector-tab'
+function storedTab(): Tab | undefined {
+  try { return (localStorage.getItem(tabKey) ?? undefined) as Tab | undefined } catch { return undefined }
+}
+const hasOutline = computed(() => file.value?.format === 'md' && tocHeadings.value.length >= 2)
+const chosenTab = ref<Tab | undefined>(requestedTab ?? storedTab())
+const tab = computed<Tab>({
+  get: () => chosenTab.value && tabs.value.some(item => item.value === chosenTab.value) ? chosenTab.value
+    : hasOutline.value ? 'outline' : 'info',
+  set: next => { chosenTab.value = next },
+})
+function pickTab(next: Tab) {
+  tab.value = next
+  try { localStorage.setItem(tabKey, next) } catch { /* storage may be disabled */ }
+}
 const tabs = computed(() => [
+  ...(hasOutline.value ? [{ value: 'outline' as const, label: '目錄' }] : []),
   { value: 'info' as const, label: '資訊' },
   { value: 'versions' as const, label: '版本' },
   { value: 'links' as const, label: '連結' },
@@ -706,15 +724,17 @@ onBeforeUnmount(() => {
         <div class="tabs" role="tablist" aria-label="面板分頁">
           <button v-for="item in tabs" :id="`tab-${item.value}`" :key="item.value" type="button" role="tab" class="tab"
             :class="{ on: tab === item.value }" :aria-selected="tab === item.value" :aria-controls="`panel-${item.value}`"
-            @click="tab = item.value">{{ item.label }}</button>
+            @click="pickTab(item.value)">{{ item.label }}</button>
           <span class="tabs-spacer" />
           <button type="button" class="icon-button close" aria-label="關閉資訊面板" @click="setInspector(false)">
             <UiIcon name="close" :size="16" />
           </button>
         </div>
         <div :id="`panel-${tab}`" role="tabpanel" :aria-labelledby="`tab-${tab}`" class="panel">
-          <InfoTab v-if="tab === 'info'" :document="file" :headings="file.format === 'md' ? tocHeadings : []"
-            :editable="session.canEdit" @jump="jump" @updated="doc.applyMetadata" />
+          <div v-if="tab === 'outline'" class="outline-panel">
+            <OutlineNav :headings="tocHeadings" :root="article" @jump="jump" />
+          </div>
+          <InfoTab v-else-if="tab === 'info'" :document="file" :editable="session.canEdit" @updated="doc.applyMetadata" />
           <VersionsTab v-else-if="tab === 'versions'" :document="file" :shown-id="historical?.id" :can-restore="session.canEdit"
             :can-delete="session.isAdmin"
             :published-number="publishedNumber" @restored="onRestored" />
@@ -863,13 +883,18 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
   background: var(--ui-bg-panel); position: sticky; top: var(--ui-topbar-height); align-self: flex-start;
   height: calc(100vh - var(--ui-topbar-height)); overflow-y: auto;
 }
-.tabs { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: var(--ui-space-1); padding: var(--ui-space-2) var(--ui-space-3) 0; border-bottom: 1px solid var(--ui-border); background: var(--ui-bg-panel); }
-.tab { min-height: 2.375rem; padding: 0 .625rem; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ui-text-muted); font: inherit; font-weight: 500; cursor: pointer; }
+/* Up to six tabs (目錄 … 公開) and the close button share 20rem: keep labels on one line; scroll sideways if a font runs wide. */
+.tabs {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 2px; padding: var(--ui-space-2) var(--ui-space-2) 0;
+  border-bottom: 1px solid var(--ui-border); background: var(--ui-bg-panel); overflow-x: auto; scrollbar-width: none;
+}
+.tab { flex: none; white-space: nowrap; min-height: 2.375rem; padding: 0 .375rem; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ui-text-muted); font: inherit; font-weight: 500; cursor: pointer; }
 .tab:hover { color: var(--ui-text); }
 .tab.on { border-bottom-color: var(--ui-accent); color: var(--ui-accent-on-soft); font-weight: 600; }
 .tabs-spacer { flex: 1; }
-.close { width: 2rem; height: 2rem; border: 0; background: transparent; margin-bottom: var(--ui-space-1); }
+.close { flex: none; width: 2rem; height: 2rem; border: 0; background: transparent; margin-bottom: var(--ui-space-1); }
 .scrim { display: none; }
+.outline-panel { padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-6); }
 
 @media (max-width: 1100px) {
   .inspector {
