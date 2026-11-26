@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import Drawer from 'primevue/drawer'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
-import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
@@ -15,8 +13,9 @@ import { useSession } from '../../stores/session'
 import { useTaxonomy, type CategoryNode } from '../../stores/taxonomy'
 import { useWorkspace } from '../../stores/workspace'
 import UiIcon from '../components/UiIcon.vue'
-import type { CollectionColor, TagItem } from '../types'
+import type { TagItem } from '../types'
 import { useSite } from '../../stores/site'
+import { collectionEditor, editCollection, newCollection } from '../collectionEditor'
 
 const site = useSite()
 const route = useRoute()
@@ -35,47 +34,20 @@ async function refresh() {
 }
 
 // ---- Collections ------------------------------------------------------------------------------
-const colors: { value: CollectionColor; label: string }[] = [
-  { value: 'blue', label: '藍' }, { value: 'teal', label: '藍綠' }, { value: 'green', label: '綠' }, { value: 'amber', label: '琥珀' },
-  { value: 'orange', label: '橘' }, { value: 'red', label: '紅' }, { value: 'purple', label: '紫' }, { value: 'gray', label: '灰' },
-]
-const editorOpen = ref(false)
-const editingId = ref<string | null>(null)
-const form = ref({ name: '', parent: null as string | null, description: '', color: '' as CollectionColor | '' })
-const formError = ref('')
-const saving = ref(false)
-
+/** New and edited collections use the workspace dialog; here it stays on this page and marks the new row. */
 function openCollection(node?: CategoryNode, parent: string | null = null) {
-  editingId.value = node?.id ?? null
-  form.value = node
-    ? { name: node.name, parent: node.parent, description: node.description ?? '', color: node.color ?? '' }
-    : { name: '', parent, description: '', color: '' }
-  formError.value = ''
-  editorOpen.value = true
+  if (node) editCollection(node.id)
+  else newCollection(parent, { stay: true })
 }
-/** A collection cannot move under itself or its own descendants. */
-const parentOptions = computed(() => {
-  const id = editingId.value
-  const blocked = new Set<string>()
-  if (id) for (const node of taxonomy.tree) if (taxonomy.pathOf(node.id).some(item => item.id === id)) blocked.add(node.id)
-  return taxonomy.categoryOptions.filter(option => !blocked.has(option.id))
+const fresh = ref<string>()
+let freshTimer = 0
+watch(() => collectionEditor.created, id => {
+  if (!id || route.name !== 'app-taxonomy') return
+  fresh.value = id
+  window.clearTimeout(freshTimer)
+  freshTimer = window.setTimeout(() => { fresh.value = undefined }, 2600)
+  void nextTick(() => document.querySelector(`[data-collection="${id}"]`)?.scrollIntoView({ block: 'nearest' }))
 })
-async function saveCollection() {
-  if (saving.value || !form.value.name.trim()) return
-  saving.value = true
-  formError.value = ''
-  const payload = { name: form.value.name.trim(), parent: form.value.parent, description: form.value.description.trim(), color: form.value.color }
-  try {
-    await api(`/api/categories/${editingId.value ? `${editingId.value}/` : ''}`, editingId.value ? 'PATCH' : 'POST', payload)
-    await refresh()
-    toast.add({ severity: 'success', summary: editingId.value ? '已更新集合' : '已新增集合', detail: payload.name, life: 2500 })
-    editorOpen.value = false
-  } catch (cause) {
-    formError.value = failure(cause, '無法儲存集合。')
-  } finally {
-    saving.value = false
-  }
-}
 const deleteBlocker = (node: CategoryNode) =>
   node.hasChildren ? '先移走或刪除子集合' : (node.document_count ?? 0) > 0 ? '先把文件移到其他集合' : ''
 function removeCollection(node: CategoryNode) {
@@ -231,7 +203,8 @@ watch(() => route.query.new, value => {
           <Button size="small" @click="openCollection()"><UiIcon name="plus" :size="15" /><span>新增集合</span></Button>
         </div>
         <ul v-if="taxonomy.tree.length" class="tree">
-          <li v-for="node in taxonomy.tree" :key="node.id" class="node" :style="{ '--depth': node.depth }">
+          <li v-for="node in taxonomy.tree" :key="node.id" class="node" :class="{ fresh: fresh === node.id }" :data-collection="node.id"
+            :style="{ '--depth': node.depth }">
             <span class="ui-col-mark mark" :class="`ui-col-${node.color || 'gray'}`" aria-hidden="true">{{ markOf(node.name) }}</span>
             <div class="node-text">
               <RouterLink :to="{ name: 'app-collection', params: { id: node.id } }" class="node-name">{{ node.name }}</RouterLink>
@@ -315,37 +288,6 @@ watch(() => route.query.new, value => {
       </section>
     </div>
 
-    <Drawer v-model:visible="editorOpen" position="right" :header="editingId ? '編輯集合' : '新增集合'" :style="{ width: 'min(100vw, 26rem)' }">
-      <form class="collection-form" @submit.prevent="saveCollection">
-        <div class="field">
-          <label for="collection-name">名稱</label>
-          <InputText id="collection-name" v-model="form.name" maxlength="120" required />
-        </div>
-        <div class="field">
-          <label for="collection-parent">上層集合</label>
-          <Select v-model="form.parent" input-id="collection-parent" :options="parentOptions" option-label="name" option-value="id"
-            show-clear placeholder="最上層" />
-        </div>
-        <div class="field">
-          <label for="collection-desc">說明 <span class="optional">選填</span></label>
-          <Textarea id="collection-desc" v-model="form.description" maxlength="1000" rows="3" auto-resize
-            placeholder="這個集合收錄哪些文件？會顯示在集合頁與首頁。" />
-        </div>
-        <fieldset class="field colors">
-          <legend>色標</legend>
-          <label v-for="item in colors" :key="item.value" class="swatch" :class="[`ui-col-${item.value}`, { on: form.color === item.value }]">
-            <input v-model="form.color" type="radio" name="collection-color" :value="item.value" class="ui-visually-hidden">
-            <span aria-hidden="true">{{ markOf(form.name || '集') }}</span>
-            <span class="ui-visually-hidden">{{ item.label }}</span>
-          </label>
-        </fieldset>
-        <Message v-if="formError" severity="error" size="small">{{ formError }}</Message>
-        <div class="actions">
-          <Button type="button" label="取消" text severity="secondary" @click="editorOpen = false" />
-          <Button type="submit" :label="editingId ? '儲存' : '新增集合'" :loading="saving" :disabled="!form.name.trim()" />
-        </div>
-      </form>
-    </Drawer>
 
     <Dialog v-model:visible="mergeOpen" header="合併標籤" modal :style="{ width: 'min(94vw, 30rem)' }" :closable="!merging">
       <div class="merge">
@@ -380,6 +322,9 @@ h1 { margin: 0; font-size: var(--ui-text-title); line-height: var(--ui-leading-t
 h2 { margin: 0; font-size: 1rem; }
 .card-sub { margin: 2px 0 0; color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .tree, .tags { list-style: none; margin: 0; padding: var(--ui-space-2) 0; }
+.node.fresh { animation: fresh-row 2.6s ease-out; }
+@keyframes fresh-row { from, 40% { background: var(--ui-accent-soft); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .node.fresh { animation: none; background: var(--ui-accent-soft); } }
 .node { display: flex; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-2) var(--ui-space-4) var(--ui-space-2) calc(var(--ui-space-5) + var(--depth) * 1.5rem); }
 .node:hover, .tag-row:hover { background: var(--ui-bg-subtle); }
 .mark { width: 1.75rem; height: 1.75rem; font-size: .8125rem; }
@@ -415,15 +360,9 @@ h2 { margin: 0; font-size: 1rem; }
 .rename .p-inputtext { flex: 1 1 8rem; min-width: 0; }
 .empty, .hint { margin: 0; padding: var(--ui-space-4) var(--ui-space-5); color: var(--ui-text-muted); font-size: var(--ui-text-sm); }
 .hint { padding-top: 0; font-size: var(--ui-text-xs); }
-.collection-form, .merge { display: grid; gap: var(--ui-space-4); }
+.merge { display: grid; gap: var(--ui-space-4); }
 .field { display: grid; gap: var(--ui-space-2); }
 .field > label, legend { font-weight: 600; }
-.optional { color: var(--ui-text-muted); font-weight: 400; font-size: var(--ui-text-sm); }
-.colors { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); margin: 0; padding: 0; border: 0; }
-.colors legend { width: 100%; margin-bottom: var(--ui-space-2); padding: 0; }
-.swatch { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: var(--ui-radius-md); border: 2px solid transparent; font-weight: 700; cursor: pointer; }
-.swatch.on { border-color: var(--ui-text); }
-.swatch:has(input:focus-visible) { box-shadow: var(--ui-focus-ring); }
 .merge-summary { margin: 0; color: var(--ui-text-secondary); line-height: 1.7; }
 .actions { display: flex; justify-content: flex-end; gap: var(--ui-space-2); }
 @media (max-width: 1100px) {

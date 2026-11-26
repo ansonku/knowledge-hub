@@ -12,6 +12,7 @@ import { useTaxonomy } from '../stores/taxonomy'
 import { useTheme } from '../stores/theme'
 import { useWorkspace } from '../stores/workspace'
 import AppSidebar from './AppSidebar.vue'
+import CollectionDialog from './components/CollectionDialog.vue'
 import SiteNotice from '../site/SiteNotice.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import UiIcon from './components/UiIcon.vue'
@@ -191,6 +192,7 @@ onBeforeUnmount(() => {
       <NewMarkdownDialog v-model:visible="creating" :default-category="createCategory" />
       <input ref="chooser" type="file" accept=".md,.html" multiple hidden @change="onChosen">
       <UploadTray />
+      <CollectionDialog />
       <div v-if="dragDepth > 0 && !overEditor" class="drop" aria-hidden="true">
         <div class="drop-card">
           <UiIcon name="upload" :size="28" />
