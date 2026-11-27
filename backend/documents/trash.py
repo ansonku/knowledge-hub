@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from users.models import User
-from users.permissions import has_role
+from users.permissions import ensure_admin_mfa, has_role
 
 from . import activity, storage
 from .models import Document, PendingDocumentDeletion, Version
@@ -31,6 +31,7 @@ def restore_document(actor, document_id):
 def queue_permanent_deletion(actor, document_id, *, confirm, title):
     if not has_role(actor, User.Role.ADMIN):
         raise PermissionDenied()
+    ensure_admin_mfa(actor)
     with connection.cursor() as cursor:
         cursor.execute("SELECT pg_advisory_xact_lock_shared(hashtext(%s), 0)", [STORAGE_LOCK_KEY])
     document = get_object_or_404(Document.objects.select_for_update(), pk=document_id, is_trashed=True)

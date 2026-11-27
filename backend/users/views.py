@@ -1,4 +1,5 @@
 from functools import wraps
+from urllib.parse import quote
 
 from allauth.account.decorators import reauthentication_required
 from allauth.account.utils import url_str_to_user_pk
@@ -18,9 +19,11 @@ from django.db.models import Q
 from django.http import Http404
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods, require_POST, require_safe
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
@@ -29,7 +32,7 @@ from .adapters import GOOGLE_LINK_OWNER
 from .forms import AdminActionForm, InvitationForm, ProfileForm
 from .mfa import reauthenticated_with_current_factor
 from .models import AuditLog, User
-from .permissions import CanReadLibrary, IsAdmin, has_role
+from .permissions import CanReadLibrary, IsAdmin, has_role, mfa_required_for
 
 ACTIVATION_SESSION = "hub_activation"
 # Workspace pages that show member management. The Django views below only accept the form
@@ -57,6 +60,13 @@ def account_payload(user):
     }
 
 
+def mfa_status(user):
+    """P25: two-factor state for the person's own pages; never secrets or codes."""
+    from .mfa import recovery_codes_left
+    left = recovery_codes_left(user)
+    return {"enabled": left is not None, "recovery_codes": left, "required": mfa_required_for(user)}
+
+
 def file_limits():
     """P23c: per-file limits the browser checks before sending. documents imports users, so import it here."""
     from documents.limits import for_members
@@ -74,7 +84,7 @@ def me(request):
             return Response({"errors": form.errors.get_json_data()}, status=400)
         save_profile(request.user)
     return Response({
-        **account_payload(request.user), "csrf_token": get_token(request),
+        **account_payload(request.user), "csrf_token": get_token(request), "mfa": mfa_status(request.user),
         "limits": file_limits(),
     })
 
@@ -229,6 +239,8 @@ def admin_required(view):
     def checked(request, *args, **kwargs):
         if not has_role(request.user, User.Role.ADMIN):
             raise PermissionDenied
+        if mfa_required_for(request.user):  # P25: set up two-factor first, then come back
+            return redirect(f"{reverse('mfa_activate_totp')}?next={quote(request.get_full_path())}")
         return view(request, *args, **kwargs)
 
     return checked
@@ -335,3 +347,34 @@ def manage_user(request, user_id):
 @never_cache
 def csrf_failure(request, reason=""):
     return render(request, "users/csrf_failure.html", status=403)
+
+
+class SecurityInput(serializers.Serializer):
+    require_admin_mfa = serializers.BooleanField()
+
+
+@never_cache
+@api_view(["GET", "PUT"])
+@permission_classes([IsAdmin])
+def security_settings(request):
+    """P25: whether admins must use two-factor, and how many do not yet."""
+    from documents.models import SiteSettings  # documents imports users; keep this one-way at import time
+    if request.method == "PUT":
+        payload = SecurityInput(data=request.data)
+        payload.is_valid(raise_exception=True)
+        value = payload.validated_data["require_admin_mfa"]
+        if value and not Authenticator.objects.filter(user=request.user, type=Authenticator.Type.TOTP).exists():
+            return Response({"require_admin_mfa": "請先為自己的帳號開啟雙因素驗證，再要求所有管理員開啟。"}, status=400)
+        with transaction.atomic():
+            site, _ = SiteSettings.objects.select_for_update().get_or_create(pk=1)
+            if site.require_admin_mfa != value:
+                lifecycle.audit("site_security_updated", request.user, actor=request.user, require_admin_mfa={"from": site.require_admin_mfa, "to": value})
+                site.require_admin_mfa = value
+                site.updated_by = request.user
+                site.save()
+    admins = User.objects.filter(role=User.Role.ADMIN, is_active=True)
+    without = admins.exclude(pk__in=Authenticator.objects.filter(type=Authenticator.Type.TOTP).values("user_id"))
+    return Response({
+        "require_admin_mfa": SiteSettings.current().require_admin_mfa,
+        "admins": admins.count(), "admins_without_mfa": without.count(),
+    })

@@ -114,6 +114,9 @@ SOCIALACCOUNT_PROVIDERS = {
 MFA_ADAPTER = "users.adapters.MFAAdapter"
 MFA_SUPPORTED_TYPES = ["totp"]
 MFA_TOTP_ISSUER = "Knowledge Hub"
+# P25: "10 天內不再詢問" on the code page (users.mfa.TrustView finishes the trust step without a page).
+MFA_TRUST_ENABLED = True
+MFA_TRUST_COOKIE_AGE = 10 * 24 * 60 * 60
 MFA_FORMS = {
     "authenticate": "users.mfa.AuthenticateForm",
 }

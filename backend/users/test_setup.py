@@ -26,6 +26,11 @@ def admin_form(**changes):
     return {"terms_version": about.TERMS_VERSION, "admin": form}
 
 
+def allow_without_mfa():
+    from documents.models import SiteSettings
+    SiteSettings.objects.filter(pk=1).update(require_admin_mfa=False)
+
+
 class SetupTestCase(TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
@@ -225,6 +230,11 @@ class OnboardingTests(SetupTestCase):
         self.open()
         self.post("/api/setup/verify", {})
         self.post("/api/setup/complete", admin_form())
+        # P25: the wizard's site requires admin two-factor; this admin has none yet.
+        blocked = self.client.get("/api/admin/about/")
+        self.assertEqual(blocked.status_code, 403)
+        self.assertTrue(blocked.json()["mfa_required"])
+        allow_without_mfa()
         found = self.client.get("/api/admin/about/").json()
         self.assertEqual(found["developer"]["github"], "https://github.com/ansonku/knowledge-hub")
         self.assertEqual(found["license"], "")
@@ -235,6 +245,7 @@ class OnboardingTests(SetupTestCase):
         self.open()
         self.post("/api/setup/verify", {})
         self.post("/api/setup/complete", admin_form())
+        allow_without_mfa()
         found = self.client.get("/api/admin/getting-started/").json()
         self.assertEqual(found["tasks"], {"admin": True, "members": False, "collections": False, "documents": False, "mfa": False})
         self.assertEqual((found["done"], found["total"]), (1, 5))

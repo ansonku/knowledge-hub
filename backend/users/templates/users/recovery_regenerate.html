@@ -1,0 +1,9 @@
+{% extends "allauth/layouts/base.html" %}
+{% block head_title %}重新產生復原碼 · {{ site_name }}{% endblock %}
+{% block content %}
+{# P25a: replaced by the redesigned page in P25b #}
+<h1>重新產生復原碼</h1>
+<p>目前還有 {{ left }} 組復原碼可用。重新產生後，舊的復原碼全部作廢。</p>
+<form method="post">{% csrf_token %}<button type="submit">重新產生</button></form>
+<p><a href="{% url 'mfa_index' %}">取消</a></p>
+{% endblock %}
