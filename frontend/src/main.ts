@@ -74,6 +74,8 @@ const router = createRouter({
         { path: ':pathMatch(.*)*', redirect: { name: 'app-home' } },
       ],
     },
+    // P24: first-run setup, outside every other layout.
+    { path: '/setup/', name: 'setup', component: () => import('./setup/SetupPage.vue') },
     // `/` is answered by Django (members → /app/, visitors → /articles/); any other unknown
     // path that Nginx hands to the SPA lands in the workspace, which sends visitors to log in.
     { path: '/:pathMatch(.*)*', redirect: '/app/' },

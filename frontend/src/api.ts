@@ -17,6 +17,16 @@ export function getCsrfToken() {
   return csrfToken
 }
 
+/** P24: until the first admin exists the server answers 503 with setup_required; every page then goes to /setup/. */
+export function followSetup(status: number, body: unknown) {
+  if (status === 503 && body && typeof body === 'object' && (body as { setup_required?: boolean }).setup_required
+      && window.location.pathname !== '/setup/') {
+    window.location.assign('/setup/')
+    return true
+  }
+  return false
+}
+
 export function errorMessage(body: unknown): string {
   if (typeof body === 'string') return body
   if (Array.isArray(body)) return body.map(errorMessage).filter(Boolean).join(' ')
@@ -37,6 +47,7 @@ export async function api<T = unknown>(url: string, method: Method = 'GET', data
   })
   if (response.status === 204) return undefined as T
   const body = await response.json().catch(() => null)
+  followSetup(response.status, body)
   if (!response.ok) throw new ApiError(response.status, errorMessage(body) || '無法完成操作。', body)
   return body as T
 }
@@ -69,6 +80,7 @@ export function upload<T = unknown>(url: string, data: FormData, onProgress?: (p
       if (event.lengthComputable) onProgress?.(Math.round(event.loaded * 100 / event.total))
     }
     request.onload = () => {
+      followSetup(request.status, request.response)
       if (request.status === 201 || request.status === 200) resolve(request.response as T)
       else reject(new ApiError(request.status, errorMessage(request.response) || '上傳失敗，請重新整理後再試。', request.response))
     }

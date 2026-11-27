@@ -1,3 +1,4 @@
+import { followSetup } from '../api'
 import type { SearchMatches } from '../searchTerms'
 import { computed, ref, type Ref } from 'vue'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
@@ -64,6 +65,7 @@ export const collectionStyle = (collection: Pick<PublicCollection, 'color'> | nu
 /** Fetch without credentials-dependent redirects: visitors are expected here. */
 export async function publicApi<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin', signal, headers: { Accept: 'application/json' } })
+  if (response.status === 503) followSetup(503, await response.clone().json().catch(() => null))  // P24
   if (!response.ok) throw Object.assign(new Error(response.status === 404 ? '找不到內容。' : '暫時無法載入，請稍後再試。'), { status: response.status })
   return response.json() as Promise<T>
 }
