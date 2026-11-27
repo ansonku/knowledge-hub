@@ -136,3 +136,84 @@ body.entry main { max-width: 28rem; }
 .account .notice-link { color: inherit; font-weight: 600; }
 .notice-close { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: var(--radius); background: transparent; color: inherit; cursor: pointer; }
 .notice-close:hover { background: rgb(0 0 0 / .06); }
+
+/* ---- P25: two-factor pages (status, steps, code boxes, recovery codes, danger zone) ---- */
+.mfa { display: grid; gap: 1.25rem; }
+.mfa .head h1 { margin-bottom: .25rem; }
+.mfa .head p { margin: 0; }
+.mfa .muted { color: var(--text-muted); font-size: .875rem; margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: .375rem; padding: .125rem .625rem; border-radius: 999px; font-size: .78rem; font-weight: 700; vertical-align: middle; }
+.chip::before { content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: currentColor; }
+.chip.on { background: var(--success-bg); color: var(--success); }
+.chip.off { background: var(--bg-muted); color: var(--text-muted); }
+.status { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); gap: .875rem; align-items: center; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.status.on { background: linear-gradient(135deg, var(--success-bg), transparent 75%); }
+.status.off { background: linear-gradient(135deg, var(--warning-bg), transparent 75%); }
+.status .shield { width: 2.75rem; height: 2.75rem; border-radius: .75rem; display: grid; place-items: center; background: var(--bg-surface); }
+.status.on .shield { color: var(--success); }
+.status.off .shield { color: var(--warning); }
+.status strong { display: block; font-size: 1rem; }
+.apps { display: flex; flex-wrap: wrap; gap: .375rem; }
+.apps span { padding: .2rem .625rem; border-radius: .5rem; background: var(--bg-subtle); border: 1px solid var(--border-subtle); font-size: .8125rem; color: var(--text-secondary); }
+.rows { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.rows .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; padding: .875rem 1rem; }
+.rows .row + .row { border-top: 1px solid var(--border-subtle); }
+.rows strong { display: block; font-size: .9375rem; }
+.rows .text { color: var(--text-secondary); font-size: .8438rem; }
+.dots { display: inline-flex; gap: 3px; margin-left: .375rem; vertical-align: middle; }
+.dots i { width: .5rem; height: .5rem; border-radius: 2px; background: var(--success); }
+.dots i.used { background: var(--border); }
+.danger-zone { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; padding: .875rem 1rem; border: 1px solid var(--danger-border); border-radius: var(--radius-lg); }
+.danger-zone strong { display: block; color: var(--danger); font-size: .9375rem; }
+.danger-zone span { color: var(--text-secondary); font-size: .8438rem; }
+.card .button.secondary, .card button.secondary { background: var(--bg-surface); border-color: var(--border-strong); color: var(--text); }
+.card .button.secondary:hover, .card button.secondary:hover { background: var(--bg-subtle); border-color: var(--border-strong); color: var(--text); }
+.card .button.danger-outline { background: var(--bg-surface); border-color: var(--danger-border); color: var(--danger); }
+.card .button.danger-outline:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+.card button.danger, .card .button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.hub-dark .card button.danger, .hub-dark .card .button.danger { color: #1a0b09; }
+.card .button.block, .card button.block { width: 100%; }
+.actions { display: flex; flex-wrap: wrap; gap: .625rem; justify-content: flex-end; align-items: center; padding-top: 1rem; border-top: 1px solid var(--border-subtle); }
+.actions .left { margin-right: auto; }
+.card .steps { display: grid; gap: 1.125rem; margin: 0; padding: 0; list-style: none; }
+.steps > li { display: grid; grid-template-columns: 1.875rem minmax(0, 1fr); gap: .875rem; }
+.steps .num { width: 1.875rem; height: 1.875rem; border-radius: 50%; background: var(--accent-soft); color: var(--accent-on-soft); display: grid; place-items: center; font-weight: 700; font-size: .84rem; }
+.steps .step-body { display: grid; gap: .625rem; min-width: 0; }
+.steps strong { font-size: .9688rem; }
+.qr-row { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 1.125rem; align-items: center; }
+.qr-row > .field { min-width: 0; }
+.qr-row img { width: 9.5rem; height: 9.5rem; padding: .5rem; border-radius: .75rem; background: #fff; border: 1px solid var(--border); }
+.secret { display: flex; align-items: center; gap: .5rem; min-width: 0; padding: .5rem .5rem .5rem .75rem; border-radius: var(--radius); background: var(--bg-muted); font-family: var(--ui-font-mono); font-size: .84rem; letter-spacing: .06em; }
+.secret code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: none !important; padding: 0 !important; }
+.card .copy { min-height: 1.75rem; padding: 0 .625rem; font-size: .78rem; background: var(--bg-surface); border-color: var(--border-strong); color: var(--text-secondary); flex: none; }
+.card .copy:hover { background: var(--bg-subtle); color: var(--text); border-color: var(--border-strong); }
+.otp { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.otp .gap { width: .5rem; }
+/* As specific as the general .card input rule, so the boxes keep their size. */
+.card .otp input:not([type=checkbox]):not([type=radio]) { flex: none; width: 2.75rem; height: 3.25rem; padding: 0; text-align: center; font-family: var(--ui-font-mono); font-size: 1.3rem; font-weight: 600; }
+/* display: grid/flex on these would otherwise beat the hidden attribute. */
+.card [hidden] { display: none !important; }
+.otp-fallback[hidden] { display: none !important; }
+.codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; padding: .875rem; list-style: none; border-radius: .75rem; background: var(--bg-subtle); border: 1px solid var(--border-subtle); counter-reset: code; }
+.codes li { font-family: var(--ui-font-mono); font-size: .95rem; letter-spacing: .04em; padding: .375rem .625rem; border-radius: .5rem; background: var(--bg-surface); border: 1px solid var(--border-subtle); color: var(--text); }
+.codes li::before { counter-increment: code; content: counter(code, decimal-leading-zero) "  "; color: var(--text-muted); font-size: .78rem; }
+.tools { display: flex; gap: .5rem; flex-wrap: wrap; }
+.callout { display: grid; grid-template-columns: 1.375rem minmax(0, 1fr); gap: .625rem; padding: .75rem .875rem; border-radius: .75rem; font-size: .875rem; color: var(--text-secondary); }
+.callout svg { margin-top: .125rem; }
+.callout.warn { background: var(--warning-bg); } .callout.warn svg { color: var(--warning); }
+.callout.bad { background: var(--danger-bg); } .callout.bad svg { color: var(--danger); }
+.callout.info { background: var(--accent-soft); } .callout.info svg { color: var(--accent); }
+.agree { display: flex; gap: .625rem; align-items: flex-start; font-weight: 500; cursor: pointer; color: var(--text); }
+.agree input { margin-top: .25rem; }
+.consequences { margin: 0; padding-left: 1.25rem; display: grid; gap: .25rem; color: var(--text-secondary); }
+.mfa .field { display: grid; gap: .375rem; }
+.mfa .field > label, .mfa .field > .label { font-weight: 600; font-size: .875rem; color: var(--text); }
+.center { text-align: center; justify-items: center; }
+.linkish { border: 0 !important; background: none !important; color: var(--accent) !important; padding: 0 !important; min-height: 0 !important; font-weight: 600; cursor: pointer; }
+.linkish:hover { color: var(--accent-hover) !important; text-decoration: underline; }
+@media (max-width: 520px) {
+  .rows .row, .danger-zone, .qr-row { grid-template-columns: minmax(0, 1fr); }
+  .codes { grid-template-columns: minmax(0, 1fr); }
+  .card .otp input:not([type=checkbox]):not([type=radio]) { width: 2.375rem; height: 3rem; }
+}
+.card .button.is-disabled { opacity: .45; cursor: not-allowed; }

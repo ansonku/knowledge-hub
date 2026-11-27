@@ -1,0 +1,28 @@
+{% extends "allauth/layouts/base.html" %}
+{% load hub_account %}
+{% block head_title %}啟用雙因素驗證 · {{ site_name }}{% endblock %}
+{% block extra_head %}<script src="/assets/account-mfa.js" defer></script>{% endblock %}
+{% block content %}
+<section class="mfa" aria-labelledby="mfa-title">
+  <div class="head"><h1 id="mfa-title">啟用雙因素驗證</h1><p>只要三個步驟，約一分鐘。</p></div>
+  <form method="post" action="{% url 'mfa_activate_totp' %}" class="mfa">
+    {% csrf_token %}
+    <ol class="steps">
+      <li><span class="num">1</span><div class="step-body"><strong>在手機安裝驗證器 App</strong>
+        <p class="muted">例如 Google Authenticator 或 Microsoft Authenticator。已經有的話直接下一步。</p></div></li>
+      <li><span class="num">2</span><div class="step-body"><strong>用 App 掃描 QR Code</strong>
+        <div class="qr-row"><img src="{{ totp_svg_data_uri }}" alt="雙因素驗證的 QR Code">
+          <div class="field"><p class="muted">無法掃描時，在 App 中選「手動輸入」，貼上這組金鑰：</p>
+            <div class="secret"><code id="totp-secret">{{ form.secret|group4 }}</code><button type="button" class="copy" data-copy="{{ form.secret }}">複製</button></div>
+            <p class="muted">帳號會顯示為「Knowledge Hub ({{ request.user.email }})」。</p></div></div></div></li>
+      <li><span class="num">3</span><div class="step-body"><strong id="code-label">輸入 App 上顯示的 6 位數驗證碼</strong>
+        <input type="text" id="code-input" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required aria-labelledby="code-label">
+        <div class="otp" data-target="code-input" role="group" aria-labelledby="code-label" hidden><input inputmode="numeric" maxlength="1" aria-label="第 1 碼" autocomplete="one-time-code"><input inputmode="numeric" maxlength="1" aria-label="第 2 碼"><input inputmode="numeric" maxlength="1" aria-label="第 3 碼"><span class="gap"></span><input inputmode="numeric" maxlength="1" aria-label="第 4 碼"><input inputmode="numeric" maxlength="1" aria-label="第 5 碼"><input inputmode="numeric" maxlength="1" aria-label="第 6 碼"></div>
+        {% if form.code.errors %}<div class="errorlist" role="alert">{% for error in form.code.errors %}{{ error }}{% endfor %}</div>{% endif %}
+        {% if form.non_field_errors %}<div class="errorlist" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+        <p class="muted">驗證碼每 30 秒更新一次。</p></div></li>
+    </ol>
+    <div class="actions"><a class="button secondary left" href="{% url 'mfa_index' %}">取消</a><button type="submit">確認並啟用</button></div>
+  </form>
+</section>
+{% endblock %}

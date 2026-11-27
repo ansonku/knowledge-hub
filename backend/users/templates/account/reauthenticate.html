@@ -1,0 +1,15 @@
+{% extends "allauth/layouts/base.html" %}
+{% load hub_account %}
+{% block head_title %}確認身分 · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="mfa" aria-labelledby="reauth-title">
+  <div class="head"><h1 id="reauth-title">請先確認是你本人</h1><p>為了{% reauth_purpose %}，請再輸入一次密碼。</p></div>
+  <form method="post" action="{% url 'account_reauthenticate' %}" class="mfa">
+    {% csrf_token %}{{ redirect_field }}
+    <div class="field"><label for="{{ form.password.id_for_label }}">密碼</label>{{ form.password }}
+      {% if form.password.errors %}<div class="errorlist" role="alert">{% for error in form.password.errors %}{{ error }}{% endfor %}</div>{% endif %}
+      <a href="{% url 'account_reset_password' %}" class="muted">忘記密碼？</a></div>
+    <div class="actions"><a class="button secondary left" href="/app/settings/">取消</a><button type="submit">確認</button></div>
+  </form>
+</section>
+{% endblock %}

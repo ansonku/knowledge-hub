@@ -18,6 +18,7 @@ from allauth.mfa.totp.internal.auth import SECRET_SESSION_KEY
 from django.contrib.auth import update_session_auth_hash
 from django.db import transaction
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -85,6 +86,9 @@ class AuthenticateForm(forms.AuthenticateForm):
 @method_decorator(never_cache, name="dispatch")
 class ActivateTOTPView(views.ActivateTOTPView):
     def dispatch(self, request, *args, **kwargs):
+        target = local_path(request.GET.get("next", ""))
+        if target:
+            request.session[AFTER_SETUP] = target  # P25: e.g. the admin page that asked for two-factor
         adapter = get_adapter()
         secret = request.session.pop(SECRET_SESSION_KEY, None)
         if secret:
@@ -108,7 +112,7 @@ class ActivateTOTPView(views.ActivateTOTPView):
         revoke_sessions(user)
         clear_authentication_records(self.request)
         update_session_auth_hash(self.request, user)
-        return render(self.request, "users/recovery_codes.html", {"codes": codes})
+        return render(self.request, "users/recovery_codes.html", {"codes": codes, "done_url": after_setup(self.request)})
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -208,4 +212,37 @@ class RegenerateRecoveryCodesView(View):
             return redirect("mfa_index")
         codes = issue_recovery_codes(auth)
         audit("mfa_recovery_regenerated", request.user, actor=request.user)
-        return render(request, "users/recovery_codes.html", {"codes": codes, "regenerated": True})
+        return render(request, "users/recovery_codes.html", {"codes": codes, "regenerated": True, "done_url": reverse("mfa_index")})
+
+
+AFTER_SETUP = "mfa_after_setup"
+
+
+def local_path(value):
+    """Only same-site paths (no scheme, host or //) are kept as a place to return to."""
+    return value if value and value.startswith("/") and not value.startswith("//") and "\\" not in value else ""
+
+
+class IndexView(base_views.IndexView):
+    """P25: the management page also shows how many recovery codes are left (never the codes)."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        left = recovery_codes_left(self.request.user)
+        context.update({"recovery_left": left, "recovery_total": RECOVERY_COUNT,
+                        "recovery_used": RECOVERY_COUNT - left if left is not None else 0,
+                        "admin_required": mfa_status_required(self.request.user)})
+        return context
+
+
+index = never_cache(IndexView.as_view())
+
+
+def mfa_status_required(user):
+    from .permissions import mfa_required_for
+    return mfa_required_for(user)
+
+
+def after_setup(request):
+    """Where 完成 on the recovery-code page goes: the page that sent the person here, or the management page."""
+    return request.session.pop(AFTER_SETUP, "") or reverse("mfa_index")

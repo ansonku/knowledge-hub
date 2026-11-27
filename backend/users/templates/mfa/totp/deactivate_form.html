@@ -1,0 +1,21 @@
+{% extends "allauth/layouts/base.html" %}
+{% load hub_account %}
+{% block head_title %}停用雙因素驗證 · {{ site_name }}{% endblock %}
+{% block content %}
+{% recovery_left request.user as left %}
+<section class="mfa" aria-labelledby="mfa-title">
+  <div class="head"><h1 id="mfa-title">停用雙因素驗證？</h1><p>停用後會發生這些事：</p></div>
+  <ul class="consequences">
+    <li>登入時只需要密碼，帳號比較容易被盜用。</li>
+    <li>手機上的驗證器不再有效，可以從 App 中刪除。</li>
+    {% if left %}<li>目前的 {{ left }} 組復原碼全部作廢。</li>{% endif %}
+    <li>其他已登入的裝置會被登出。</li>
+  </ul>
+  {% if request.user.role == "admin" %}<div class="callout bad"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/></svg><span>管理員帳號建議保持啟用。若網站要求管理員開啟雙因素驗證，停用後將無法使用管理中心。</span></div>{% endif %}
+  <form method="post" action="{% url 'mfa_deactivate_totp' %}">
+    {% csrf_token %}{% for field in form.hidden_fields %}{{ field }}{% endfor %}
+    {% if form.non_field_errors %}<div class="errorlist" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="actions"><a class="button secondary left" href="{% url 'mfa_index' %}">取消</a><button type="submit" class="danger">停用雙因素驗證</button></div>
+  </form>
+</section>
+{% endblock %}

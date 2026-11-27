@@ -76,6 +76,7 @@ urlpatterns = [
     path("accounts/2fa/totp/activate/", mfa.ActivateTOTPView.as_view(), name="mfa_activate_totp"),
     path("accounts/2fa/totp/deactivate/", mfa.DeactivateTOTPView.as_view(), name="mfa_deactivate_totp"),
     path("accounts/2fa/trust/", mfa.trust, name="mfa_trust"),
+    path("accounts/2fa/", mfa.index, name="mfa_index"),
     path("accounts/2fa/recovery-codes/regenerate/", mfa.RegenerateRecoveryCodesView.as_view(), name="mfa_regenerate_recovery"),
     path("api/admin/security/", views.security_settings, name="security_settings"),
     path("accounts/", include("allauth.urls")),

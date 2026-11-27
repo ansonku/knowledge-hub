@@ -229,8 +229,9 @@ class AccountTests(TestCase):
         self.client.force_login(self.viewer)
         page = self.client.get(reverse("mfa_index")).content.decode()
         self.assertIn("雙因素驗證", page)
-        self.assertIn("尚未啟用驗證器。", page)
-        for old in ("二階", "恢復碼", "authenticator 驗證器"):
+        self.assertIn("尚未啟用", page)
+        # P25: one set of terms on every two-factor page.
+        for old in ("二階", "恢復碼", "authenticator 驗證器", "雙重驗證", "帳戶", "您", "QR 碼", "驗證器代碼"):
             self.assertNotIn(old, page)
 
     def test_compiled_translations_match_the_catalogue(self):
