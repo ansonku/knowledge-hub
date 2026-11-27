@@ -17,6 +17,7 @@ export type ActivityItem = {
     tags?: { added: string[]; removed: string[] }
     presentation?: { from: string; to: string }
     gallery_layout?: { from: string; to: string }
+    cover?: { from: boolean; to: boolean }
   }
   created_at: string
   document: { id: string; title: string; format: Format }
@@ -58,6 +59,7 @@ export function activityDetail(item: ActivityItem) {
     const to = detail.gallery_layout.to as GalleryLayout | ''
     parts.push(`相簿版面改為「${to ? LAYOUT_LABELS[to] ?? to : '跟隨系統預設'}」`)
   }
+  if (detail.cover) parts.push(detail.cover.to ? (detail.cover.from ? '更換封面' : '設定封面') : '移除封面')
   return parts.join('；')
 }
 

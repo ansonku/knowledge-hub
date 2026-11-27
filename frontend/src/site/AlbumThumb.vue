@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // P21b: an album article's cover — wide on cards (with the picture count), a small square in compact lists.
+// P22: any article can have a chosen cover; only albums carry a count.
 // The picture is a 480 px thumbnail; its title is right beside it, so it carries no alt text.
 import type { AlbumCover } from './public'
 
@@ -9,7 +10,7 @@ withDefaults(defineProps<{ cover: AlbumCover; variant?: 'wide' | 'mini' }>(), { 
 <template>
   <span v-if="cover.url" class="album-thumb" :class="`album-${variant}`">
     <img :src="cover.url" alt="" loading="lazy" decoding="async" :width="variant === 'wide' ? 480 : 96" :height="variant === 'wide' ? 270 : 96">
-    <span v-if="variant === 'wide'" class="count" :aria-label="`相簿，${cover.count} 張圖片`">
+    <span v-if="variant === 'wide' && cover.count != null" class="count" :aria-label="`相簿，${cover.count} 張圖片`">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="7" width="14" height="13" rx="2" /><path d="M7 3h12a2 2 0 0 1 2 2v12" /></svg>
       {{ cover.count }} 張
     </span>

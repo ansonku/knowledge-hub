@@ -26,6 +26,8 @@ export type DocumentDetails = {
   /** P11c: 'gallery' reads as a photo album; gallery_layout '' follows the system default. */
   presentation: 'article' | 'gallery'
   gallery_layout: string
+  /** P22: the picture shown on cards and as og:image (one of the document's own pictures). */
+  cover_image: { id: string; url: string; thumb: string; width: number; height: number } | null
   preview_available?: boolean
   /** Viewer-specific and publication fields returned by GET only. */
   is_favorite?: boolean
