@@ -148,8 +148,7 @@ def write_file(image, encoded):
 def add_image(actor, document_id, upload):
     services.require_editor(actor)
     document = get_object_or_404(services.active_documents(), pk=document_id)
-    if document.format != Document.Format.MARKDOWN:
-        raise ValidationError({"file": "只有 Markdown 文件可以插入圖片。"})
+    # P22: HTML documents take pictures too, only to use as their cover (their content never refers to them).
     encoded, name, width, height = reencode(read_limited(upload))
     digest = hashlib.sha256(encoded).hexdigest()
     with transaction.atomic():
@@ -183,7 +182,8 @@ def lock_storage(*, shared):
 def unused_images(now=None):
     """Images that no version refers to and that were last uploaded more than the grace period ago."""
     referenced = VersionImage.objects.filter(image=OuterRef("pk"))
-    return DocumentImage.objects.filter(uploaded_at__lt=(now or timezone.now()) - GRACE).exclude(Exists(referenced))
+    cover = Document.objects.filter(cover_image=OuterRef("pk"))  # P22: a cover is in use
+    return DocumentImage.objects.filter(uploaded_at__lt=(now or timezone.now()) - GRACE).exclude(Exists(referenced)).exclude(Exists(cover))
 
 
 def collect_unused_images(*, dry_run=False):
@@ -279,7 +279,12 @@ def can_read(user, image):
     if has_role(user, *User.Role.values):
         return True
     publication = ArticlePublication.objects.filter(document_id=document.pk).only("version_id").first()
-    return bool(publication) and VersionImage.objects.filter(version_id=publication.version_id, image=image).exists()
+    if publication is None:
+        return False
+    # P22: a published article's cover is public, like its title.
+    if document.cover_image_id == image.pk:
+        return True
+    return VersionImage.objects.filter(version_id=publication.version_id, image=image).exists()
 
 
 @api_view(["GET"])

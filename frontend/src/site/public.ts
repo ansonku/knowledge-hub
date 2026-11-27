@@ -8,8 +8,8 @@ export type PublicCollection = { id: string; name: string; color: CollectionColo
 /** A collection on the path to a published article (decision 6, revised in P5b). */
 export type PublicNode = PublicCollection & { parent: string | null; depth: number; article_count: number; total_count: number }
 /** `date` is the publication date on the public site and the last update in the member portal. */
-/** P21b: album articles' cover (a thumbnail; url is null for an album without pictures) and picture count. */
-export type AlbumCover = { url: string | null; count: number }
+/** P21b: an article's cover (a thumbnail; url is null for an album without pictures). P22: count is null unless an album. */
+export type AlbumCover = { url: string | null; count: number | null }
 export type PublicNavArticle = { document_id: string; title: string; collection_id: string | null; date: string; cover?: AlbumCover }
 export type PublicNav = { collections: PublicNode[]; articles: PublicNavArticle[] }
 export type PublicCard = {

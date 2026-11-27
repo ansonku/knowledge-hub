@@ -45,6 +45,9 @@ class Document(models.Model):
     title = models.CharField(max_length=240)
     format = models.CharField(max_length=4, choices=Format.choices)
     category = models.ForeignKey(Category, null=True, blank=True, on_delete=models.PROTECT)
+    # P22: a picture of this document shown on cards (and as og:image when published). A document setting, not
+    # part of any version. Cleared when the picture goes.
+    cover_image = models.ForeignKey("DocumentImage", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     tags = models.ManyToManyField(Tag, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     current_version = models.ForeignKey("Version", null=True, on_delete=models.PROTECT, related_name="+")

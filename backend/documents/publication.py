@@ -337,9 +337,12 @@ def head_value(text):
     return html.escape(text, quote=True).encode("ascii", "xmlcharrefreplace").decode("ascii")
 
 
-def head_markup(title, description, path, kind, site_name):
+def head_markup(title, description, path, kind, site_name, image=None):
     title, description = head_value(title), head_value(description)
     url = head_value(settings.PUBLIC_ORIGIN.rstrip("/") + path)
+    # P22: the cover as the share preview. The original, absolute: sites want about 1200 px, more than the thumbnail.
+    picture = (f'<meta property="og:image" content="{head_value(settings.PUBLIC_ORIGIN.rstrip("/") + image)}">'
+               '<meta name="twitter:card" content="summary_large_image">') if image else ""
     return "".join((
         f"<title>{title}</title>",
         f'<meta name="description" content="{description}">',
@@ -348,6 +351,7 @@ def head_markup(title, description, path, kind, site_name):
         f'<meta property="og:title" content="{title}">',
         f'<meta property="og:description" content="{description}">',
         f'<meta property="og:url" content="{url}">',
+        picture,
     ))
 
 
@@ -370,4 +374,6 @@ def public_article_page(request, document_id):
         return HttpResponse(status=404)
     site = SiteSettings.current()
     description = summarise(row["sample"], row["title"], row["format"]) or site.tagline or site.name
-    return spa_page(head_markup(f"{row['title']} · {site.name}", description, f"/articles/{document_id}/", "article", site.name))
+    cover = Document.objects.filter(pk=document_id).values_list("cover_image_id", flat=True).first()
+    return spa_page(head_markup(f"{row['title']} · {site.name}", description, f"/articles/{document_id}/", "article", site.name,
+                                image=f"/api/images/{cover}/" if cover else None))
