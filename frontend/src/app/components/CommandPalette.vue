@@ -78,6 +78,7 @@ const SETTINGS: { label: string; page: string; hash: string; keywords: string }[
   { label: '相簿與燈箱', page: 'app-site-settings', hash: '#gallery', keywords: '相簿 燈箱 gallery lightbox 動畫' },
   { label: '立即執行維護', page: 'app-maintenance', hash: '#jobs', keywords: '維護 清理 索引 一致性 maintenance 備份 backup' },
   { label: '儲存空間', page: 'app-system', hash: '#storage', keywords: '儲存 空間 磁碟 storage disk' },
+  { label: '儲存空間上限', page: 'app-system', hash: '#storage', keywords: '上限 配額 容量 quota limit storage' },
 ]
 const admin = computed<Command[]>(() => {
   const groups = groupsFor(session.canEdit, session.isAdmin)

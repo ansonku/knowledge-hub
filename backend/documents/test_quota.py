@@ -46,6 +46,7 @@ class StorageLimitTests(ImageFixture):
         self.assertEqual(response.status_code, 413)
         self.assertIn("儲存空間已達上限", response.json()["file"])
         self.assertIn("請聯絡管理員", response.json()["file"])
+        self.assertEqual(set(response.json()), {"file"})  # nothing else would be shown
         response = self.client.post(f"/api/documents/{self.doc}/versions/", {"file": SimpleUploadedFile("doc.md", b"# v2\n" + b"y" * 200)})
         self.assertEqual(response.status_code, 413)
         self.assertEqual(self.upload(picture(size=(40, 30))).status_code, 413)

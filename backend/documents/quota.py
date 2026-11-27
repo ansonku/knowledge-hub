@@ -96,7 +96,8 @@ def check_space(incoming):
     found = disk()
     if found and found["free_bytes"] - incoming < settings.UPLOAD_MIN_FREE_BYTES:
         logger.error("Upload refused: less than %d bytes of disk space would remain.", settings.UPLOAD_MIN_FREE_BYTES)
-        raise StorageFull({"file": "伺服器磁碟空間不足，暫時無法上傳。請通知管理員清理空間。", "reason": "disk"})
+        # Only the message: DRF turns every value of an error body into text, and the frontend shows all of it.
+        raise StorageFull({"file": "伺服器磁碟空間不足，暫時無法上傳。請通知管理員清理空間。"})
     limit = SiteSettings.current().storage_limit
     if not limit:
         return
@@ -105,7 +106,6 @@ def check_space(incoming):
         logger.warning("Upload refused: storage limit %d reached (used %d, incoming %d).", limit, used, incoming)
         raise StorageFull({
             "file": f"儲存空間已達上限（已用 {size_label(used)}／上限 {size_label(limit)}），請聯絡管理員。",
-            "reason": "limit", "used": used, "limit": limit,
         })
 
 
