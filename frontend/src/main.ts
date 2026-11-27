@@ -66,6 +66,7 @@ const router = createRouter({
             { path: 'system/', name: 'app-system', component: () => import('./app/admin/SystemPage.vue') },
             { path: 'site/', name: 'app-site-settings', component: () => import('./app/admin/SiteSettingsPage.vue') },
             { path: 'maintenance/', name: 'app-maintenance', component: () => import('./app/admin/MaintenancePage.vue') },
+            { path: 'about/', name: 'app-about', component: () => import('./app/admin/AboutPage.vue') },
             { path: 'audit/', name: 'app-audit', component: () => import('./app/admin/AuditPage.vue') },
             { path: 'members/', name: 'app-members', component: () => import('./app/admin/MembersPage.vue') },
             { path: 'members/:id/', name: 'app-member', component: () => import('./app/admin/MemberPage.vue') },

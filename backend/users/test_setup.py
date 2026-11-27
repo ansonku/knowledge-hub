@@ -216,3 +216,37 @@ class CommandTests(SetupTestCase):
         self.assertEqual(late.status_code, 410)
         self.assertEqual(User.objects.filter(role=User.Role.ADMIN).count(), 1)
 
+
+
+class OnboardingTests(SetupTestCase):
+    """P24c: the About page and the getting-started card."""
+
+    def test_about_lists_who_accepted_which_terms(self):
+        self.open()
+        self.post("/api/setup/verify", {})
+        self.post("/api/setup/complete", admin_form())
+        found = self.client.get("/api/admin/about/").json()
+        self.assertEqual(found["developer"]["github"], "https://github.com/ansonku/knowledge-hub")
+        self.assertEqual(found["license"], "")
+        self.assertEqual(found["accepted"][0]["by"], "Taiwan")
+        self.assertEqual((found["accepted"][0]["via"], found["accepted"][0]["terms_version"]), ("setup", about.TERMS_VERSION))
+
+    def test_getting_started_follows_the_data(self):
+        self.open()
+        self.post("/api/setup/verify", {})
+        self.post("/api/setup/complete", admin_form())
+        found = self.client.get("/api/admin/getting-started/").json()
+        self.assertEqual(found["tasks"], {"admin": True, "members": False, "collections": False, "documents": False, "mfa": False})
+        self.assertEqual((found["done"], found["total"]), (1, 5))
+        from documents.models import Category
+        Category.objects.create(name="操作指南")
+        User.objects.create_user("reader", "reader@example.test")
+        found = self.client.get("/api/admin/getting-started/").json()
+        self.assertTrue(found["tasks"]["collections"] and found["tasks"]["members"])
+        self.assertEqual(found["done"], 3)
+
+    def test_only_admins(self):
+        editor = User.objects.create_user("editor", "editor@example.test", role=User.Role.EDITOR)
+        self.client.force_login(editor)
+        self.assertEqual(self.client.get("/api/admin/about/").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/getting-started/").status_code, 403)

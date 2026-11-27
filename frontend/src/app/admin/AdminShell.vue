@@ -2,6 +2,7 @@
 // P19 (E2＋): the frame of every management page — a two-row menu (groups, then the group's pages) that
 // sticks to the top while scrolling, with marks where something needs attention. The page renders below.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import GettingStarted from './GettingStarted.vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAttention } from '../../stores/attention'
 import { useSession } from '../../stores/session'
@@ -97,6 +98,7 @@ onBeforeUnmount(() => {
         </RouterLink>
       </nav>
     </div>
+    <GettingStarted v-if="session.isAdmin" />
     <RouterView />
   </div>
 </template>

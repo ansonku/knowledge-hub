@@ -18,6 +18,7 @@ export const ADMIN_GROUPS: AdminGroup[] = [
     { name: 'app-system', label: '系統狀態', icon: 'alert', admin: true },
     { name: 'app-site-settings', label: '網站設定', icon: 'globe', admin: true },
     { name: 'app-maintenance', label: '維護與備份', icon: 'history', admin: true },
+    { name: 'app-about', label: '關於', icon: 'info', admin: true },
   ] },
 ]
 

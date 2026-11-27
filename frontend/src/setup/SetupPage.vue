@@ -5,6 +5,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { errorMessage } from '../api'
 import { useTheme } from '../stores/theme'
+import DeveloperCard from './DeveloperCard.vue'
 import {
   complete, isApiError, loadStatus, passwordRules, sizeText, strength, verify,
   type About, type AdminForm, type Checks, type SiteForm,
@@ -247,8 +248,6 @@ const checkRows = computed<CheckRow[]>(() => {
 })
 const readyCount = computed(() => checkRows.value.filter(row => row.ok).length)
 
-const initials = computed(() => (about.value?.developer.name ?? '').replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase() || 'KH')
-const githubLabel = computed(() => about.value?.developer.github.replace(/^https?:\/\//, '') ?? '')
 const FEATURES = [
   ['doc', '文件與版本', '上傳或直接撰寫 Markdown，每次儲存都保留版本，可比較與還原。'],
   ['shield', '安全的 HTML 閱讀', '互動式 HTML 在隔離沙箱中顯示，不影響網站本身。'],
@@ -348,29 +347,7 @@ const STRENGTH = ['', '太弱', '普通', '不錯', '很強']
               <template v-else-if="current === 'license'">
                 <div class="head"><h1 :id="`step-${current}`" ref="heading" tabindex="-1">授權與開發者</h1>
                   <p class="sub">請確認開發者資訊並閱讀授權條款。這些內容之後也可以在管理中心的「關於」頁查看。</p></div>
-                <div class="dev">
-                  <div class="avatar" aria-hidden="true">{{ initials }}</div>
-                  <div>
-                    <div class="dev-name">{{ about.developer.name }}</div>
-                    <div class="dev-role">開發與維護 Knowledge Hub</div>
-                    <div class="dev-links">
-                      <span><span v-html="svg('mail', 15)" />{{ about.developer.email }}</span>
-                      <span><span v-html="svg('code', 15)" /><a :href="about.developer.github" target="_blank" rel="noopener">{{ githubLabel }}</a></span>
-                    </div>
-                    <div class="badges">
-                      <span class="badge">版本 <b>v{{ about.version }}</b></span>
-                      <span class="badge">授權 <b>{{ about.license || '待定' }}</b></span>
-                      <span class="badge">© <b>{{ about.copyright }}</b></span>
-                    </div>
-                    <div class="support-row">
-                      <a v-if="about.support.github_sponsors" class="support-btn heart" :href="about.support.github_sponsors" target="_blank" rel="noopener"><span v-html="svg('heart', 15)" />GitHub Sponsors</a>
-                      <span v-else class="support-btn heart soon" aria-disabled="true"><span v-html="svg('heart', 15)" />GitHub Sponsors<em>即將開放</em></span>
-                      <a v-if="about.support.buy_me_a_coffee" class="support-btn coffee" :href="about.support.buy_me_a_coffee" target="_blank" rel="noopener"><span v-html="svg('cup', 15)" />請我喝杯咖啡</a>
-                      <span v-else class="support-btn coffee soon" aria-disabled="true"><span v-html="svg('cup', 15)" />請我喝杯咖啡<em>即將開放</em></span>
-                      <a class="support-btn" :href="about.developer.github" target="_blank" rel="noopener"><span v-html="svg('star', 15)" />在 GitHub 加星號</a>
-                    </div>
-                  </div>
-                </div>
+                <DeveloperCard :about="about" />
                 <div class="license">
                   <div class="license-head"><strong>使用說明與授權條款</strong><span>條款版本 {{ about.terms_version }}</span></div>
                   <div class="license-body" tabindex="0" aria-label="使用說明與授權條款全文">
@@ -511,7 +488,7 @@ const STRENGTH = ['', '太弱', '普通', '不錯', '很強']
 .panel-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; font-size: .8rem; font-weight: 600; text-decoration: none; color: var(--panel-ink); background: rgb(255 255 255 / .08); border: 1px solid rgb(255 255 255 / .14); }
 .panel-btn:hover:not(.soon) { background: rgb(255 255 255 / .14); }
 .panel-btn.heart :deep(svg) { color: #ff8fa3; }
-.panel-btn.coffee :deep(svg), .support-btn.coffee :deep(svg) { color: #e2a63b; }
+.panel-btn.coffee :deep(svg) { color: #e2a63b; }
 .panel-foot { margin-top: auto; display: grid; gap: 4px; font-size: .76rem; color: var(--panel-dim); }
 .soon { cursor: default; opacity: .75; }
 .soon em { font-style: normal; font-size: .68rem; font-weight: 600; padding: 0 6px; margin-left: 2px; border-radius: 999px; background: rgb(255 255 255 / .12); }
@@ -548,22 +525,6 @@ h1:focus { outline: none; }
 .features strong { display: block; font-size: .92rem; }
 .features span { color: var(--ui-text-secondary); font-size: .84rem; }
 
-.dev { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 18px; align-items: center; padding: 20px; border: 1px solid var(--ui-border); border-radius: 16px; background: linear-gradient(135deg, var(--ui-accent-soft), transparent 70%); }
-.avatar { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: linear-gradient(145deg, #4f7bff, #1e4fd8); color: #fff; font-weight: 700; font-size: 1.3rem; }
-.dev-name { font-size: 1.1rem; font-weight: 700; }
-.dev-role { color: var(--ui-text-muted); font-size: .82rem; }
-.dev-links { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: .84rem; }
-.dev-links > span { display: inline-flex; align-items: center; gap: 6px; color: var(--ui-text-secondary); min-width: 0; overflow-wrap: anywhere; }
-.dev-links a { color: var(--ui-accent); text-decoration: none; }
-.dev-links a:hover { text-decoration: underline; }
-.badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: .76rem; font-weight: 600; background: var(--ui-bg-surface); border: 1px solid var(--ui-border); color: var(--ui-text-secondary); }
-.badge b { color: var(--ui-text); }
-.support-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.support-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--ui-border); background: var(--ui-bg-surface); color: var(--ui-text); font-size: .8rem; font-weight: 600; text-decoration: none; }
-.support-btn:hover:not(.soon) { border-color: var(--ui-accent); }
-.support-btn.heart :deep(svg) { color: #e0436b; }
-.support-btn.soon em { background: var(--ui-bg-muted); color: var(--ui-text-muted); }
 .license { border: 1px solid var(--ui-border); border-radius: 14px; overflow: hidden; }
 .license-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--ui-border-subtle); }
 .license-head strong { font-size: .92rem; }
@@ -647,7 +608,6 @@ button:focus-visible, a:focus-visible, .license-body:focus-visible, .agree input
 @media (max-width: 640px) {
   .section { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .features { grid-template-columns: minmax(0, 1fr); }
-  .dev { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   .card-body { padding: 22px 18px; }
