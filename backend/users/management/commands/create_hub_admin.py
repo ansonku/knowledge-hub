@@ -8,6 +8,7 @@ from django.db import connection, IntegrityError, transaction
 
 from users.lifecycle import audit
 from users.models import User
+from users.setup import close_setup
 
 
 class Command(BaseCommand):
@@ -38,7 +39,8 @@ class Command(BaseCommand):
                     raise CommandError("An active administrator already exists.")
                 user.save()
                 EmailAddress.objects.create(user=user, email=user.email, primary=True, verified=True)
-                audit("admin_bootstrapped", user)
+                audit("admin_bootstrapped", user, via="command")
+                close_setup()  # P24: the setup wizard and its code are no longer needed
         except IntegrityError as error:
             raise CommandError("Username or email already exists.") from error
         self.stdout.write(self.style.SUCCESS("Administrator created."))

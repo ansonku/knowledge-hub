@@ -45,3 +45,12 @@ class AuditLog(models.Model):
     action = models.CharField(max_length=48)
     metadata = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SetupState(models.Model):
+    """P24: the first-run setup (one row, pk=1), opened by `prepare_setup` while no admin exists.
+
+    The setup code itself lives only in a host-readable file; this keeps its hash."""
+    opened_at = models.DateTimeField(null=True, blank=True)
+    code_hash = models.CharField(max_length=256, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)

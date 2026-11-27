@@ -17,6 +17,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "documents.middleware.SameOriginApiMiddleware",
+    "users.setup.SetupRequiredMiddleware",  # P24: first-run setup
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

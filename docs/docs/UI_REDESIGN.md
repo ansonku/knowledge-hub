@@ -2969,3 +2969,22 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 後端：新增 `FileLimitTests`（5 項）：預設值與成員的 `limits`；Markdown 與 HTML 各自的上限；圖片上限；還原舊版本不受上限影響；範圍檢查、權限、稽核紀錄、回到預設。影片的上限測試改為設定管理員的值。全部 259 項通過，`ruff` 通過。
   - Playwright：新增 `file_limits.py`（22 項）：四類的目前值、數字與拉桿同步、超出範圍自動調整、Cloudflare 提醒出現與消失、對數拉桿方向鍵 1 MB、儲存；Editor 的上傳匣、新版本對話框、編輯器圖片與影片、封面都在送出前顯示訊息且沒有送出請求；伺服器也拒絕；500 px 深色模式；恢復預設值；結束時還原原本的值。
   - 回歸：`dropzone` 8、`images` 21、`versions` 19、`doc_covers` 21、`videos` 27、`storage_limit`（ui）9 項通過，`system` 沒有失敗。
+
+### P24a 首次設定：後端（2026-11-27）
+
+- `users.SetupState`（單列）：時限開始時間、設定碼雜湊（Django 的密碼雜湊）、完成時間。遷移 `users/0003_setup_state`。
+- 啟動指令 `prepare_setup`（容器啟動時在 `migrate` 之後執行）：
+  - 沒有啟用中的管理員：重新開放一小時、產生新的 12 碼設定碼（不含 0/O、1/I，顯示為 `XXXX-XXXX-XXXX`），以權限 600 寫入 `documents/setup-code.txt`（先寫暫存檔再取代），資料庫只存雜湊。記錄只寫出檔案位置與查看指令，不寫出設定碼。
+  - 已有管理員：標記為已完成並刪除殘留的檔案。開發站重建後就是這個情況，行為不變。
+- 是否需要設定：只有「已開放且尚未完成」的列才算。已完成與從未開放（測試、還沒執行過 `prepare_setup` 的舊安裝）在同一個程序中不會再改變，所以記在記憶體中，之後不再查詢；設定期間每個請求查詢一次。
+- 中介層 `SetupRequiredMiddleware`：需要設定時，Django 的頁面（`/`、`/articles/`、`/accounts/…`）導向 `/setup/`，API 回應 503 與 `setup_required`；健康檢查、設定 API、`/setup/` 與靜態檔不受影響。工作區頁面由 nginx 直接提供，P24b 在前端遇到 503 時導向設定頁。
+- API：
+  - `GET /api/setup/`：是否需要設定、時限剩餘秒數、是否需要設定碼、是否已取得許可、設定碼檔案位置、系統說明（`hub/about.py`）與條款、系統檢查（HTTPS、資料庫、文件資料夾可否寫入、磁碟、郵件、Google 登入、MFA 金鑰）。不需要設定時只回應 `{"required": false}`。同時設定 CSRF cookie。
+  - `POST /api/setup/verify`：時限內不需要設定碼；時限過後檢查設定碼（不分大小寫、可省略連字號）。每個來源 10 分鐘內最多錯 5 次，錯誤時回應剩餘次數，超過回應 429。通過後在 session 中給 30 分鐘的設定許可。
+  - `POST /api/setup/complete`：需要許可；檢查條款版本、管理員資料（Django 的欄位與密碼檢查、Email 不可重複）；以與 `create_hub_admin` 相同的資料庫鎖建立管理員（Email 標為已驗證）、套用網站名稱、介紹與儲存空間上限（皆可省略）、寫入稽核紀錄 `admin_bootstrapped`（`via: setup` 與條款版本）、作廢設定碼並刪除檔案、登入；回應下一頁 `/app/admin/`。已完成時回應 410。
+- `create_hub_admin` 保留：成功時同樣作廢設定碼，稽核紀錄加上 `via: command`。
+- `hub/about.py`：版本 1.0.0、開發者（ansonku、ansonku@gmail.com、github.com/ansonku/knowledge-hub）、版權 2026 ansonku、授權（空白，顯示「待定」）、贊助連結（GitHub Sponsors、Buy Me a Coffee，空白時顯示「即將開放」）、條款版本 1；條款全文在 `hub/terms.md`（以 `## ` 分段）。
+- 驗證：
+  - 新增 `users/test_setup.py`（16 項）：沒有設定列時一切照舊；設定碼檔案的格式、權限 600、指令輸出不含設定碼、資料庫只存雜湊；重新啟動產生新設定碼並重新開放；已有管理員時關閉；頁面導向與 API 503、健康檢查不受影響；時限內的狀態；時限內完成（管理員、Email 驗證、登入、稽核紀錄、網站設定、作廢檔案、完成後恢復正常、再次完成回應 410）；網站設定可省略；沒有許可時拒絕；許可 30 分鐘後失效；密碼規則、條款版本與 Email 格式；時限過後需要設定碼、錯誤次數提示、大小寫與連字號；錯 5 次後 429；記錄中沒有設定碼與密碼；`create_hub_admin` 作廢設定碼；兩個瀏覽器同時完成只建立一位管理員。全部 275 項通過，`ruff`、`smoke.sh` 通過。
+  - 開發站重建後：設定列標為已完成、沒有設定碼檔案、`/api/setup/` 回應不需要設定。
+  - 另開一組空資料庫的 Compose 專案（`kmsetuptest`，連接埠 18091）實際跑一次：啟動記錄只有檔案位置、設定碼格式正確且不在記錄中；`/`、`/articles/`、`/accounts/login/` 導向 `/setup/`，API 回應 503；時限內取得許可、完成設定、以新管理員登入；之後恢復正常、設定碼檔案已刪除。結束後只刪除該專案的容器與資料卷。
