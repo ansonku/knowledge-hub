@@ -21,6 +21,7 @@ import { useTheme } from '../stores/theme'
 import { UNCATEGORIZED, useTaxonomy } from '../stores/taxonomy'
 import MetadataDialog from './components/MetadataDialog.vue'
 import UiIcon from './components/UiIcon.vue'
+import { currentPublicArticle, openPublic } from './publicLink'
 import UploadDialog from './components/UploadDialog.vue'
 import { useDocument, type DocumentDetails, type PublicationStatus } from './composables/useDocument'
 import { incomingLinks } from './links'
@@ -415,6 +416,12 @@ const visibility = computed(() => {
     ? { kind: 'lagging', label: `公開 v${published} · 落後 ${behind} 版` }
     : { kind: 'public', label: `公開 v${published}` }
 })
+// The public-site page, for the "在公開站查看" link, the menu and the command palette.
+const publicPath = computed(() => file.value && visibility.value && visibility.value.kind !== 'private' ? `/articles/${file.value.id}/` : null)
+watch([publicPath, () => file.value?.title], () => {
+  currentPublicArticle.value = publicPath.value && file.value ? { id: file.value.id, title: file.value.title } : null
+}, { immediate: true })
+onBeforeUnmount(() => { currentPublicArticle.value = null })
 
 // ---- Favourite and recent views ----------------------------------------------------
 const favoriteBusy = ref(false)
@@ -503,6 +510,7 @@ const asRow = computed<DocumentRow | undefined>(() => file.value as DocumentRow 
 const menuItems = computed<MenuItem[]>(() => {
   if (!file.value) return []
   const items: MenuItem[] = [{ label: historical.value ? `下載 v${historical.value.number}` : '下載原始檔', url: doc.downloadUrl.value }]
+  if (publicPath.value) items.push({ label: '在公開站查看', command: () => openPublic(publicPath.value!) })
   if (session.canEdit) {
     items.push(
       { label: '編輯標題與標籤', command: () => { editing.value = asRow.value } },
@@ -651,9 +659,16 @@ onBeforeUnmount(() => {
             <div class="meta">
               <span class="chip">{{ formatLabel(file.format) }}</span>
               <span class="chip">v{{ shownVersion.number }}</span>
-              <button v-if="visibility" type="button" class="chip status" :class="visibility.kind" @click="openTab('publish')">
+              <button v-if="visibility && session.isAdmin" type="button" class="chip status" :class="visibility.kind" @click="openTab('publish')">
                 <span class="dot" aria-hidden="true" />{{ visibility.label }}
               </button>
+              <span v-else-if="visibility" class="chip status" :class="visibility.kind">
+                <span class="dot" aria-hidden="true" />{{ visibility.label }}
+              </span>
+              <a v-if="publicPath" :href="publicPath" target="_blank" rel="noopener" class="public-link"
+                :title="visibility?.kind === 'lagging' ? '公開站顯示的是已發布的版本，不是目前的版本' : undefined">
+                在公開站查看<UiIcon name="external" :size="13" />
+              </a>
               <span class="byline">{{ versionLine }}</span>
             </div>
             <div v-if="canEdit" class="modes" role="group" aria-label="檢視模式">
@@ -937,4 +952,6 @@ h1 { margin: 0 0 var(--ui-space-3); font-size: var(--ui-text-title); line-height
   .topbar { position: static; padding-inline: var(--ui-space-4); }
   .editor-bar { scroll-margin-top: var(--ui-space-3); }
 }
+.public-link { display: inline-flex; align-items: center; gap: .25rem; color: var(--ui-accent); font-size: var(--ui-text-sm); font-weight: 600; text-decoration: none; }
+.public-link:hover { text-decoration: underline; }
 </style>

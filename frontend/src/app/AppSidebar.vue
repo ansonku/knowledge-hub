@@ -111,6 +111,14 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
         :aria-current="isActive(item.name) ? 'page' : undefined" @click="emit('navigate')">
         <UiIcon :name="item.icon" :size="17" /><span class="label">{{ item.label }}</span>
       </RouterLink>
+      <!-- Up here so they need no scrolling past the collections. -->
+      <a href="/read/" class="item">
+        <UiIcon name="book" :size="17" /><span class="label">閱讀入口</span>
+      </a>
+      <!-- A quick look at what visitors see; a new tab keeps the work in progress. -->
+      <a href="/articles/" target="_blank" rel="noopener" class="item" aria-label="公開站（在新分頁開啟）">
+        <UiIcon name="globe" :size="17" /><span class="label">公開站</span><UiIcon name="external" :size="13" class="external" />
+      </a>
     </div>
 
     <div class="group">
@@ -157,9 +165,6 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
         <UiIcon :name="item.icon" :size="17" /><span class="label">{{ item.label }}</span>
         <span v-if="item.badge" class="badge" :class="item.tone">{{ item.badge }}</span>
       </RouterLink>
-      <a href="/read/" class="item">
-        <UiIcon name="book" :size="17" /><span class="label">閱讀入口</span>
-      </a>
       <!-- P19 (E2＋): one entry; the management area has its own menu at the top. -->
       <RouterLink v-if="adminTarget" :to="{ name: adminTarget }" class="item" :class="{ active: onAdminPage }"
         :aria-current="onAdminPage ? 'page' : undefined" @click="emit('navigate')">
@@ -236,4 +241,5 @@ const markOf = (name: string) => Array.from(name)[0]?.toUpperCase() ?? '?'
 .account-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .account-name { color: var(--ui-text); font-weight: 600; font-size: .84375rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-role { font-size: var(--ui-text-xs); }
+.item .external { margin-left: auto; opacity: .55; }
 </style>
