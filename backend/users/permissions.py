@@ -22,6 +22,11 @@ def mfa_required_for(user):
     return not Authenticator.objects.filter(user=user, type=Authenticator.Type.TOTP).exists()
 
 
+def acts_as_admin(user):
+    """A yes/no check (never raises): an admin who may use admin features right now."""
+    return has_role(user, User.Role.ADMIN) and not mfa_required_for(user)
+
+
 def ensure_admin_mfa(user):
     """Raise 403 with mfa_required for an admin without two-factor while the site requires it."""
     if mfa_required_for(user):

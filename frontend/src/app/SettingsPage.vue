@@ -57,6 +57,13 @@ const security = [
   { title: 'Google 帳號', text: '綁定 Google 帳號後，可以用 Google 登入。需要再次驗證身分。', href: '/accounts/3rdparty/', action: '管理綁定' },
 ]
 
+// P25c: the two-factor row says whether it is on and how many recovery codes are left.
+const mfaText = computed(() => {
+  const mfa = session.mfa
+  if (!mfa?.enabled) return mfa?.required ? '這個網站要求管理員開啟雙因素驗證，開啟後才能使用管理中心。' : '登入時除了密碼，還要輸入驗證器 App 上的 6 位數驗證碼。'
+  return `登入時需要驗證器 App 上的驗證碼。還有 ${mfa.recovery_codes ?? 0} 組復原碼可用${(mfa.recovery_codes ?? 0) <= 3 ? '，建議重新產生' : ''}。`
+})
+
 onMounted(() => site.setTitle('個人設定'))
 </script>
 
@@ -117,8 +124,10 @@ onMounted(() => site.setTitle('個人設定'))
       <ul class="rows">
         <li v-for="item in security" :key="item.href" class="row">
           <div class="row-text">
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.text }}</span>
+            <strong>{{ item.title }}
+              <span v-if="item.href === '/accounts/2fa/' && session.mfa" class="mfa-chip" :class="session.mfa.enabled ? 'on' : 'off'">{{ session.mfa.enabled ? '已啟用' : '未啟用' }}</span>
+            </strong>
+            <span>{{ item.href === '/accounts/2fa/' ? mfaText : item.text }}</span>
           </div>
           <a :href="item.href" class="row-action">{{ item.action }}<UiIcon name="chevronRight" :size="16" /></a>
         </li>
@@ -185,4 +194,8 @@ h2 { margin: 0; font-size: 1rem; font-weight: 600; }
   .facts div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .modes { grid-template-columns: minmax(0, 1fr); }
 }
+.mfa-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: var(--ui-space-2); padding: 1px 8px; border-radius: var(--ui-radius-pill); font-size: var(--ui-text-xs); font-weight: 700; vertical-align: middle; }
+.mfa-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.mfa-chip.on { background: var(--ui-public-bg); color: var(--ui-public-text); }
+.mfa-chip.off { background: var(--ui-bg-muted); color: var(--ui-text-muted); }
 </style>

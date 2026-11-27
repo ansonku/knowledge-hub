@@ -4,6 +4,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { api } from '../../api'
+import { activateUrl } from '../../mfaGate'
 import { useSession } from '../../stores/session'
 import UiIcon from '../components/UiIcon.vue'
 
@@ -27,7 +28,7 @@ const ITEMS: { key: keyof Tasks; title: string; text: string; action?: string; t
   { key: 'members', title: '邀請成員', text: '寄出邀請，指定 Editor 或 Viewer。', action: '前往成員管理', to: 'app-members' },
   { key: 'collections', title: '建立集合', text: '先規劃分類，例如操作指南、規格書。', action: '新增集合', to: 'app-taxonomy' },
   { key: 'documents', title: '上傳第一份文件', text: '拖入 .md、.html，或直接新增 Markdown。', action: '前往全部文件', to: 'app-library' },
-  { key: 'mfa', title: '開啟雙因素驗證', text: '為管理員帳號多加一層保護。', action: '設定雙因素驗證', href: '/accounts/2fa/' },
+  { key: 'mfa', title: '開啟雙因素驗證', text: '為管理員帳號多加一層保護。', action: '設定雙因素驗證', href: activateUrl('/app/admin/') },
 ]
 const done = computed(() => tasks.value ? ITEMS.filter(item => tasks.value![item.key]).length : 0)
 // Only a new site gets the card: once members, collections and documents exist it stays away, even without

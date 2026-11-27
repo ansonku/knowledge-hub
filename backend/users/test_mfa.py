@@ -158,6 +158,16 @@ class RequiredForAdminsTests(MfaTestCase):
         self.assertEqual(merged.status_code, 403, merged.content)
         self.assertTrue(merged.json().get("mfa_required"), merged.content)
 
+    def test_public_reads_still_work_for_a_held_back_admin(self):
+        """Found by the browser test: GET /api/site/ (public) used IsAdmin as a yes/no check and answered 403."""
+        self.require()
+        client = Client()
+        client.force_login(self.admin)
+        site = client.get("/api/site/")
+        self.assertEqual(site.status_code, 200)
+        self.assertIn("name", site.json())
+        self.assertNotIn("notice_settings", site.json())
+
     def test_with_two_factor_or_when_off_admins_carry_on(self):
         self.require()
         self.enable(self.admin)
