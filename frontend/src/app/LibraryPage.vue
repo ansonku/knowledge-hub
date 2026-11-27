@@ -100,7 +100,6 @@ function clearFilters() {
 const rows = ref<Row[]>([])
 const count = ref(0)
 const pageSize = ref(25)
-const limits = ref({ ...session.limits })
 const loading = ref(true)
 const error = ref('')
 let request = 0
@@ -125,7 +124,7 @@ async function load() {
     selected.value = selected.value.filter(id => data.results.some(row => row.id === id))
     count.value = data.count
     pageSize.value = data.page_size
-    limits.value = data.limits
+    session.limits = data.limits  // the freshest per-file limits (P23c)
     const lastPage = Math.max(1, Math.ceil(data.count / data.page_size))
     if (page.value > lastPage) setQuery({ page: lastPage }, false)
   } catch (cause) {
@@ -477,7 +476,7 @@ function onSaved() {
     </nav>
 
     <Menu id="row-menu" ref="rowMenu" :model="menuItems" popup />
-    <UploadDialog v-if="versionTarget" v-model:visible="uploadOpen" :target="versionTarget" :max-bytes="limits.bytes" @uploaded="load" />
+    <UploadDialog v-if="versionTarget" v-model:visible="uploadOpen" :target="versionTarget" @uploaded="load" />
     <BulkDialog :action="bulkAction" :ids="selected" @close="bulkAction = undefined" @done="bulkDone" />
     <MetadataDialog :document="editing" @close="editing = undefined" @saved="onSaved" />
     <PublicationDialog v-if="publishing" :id="publishing.id" :format="publishing.format" :csrf="getCsrfToken()"

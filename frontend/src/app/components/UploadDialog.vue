@@ -8,11 +8,13 @@ import ProgressBar from 'primevue/progressbar'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, watch } from 'vue'
 import { ApiError, upload } from '../../api'
+import { documentKind, limitOf, overLimit, sizeLabel } from '../../fileLimits'
+import { useSession } from '../../stores/session'
 import { formatLabel, type DocumentRow, type Format } from '../types'
 import UiIcon from './UiIcon.vue'
 
 const visible = defineModel<boolean>('visible', { required: true })
-const props = defineProps<{ target: DocumentRow; maxBytes: number }>()
+const props = defineProps<{ target: DocumentRow }>()
 const emit = defineEmits<{ uploaded: [count: number] }>()
 
 type Item = {
@@ -30,7 +32,8 @@ const dragging = ref(false)
 const processing = ref(false)
 const chooser = ref<HTMLInputElement>()
 
-const maxMB = computed(() => Math.round(props.maxBytes / (1024 * 1024)))
+const session = useSession()
+const maxBytes = computed(() => limitOf(documentKind(props.target.format), session.limits))
 const ready = computed(() => item.value?.state === 'ready' || (item.value?.state === 'duplicate' && item.value.force))
 
 watch(visible, open => {
@@ -44,10 +47,6 @@ function formatOf(name: string): Format | undefined {
   if (/\.md$/i.test(name)) return 'md'
 }
 
-function sizeLabel(size: number) {
-  return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`
-}
-
 function addFiles(files: FileList | null | undefined) {
   const file = files?.[0]
   if (!file || processing.value) return
@@ -56,7 +55,7 @@ function addFiles(files: FileList | null | undefined) {
   if (!format) message = '只支援 .md 或 .html 檔案。'
   else if (format !== props.target.format) message = `新版本必須維持 ${formatLabel(props.target.format)} 格式。`
   else if (!file.size) message = '空白檔案無法上傳。'
-  else if (file.size > props.maxBytes) message = `超過每檔 ${maxMB.value} MB 上限。`
+  else message = overLimit(documentKind(props.target.format), file.size, session.limits)
   item.value = { file, state: message ? 'invalid' : 'ready', message, progress: 0, force: false }
 }
 
@@ -118,7 +117,7 @@ async function start() {
           將檔案拖曳到這裡，或
           <button type="button" class="link-button" :disabled="processing" @click="chooser?.click()">選擇檔案</button>
         </p>
-        <small>{{ formatLabel(target.format) }} 檔案，上限 {{ maxMB }} MB。</small>
+        <small>{{ formatLabel(target.format) }} 檔案，上限 {{ sizeLabel(maxBytes) }}。</small>
         <input ref="chooser" type="file" accept=".md,.html" hidden @change="choose">
       </div>
 

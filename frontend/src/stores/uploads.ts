@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { overLimit } from '../fileLimits'
 import { computed, ref } from 'vue'
 import { ApiError, upload } from '../api'
 import type { DocumentRow } from '../app/types'
@@ -35,7 +36,8 @@ export const useUploads = defineStore('uploads', () => {
     const session = useSession()
     if (!/\.(md|html)$/i.test(file.name)) return '只支援 .md 或 .html 檔案。'
     if (!file.size) return '空白檔案無法上傳。'
-    if (file.size > session.limits.bytes) return `超過每檔 ${Math.round(session.limits.bytes / 1024 / 1024)} MB 上限。`
+    const tooBig = overLimit(/\.md$/i.test(file.name) ? 'markdown' : 'html', file.size, session.limits)
+    if (tooBig) return tooBig
     return ''
   }
 

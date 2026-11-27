@@ -67,9 +67,9 @@ docker compose exec backend python manage.py create_hub_admin <帳號名稱> <�
 
 登入後開啟 [全部文件](http://localhost:18080/app/library/)。Admin 和 Editor 可管理集合與標籤、上傳 UTF-8 Markdown 或 HTML（可直接把檔案拖進視窗），以及從文件頁或清單列選單更新指定文件的版本。Viewer 可讀取清單與下載原始檔。上傳匣會逐檔上傳，因此其中一檔失敗時，其他檔案仍可成功儲存。每個成功上傳的檔案各自建立一份文件和 v1。
 
-開發環境預設每檔 50 MiB，每批最多 20 檔，可用 `DOCUMENT_MAX_BYTES` 和 `DOCUMENT_MAX_BATCH` 調整。提高單檔上限時，也要同步調整 Nginx 文件路徑的 `client_max_body_size`，並預留 multipart 表單額外大小。
+單一檔案的上限由 Admin 在「管理 › 系統狀態 › 儲存空間」設定（Markdown 1～50 MB、HTML 1～100 MB、圖片 1～30 MB、影片 10 MB～1 GB；預設 50、50、10、200 MB），瀏覽器在送出前檢查，伺服器也會再檢查。Nginx 的 `client_max_body_size` 已涵蓋各類範圍的上端，不需要隨設定調整。每批最多 20 檔，可用 `DOCUMENT_MAX_BATCH` 調整。
 
-文件原始內容存在 Compose 的 `document_data` volume。備份須同時包含這個 volume 和 PostgreSQL 的 `postgres_data`。Markdown 中嵌入的影片也在同一個 volume 的 `videos/` 目錄（單檔上限 200 MB，可用 `VIDEO_MAX_BYTES` 調低；調高時要同步調整 Nginx 影片上傳路徑的 `client_max_body_size`），會讓備份明顯變大。完整的目錄結構、命名規則與清理方式見 [ARCHITECTURE.md 的 File storage](docs/docs/ARCHITECTURE.md#file-storage)。
+文件原始內容存在 Compose 的 `document_data` volume。備份須同時包含這個 volume 和 PostgreSQL 的 `postgres_data`。Markdown 中嵌入的影片也在同一個 volume 的 `videos/` 目錄（單檔上限由 Admin 設定，預設 200 MB、最大 1 GB），會讓備份明顯變大。完整的目錄結構、命名規則與清理方式見 [ARCHITECTURE.md 的 File storage](docs/docs/ARCHITECTURE.md#file-storage)。
 
 影片由 Nginx 送出：Django 檢查權限後回應 `X-Accel-Redirect`，Nginx 從內部路徑 `/_protected/videos/` 送檔並處理 Range，播放器才能拖動進度。Nginx 只以唯讀方式掛載 `document_data` 的 `videos/` 子目錄（Compose 的 volume `subpath`，需要 Docker Compose 2.23 以上）；後端服務啟動時會先建立這個目錄。兩個容器透過 gid 2101 的 `media` 群組共用讀取權限，影片目錄為 `0750`、檔案為 `0640`，其他文件檔案 Nginx 讀不到。HTML 由下載端點以附件提供。文件移入回收桶後會從清單和下載端點隱藏，所有版本仍保留。
 

@@ -9,7 +9,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from . import videos
-from .models import DocumentVideo, VersionVideo
+from .models import DocumentVideo, SiteSettings, VersionVideo
 from .test_images import ImageFixture, picture
 from .videos import VideoUploadThrottle
 
@@ -79,16 +79,18 @@ class VideoTests(VideoFixture):
 
     def test_empty_and_oversized_files_are_refused(self):
         self.assertEqual(self.upload_video(b"").status_code, 400)
-        with override_settings(VIDEO_MAX_BYTES=1000):
+        # P23c: the admin's video limit, in MB; shrink a "megabyte" so the smallest setting (10) is 1000 bytes.
+        SiteSettings.objects.update_or_create(pk=1, defaults={"video_max_mb": 10})
+        with patch("documents.limits.MB", 100):
             response = self.upload_video(mp4())
         self.assertEqual(response.status_code, 400)
-        self.assertIn("MB", str(response.json()))
+        self.assertEqual(response.json()["file"], "影片超過上限 10 MB。")
         self.assertFalse(DocumentVideo.objects.exists())
 
     def test_low_disk_space_refuses_the_upload(self):
-        with override_settings(VIDEO_MIN_FREE_BYTES=10 ** 18), self.assertLogs("documents.videos", "ERROR"):
+        with override_settings(UPLOAD_MIN_FREE_BYTES=10 ** 18), self.assertLogs("documents.quota", "ERROR"):
             response = self.upload_video(mp4())
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 413)
         self.assertIn("磁碟空間不足", str(response.json()))
         self.assertFalse(DocumentVideo.objects.exists())
 

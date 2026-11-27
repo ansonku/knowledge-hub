@@ -1,5 +1,6 @@
 // P19: shared by the three 系統 pages (狀態, 網站設定, 維護與備份).
 import { api, ApiError } from '../../api'
+import type { Limits } from '../../fileLimits'
 import type { MaintenanceRun } from './maintenance'
 
 export type Report = {
@@ -15,7 +16,7 @@ export type Report = {
     unused_images: number; unused_images_bytes: number
     unused_videos: number; unused_videos_bytes: number
   }
-  config: { https: boolean; google_login: boolean; smtp: boolean; mfa_key: boolean; html_preview: boolean; max_upload_bytes: number; max_batch: number }
+  config: { https: boolean; google_login: boolean; smtp: boolean; mfa_key: boolean; html_preview: boolean; file_limits: Limits; max_batch: number }
   warnings: { level: 'info' | 'warning' | 'danger'; key: string; text: string }[]
   maintenance: MaintenanceRun | null
 }

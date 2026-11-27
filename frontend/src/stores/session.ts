@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, isAuthError, setCsrfToken } from '../api'
+import { DEFAULT_LIMITS, type Limits } from '../fileLimits'
 
 export type Role = 'admin' | 'editor' | 'viewer'
 export type Account = {
@@ -10,13 +11,13 @@ export type Account = {
   display_name: string
   role: Role
 }
-export type Limits = { bytes: number; batch: number }
+export type { Limits } from '../fileLimits'
 type MeResponse = Account & { csrf_token: string; limits?: Limits }
 
 // Visibility helpers only; the backend enforces every permission on each request.
 export const useSession = defineStore('session', () => {
   const account = ref<Account>()
-  const limits = ref<Limits>({ bytes: 50 * 1024 * 1024, batch: 20 })
+  const limits = ref<Limits>({ ...DEFAULT_LIMITS })
   const status = ref<'idle' | 'loading' | 'member' | 'guest' | 'error'>('idle')
   let pending: Promise<void> | undefined
 

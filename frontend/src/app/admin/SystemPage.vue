@@ -9,6 +9,7 @@ import { useSession } from '../../stores/session'
 import { useSite } from '../../stores/site'
 import UiIcon, { type IconName } from '../components/UiIcon.vue'
 import { longDateTime, shortDate } from '../types'
+import StorageCard from './StorageCard.vue'
 import { bytes, loadReport, type Report } from './system'
 
 const site = useSite()
@@ -30,10 +31,6 @@ async function load() {
 }
 
 const number = new Intl.NumberFormat('zh-TW')
-const diskUsed = computed(() => {
-  const disk = report.value?.storage.disk
-  return disk ? (disk.total_bytes - disk.free_bytes) / disk.total_bytes : 0
-})
 const severity = (level: Report['warnings'][number]['level']) => level === 'danger' ? 'error' : level === 'warning' ? 'warn' : 'info'
 
 const flags = computed(() => {
@@ -68,6 +65,7 @@ const fixes: Record<string, { to: object; label: string }> = {
   unindexed: { to: { name: 'app-maintenance' }, label: '前往維護與備份' },
   missing_files: { to: { name: 'app-maintenance' }, label: '前往維護與備份' },
   single_admin: { to: { name: 'app-members' }, label: '前往成員管理' },
+  storage_limit: { to: { name: 'app-system', hash: '#storage' }, label: '查看儲存空間' },
 }
 
 onMounted(() => {
@@ -119,26 +117,7 @@ onMounted(() => {
             </li>
           </ul>
         </section>
-        <section id="storage" class="card" aria-labelledby="storage-title">
-          <h2 id="storage-title">儲存空間</h2>
-          <dl class="facts">
-            <div><dt>文件版本檔案</dt><dd>{{ bytes(report.storage.versions_bytes) }}</dd></div>
-            <div><dt>文件中的圖片（{{ report.content.images.toLocaleString() }} 張）</dt><dd>{{ bytes(report.storage.images_bytes) }}</dd></div>
-            <div><dt>文件中的影片（{{ report.content.videos.toLocaleString() }} 支）</dt><dd>{{ bytes(report.storage.videos_bytes) }}</dd></div>
-            <div><dt>資料庫</dt><dd>{{ bytes(report.storage.database_bytes) }}</dd></div>
-          </dl>
-          <div v-if="report.storage.disk" class="disk">
-            <div class="disk-line">
-              <span>磁碟</span>
-              <span>剩餘 {{ bytes(report.storage.disk.free_bytes) }} / 共 {{ bytes(report.storage.disk.total_bytes) }}</span>
-            </div>
-            <div class="meter" role="meter" :aria-valuenow="Math.round(diskUsed * 100)" aria-valuemin="0" aria-valuemax="100" aria-label="磁碟使用率">
-              <span :style="{ width: `${Math.round(diskUsed * 100)}%` }" :class="{ high: diskUsed > .9 }" />
-            </div>
-            <p class="note">已使用 {{ Math.round(diskUsed * 100) }}%。備份須同時包含 PostgreSQL 與文件檔案兩個資料卷。</p>
-          </div>
-          <p v-else class="note">無法讀取磁碟容量。</p>
-        </section>
+        <StorageCard @changed="load" />
         <section id="members" class="card" aria-labelledby="members-title">
           <h2 id="members-title">成員</h2>
           <dl class="facts">
@@ -158,7 +137,9 @@ onMounted(() => {
               <span class="flag-text"><strong>{{ flag.label }}</strong><span>{{ flag.on ? flag.onText : flag.offText }}</span></span>
             </li>
           </ul>
-          <p class="note">上傳上限：每檔 {{ bytes(report.config.max_upload_bytes) }}，每批 {{ report.config.max_batch }} 檔。</p>
+          <p class="note">
+            單一檔案上限：Markdown {{ bytes(report.config.file_limits.markdown_bytes) }}、HTML {{ bytes(report.config.file_limits.html_bytes) }}、圖片 {{ bytes(report.config.file_limits.image_bytes) }}、影片 {{ bytes(report.config.file_limits.video_bytes) }}（在「儲存空間」調整）；每批 {{ report.config.max_batch }} 檔。
+          </p>
         </section>
       </div>
     </template>

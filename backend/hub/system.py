@@ -15,10 +15,11 @@ from django.views.decorators.cache import never_cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from documents import limits
 from documents.images import unused_images
 from documents.videos import unused_videos
 from documents.models import (
-    ArticlePublication, Category, Document, DocumentImage, DocumentVideo, PendingDocumentDeletion, Tag, Version,
+    ArticlePublication, Category, Document, DocumentImage, DocumentVideo, PendingDocumentDeletion, SiteSettings, Tag, Version,
 )
 from users.models import User
 from users.permissions import IsAdmin
@@ -45,6 +46,21 @@ def disk():
     return {"total_bytes": usage.total, "free_bytes": usage.free}
 
 
+def limit_status():
+    """P23: the storage limit, what counts towards it, and how close it is."""
+    from documents import quota
+    limit = SiteSettings.current().storage_limit
+    used = quota.usage()["total"]
+    return {"limit_bytes": limit, "counted_bytes": used, "limit_level": quota.level(used, limit)}
+
+
+STORAGE_NOTES = {
+    "notice": ("warning", "儲存空間已用超過 80%。"),
+    "warning": ("danger", "儲存空間已用超過 90%，接近上限。"),
+    "full": ("danger", "儲存空間已達上限，新的上傳會被拒絕。"),
+}
+
+
 def warnings(report):
     notes = []
     jobs, config, members, storage = report["jobs"], report["config"], report["members"], report["storage"]
@@ -63,6 +79,10 @@ def warnings(report):
                               "並在主機上執行 `check_document_storage` 查看是哪些檔案。"})
     if storage["disk"] and storage["disk"]["free_bytes"] < storage["disk"]["total_bytes"] * LOW_DISK_SHARE:
         notes.append({"level": "danger", "key": "low_disk", "text": "文件儲存空間所在的磁碟剩餘不到 10%。"})
+    if storage.get("limit_level"):
+        tone, text = STORAGE_NOTES[storage["limit_level"]]
+        notes.append({"level": tone, "key": "storage_limit",
+                      "text": f"{text}可以在「儲存空間」查看各類檔案的用量，清空回收桶或刪除不需要的舊版本與影片。"})
     if members["active_admins"] < 2:
         notes.append({"level": "info", "key": "single_admin",
                       "text": "目前只有一位使用中的 Admin。停用帳號、重設雙因素驗證等操作需要另一位 Admin 才能對這位 Admin 執行。"})
@@ -110,6 +130,7 @@ def system_status(request):
             "versions_bytes": versions["bytes"] or 0, "images_bytes": images["bytes"] or 0,
             "videos_bytes": videos["bytes"] or 0,
             "database_bytes": database_size(), "disk": disk(),
+            **limit_status(),
         },
         "members": {
             "total": people["total"], "active": people["active"], "pending": people["pending"], "disabled": people["disabled"],
@@ -132,7 +153,7 @@ def system_status(request):
             "smtp": bool(settings.EMAIL_HOST),
             "mfa_key": bool(settings.MFA_ENCRYPTION_KEY),
             "html_preview": settings.LOCAL_HTML_PREVIEW,
-            "max_upload_bytes": settings.DOCUMENT_MAX_BYTES,
+            "file_limits": limits.for_members(),
             "max_batch": settings.DOCUMENT_MAX_BATCH,
         },
     }

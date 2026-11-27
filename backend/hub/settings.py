@@ -144,12 +144,10 @@ EMAIL_FILE_PATH = "/tmp/hub-mail"
 MFA_ENCRYPTION_KEY = os.getenv("MFA_ENCRYPTION_KEY")
 
 DOCUMENT_STORAGE = os.getenv("DOCUMENT_STORAGE", "/var/lib/knowledge-hub/documents")
-DOCUMENT_MAX_BYTES = int(os.getenv("DOCUMENT_MAX_BYTES") or 50 * 1024 * 1024)
 DOCUMENT_MAX_BATCH = int(os.getenv("DOCUMENT_MAX_BATCH") or 20)
+# P23: every upload (not only videos) keeps this much of the disk free. Per-file limits are admin settings (P23c).
+UPLOAD_MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 # Videos embedded in Markdown (P10). nginx serves them from DOCUMENT_STORAGE/videos/ after Django checks access;
-# keep VIDEO_MAX_BYTES below the nginx client_max_body_size of the video upload location.
-VIDEO_MAX_BYTES = int(os.getenv("VIDEO_MAX_BYTES") or 200 * 1024 * 1024)
-VIDEO_MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 VIDEO_ACCEL_PREFIX = "/_protected/videos/"
 
 LOCAL_HTML_PREVIEW = os.getenv("LOCAL_HTML_PREVIEW", "false").lower() == "true"
