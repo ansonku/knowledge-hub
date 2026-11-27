@@ -10,6 +10,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { useConfirm } from 'primevue/useconfirm'
 import { useSession } from '../../stores/session'
 import UiIcon from '../components/UiIcon.vue'
+import SecurityCard from './SecurityCard.vue'
 import { SPEED_FACTORS, useSite, type GallerySettings, type NoticeLevel, type NoticeSettings } from '../../stores/site'
 import { GALLERY_LAYOUTS, LAYOUT_LABELS } from '../../gallery'
 
@@ -206,7 +207,7 @@ onMounted(() => {
     <header class="page-head">
       <div>
         <h1>網站設定</h1>
-        <p class="subtitle" aria-live="polite">站名與介紹、公告橫幅、相簿與燈箱。會影響工作區、閱讀入口與公開站。</p>
+        <p class="subtitle" aria-live="polite">站名與介紹、公告橫幅、相簿與燈箱、帳號安全。會影響工作區、閱讀入口與公開站。</p>
       </div>
     </header>
 
@@ -340,6 +341,7 @@ onMounted(() => {
             </div>
           </form>
         </section>
+        <SecurityCard />
     </div>
   </div>
 </template>

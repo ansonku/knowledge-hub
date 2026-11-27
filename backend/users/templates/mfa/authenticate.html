@@ -1,20 +1,23 @@
 {% extends "allauth/layouts/credentials.html" %}
-{% block head_title %}雙因素驗證 · {{ site_name }}{% endblock %}
+{% block head_title %}輸入驗證碼 · {{ site_name }}{% endblock %}
+{% block extra_head %}<script src="/assets/account-mfa.js" defer></script>{% endblock %}
 {% block content %}
-<section class="login-card" aria-labelledby="mfa-title">
-  <h1 id="mfa-title">雙因素驗證</h1>
-  <p class="login-description">輸入驗證器上的動態密碼，或輸入一組尚未使用的復原碼。</p>
-  <form class="login-form" method="post">
+<section class="login-card mfa" aria-labelledby="mfa-title">
+  <div class="head center"><span style="color:var(--accent)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></span><h1 id="mfa-title">輸入驗證碼</h1>
+    <p class="login-description">打開手機上的驗證器 App，輸入 {{ site_name }} 的 6 位數驗證碼。</p></div>
+  <form class="login-form mfa" method="post">
     {% csrf_token %}
-    {% if form.non_field_errors %}
-      <div class="login-errors" role="alert">{{ form.non_field_errors }}</div>
-    {% endif %}
-    <div class="login-field">
-      <label for="{{ form.code.id_for_label }}">驗證碼或復原碼</label>
-      {{ form.code }}
-      {{ form.code.errors }}
+    {% if form.non_field_errors %}<div class="login-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="field center"><span class="label" id="code-label">驗證碼</span>
+      <input type="text" id="code-input" name="code" autocomplete="one-time-code" maxlength="20" required aria-labelledby="code-label" placeholder="驗證碼或復原碼">
+      <div class="otp" data-target="code-input" role="group" aria-labelledby="code-label" hidden><input inputmode="numeric" maxlength="1" aria-label="第 1 碼" autocomplete="one-time-code"><input inputmode="numeric" maxlength="1" aria-label="第 2 碼"><input inputmode="numeric" maxlength="1" aria-label="第 3 碼"><span class="gap"></span><input inputmode="numeric" maxlength="1" aria-label="第 4 碼"><input inputmode="numeric" maxlength="1" aria-label="第 5 碼"><input inputmode="numeric" maxlength="1" aria-label="第 6 碼"></div>
+      <div class="field" data-recovery-field hidden><label for="recovery-input">復原碼</label>
+        <input type="text" id="recovery-input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 7Q4M-2KXD"></div>
+      {% if form.code.errors %}<div class="errorlist" role="alert">{% for error in form.code.errors %}{{ error }}{% endfor %}</div>{% endif %}
     </div>
+    <label class="agree"><input type="checkbox" name="trust"> 在這台裝置上 10 天內不再詢問</label>
     <button type="submit" class="login-action">驗證並登入</button>
+    <button type="button" class="linkish" data-use-recovery data-label="手機不在身邊？改用復原碼" data-back="改用驗證器 App 的驗證碼" hidden>手機不在身邊？改用復原碼</button>
   </form>
 </section>
 {% endblock %}

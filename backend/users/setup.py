@@ -293,6 +293,7 @@ def setup_complete(request):
             user.save()
             EmailAddress.objects.create(user=user, email=user.email, primary=True, verified=True)
             apply_site(data.get("site") or {}, user)
+            require_admin_mfa(user)
             audit("admin_bootstrapped", user, actor=user, via="setup", terms_version=about.TERMS_VERSION)
             close_setup()
     except IntegrityError:
@@ -301,6 +302,12 @@ def setup_complete(request):
     request.session.pop(SESSION_KEY, None)
     logger.info("First-run setup completed; administrator %s created.", user.pk)
     return Response({"done": True, "next": "/app/admin/"}, status=status.HTTP_201_CREATED)
+
+
+def require_admin_mfa(user):
+    """P25: a site made by the wizard asks its admins to use two-factor from the start."""
+    from documents.models import SiteSettings
+    SiteSettings.objects.update_or_create(pk=1, defaults={"require_admin_mfa": True, "updated_by": user})
 
 
 def apply_site(site, user):

@@ -1,0 +1,30 @@
+{% extends "allauth/layouts/base.html" %}
+{% load hub_account %}
+{% block head_title %}雙因素驗證 · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="mfa" aria-labelledby="mfa-title">
+  <div class="head">
+    <h1 id="mfa-title">雙因素驗證</h1>
+    {% if authenticators.totp %}<p>登入時需要密碼和驗證器 App 上的 6 位數驗證碼。</p>
+    {% else %}<p>登入時除了密碼，還要輸入手機驗證器 App 產生的 6 位數驗證碼。就算密碼外洩，別人也無法登入。</p>{% endif %}
+  </div>
+  {% if admin_required %}<div class="callout info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/></svg><span>這個網站要求管理員開啟雙因素驗證，完成後才能使用管理中心。</span></div>{% endif %}
+  {% if authenticators.totp %}
+    <div class="status on"><span class="shield"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></span><div><strong>已啟用 <span class="chip on">保護中</span></strong>
+      <p class="muted">{{ authenticators.totp.created_at|date:"Y/m/d" }} 啟用{% if authenticators.totp.last_used_at %} · 上次使用驗證碼：{{ authenticators.totp.last_used_at|date:"Y/m/d H:i" }}{% endif %}</p></div></div>
+    <div class="rows">
+      <div class="row"><div><strong>驗證器 App</strong><span class="text">換新手機時，先停用再重新啟用，用新手機掃描。</span></div><span class="chip on">已連結</span></div>
+      <div class="row"><div><strong>復原碼 <span class="dots" aria-label="還有 {{ recovery_left }} 組">{% for i in "0123456789" %}<i{% if forloop.counter > recovery_left %} class="used"{% endif %}></i>{% endfor %}</span></strong>
+        <span class="text">還有 {{ recovery_left }} 組可用（共 {{ recovery_total }} 組）。{% if recovery_left <= 3 %}剩下不多，建議重新產生。{% else %}手機不在身邊時可以用復原碼登入。{% endif %}</span></div>
+        <a class="button secondary" href="{% url 'mfa_regenerate_recovery' %}">重新產生</a></div>
+    </div>
+    <div class="danger-zone"><div><strong>停用雙因素驗證</strong><span>停用後，只要密碼就能登入這個帳號。</span></div>
+      <a class="button danger-outline" href="{% url 'mfa_deactivate_totp' %}">停用</a></div>
+  {% else %}
+    <div class="status off"><span class="shield"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span><div><strong>尚未啟用</strong><p class="muted">目前只用密碼保護這個帳號。</p></div></div>
+    <div class="field"><p class="muted">可以使用任何支援 TOTP 的驗證器 App：</p>
+      <div class="apps"><span>Google Authenticator</span><span>Microsoft Authenticator</span><span>1Password</span><span>Bitwarden</span><span>Authy</span></div></div>
+    <a class="button block" href="{% url 'mfa_activate_totp' %}">開始設定</a>
+  {% endif %}
+</section>
+{% endblock %}

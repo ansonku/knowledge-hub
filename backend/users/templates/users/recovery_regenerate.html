@@ -1,0 +1,12 @@
+{% extends "allauth/layouts/base.html" %}
+{% block head_title %}重新產生復原碼 · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="mfa" aria-labelledby="regen-title">
+  <div class="head"><h1 id="regen-title">重新產生復原碼</h1><p>會產生一組新的 10 組復原碼。目前還有 {{ left }} 組可用。</p></div>
+  <div class="callout warn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/></svg><span>產生後，目前的 {{ left }} 組復原碼會立刻失效。</span></div>
+  <form method="post" action="{% url 'mfa_regenerate_recovery' %}">
+    {% csrf_token %}
+    <div class="actions"><a class="button secondary left" href="{% url 'mfa_index' %}">取消</a><button type="submit">產生新的復原碼</button></div>
+  </form>
+</section>
+{% endblock %}

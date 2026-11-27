@@ -12,12 +12,15 @@ export type Account = {
   role: Role
 }
 export type { Limits } from '../fileLimits'
-type MeResponse = Account & { csrf_token: string; limits?: Limits }
+/** P25: two-factor state (never secrets); `required` = an admin held back by the site's setting. */
+export type MfaStatus = { enabled: boolean; recovery_codes: number | null; required: boolean }
+type MeResponse = Account & { csrf_token: string; limits?: Limits; mfa?: MfaStatus }
 
 // Visibility helpers only; the backend enforces every permission on each request.
 export const useSession = defineStore('session', () => {
   const account = ref<Account>()
   const limits = ref<Limits>({ ...DEFAULT_LIMITS })
+  const mfa = ref<MfaStatus>()
   const status = ref<'idle' | 'loading' | 'member' | 'guest' | 'error'>('idle')
   let pending: Promise<void> | undefined
 
@@ -30,9 +33,10 @@ export const useSession = defineStore('session', () => {
     if (pending && !force) return pending
     status.value = 'loading'
     pending = api<MeResponse>('/api/auth/me')
-      .then(({ csrf_token, limits: serverLimits, ...me }) => {
+      .then(({ csrf_token, limits: serverLimits, mfa: mfaStatus, ...me }) => {
         setCsrfToken(csrf_token)
         if (serverLimits) limits.value = serverLimits
+        mfa.value = mfaStatus
         account.value = me
         status.value = 'member'
       })
@@ -44,5 +48,5 @@ export const useSession = defineStore('session', () => {
     return pending
   }
 
-  return { account, limits, status, role, isAdmin, canEdit, displayName, load }
+  return { account, limits, mfa, status, role, isAdmin, canEdit, displayName, load }
 })

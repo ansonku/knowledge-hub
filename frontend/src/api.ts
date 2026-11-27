@@ -1,5 +1,6 @@
 // Shared HTTP helpers for the redesigned workspace (/app/).
 // Legacy pages keep their own copies until they are removed in P4.
+import { noteMfaRequired } from './mfaGate'
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string, readonly body?: unknown) {
@@ -48,6 +49,7 @@ export async function api<T = unknown>(url: string, method: Method = 'GET', data
   if (response.status === 204) return undefined as T
   const body = await response.json().catch(() => null)
   followSetup(response.status, body)
+  noteMfaRequired(response.status, body)  // P25c
   if (!response.ok) throw new ApiError(response.status, errorMessage(body) || '無法完成操作。', body)
   return body as T
 }

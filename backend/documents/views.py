@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from users.lifecycle import audit
 from users.models import User
-from users.permissions import CanReadLibrary, IsAdmin
+from users.permissions import CanReadLibrary, IsAdmin, acts_as_admin
 
 from . import limits, search, services, storage, trash
 from .models import (
@@ -524,7 +524,8 @@ def gallery_payload(site):
 def site_payload(site, request=None):
     # The gallery settings are public: the public site's lightbox and galleries follow them too.
     payload = {"name": site.name, "tagline": site.tagline, "notice": site.active_notice(), "gallery": gallery_payload(site)}
-    if request is not None and IsAdmin().has_permission(request, None):
+    # A yes/no check: IsAdmin raises for an admin held back by the two-factor requirement (P25).
+    if request is not None and acts_as_admin(request.user):
         # The editor needs the stored announcement even when it is off or outside its window.
         payload["notice_settings"] = {
             "enabled": site.notice_enabled, "text": site.notice_text, "link": site.notice_link,

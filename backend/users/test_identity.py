@@ -29,6 +29,13 @@ NEW_PASSWORD = "bottle-jigsaw-branch-parcel-8080"
 FAST_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
+def past_trust(client, response):
+    """P25: after the code, sign-in passes the trust step, which finishes at once (no page)."""
+    if response.status_code == 302 and response["Location"].endswith("/accounts/2fa/trust/"):
+        return client.get(response["Location"])
+    return response
+
+
 def path_from_last_email():
     return urlsplit(re.search(r"https?://\S+", mail.outbox[-1].body).group()).path
 
@@ -222,8 +229,9 @@ class AccountTests(TestCase):
         self.client.force_login(self.viewer)
         page = self.client.get(reverse("mfa_index")).content.decode()
         self.assertIn("雙因素驗證", page)
-        self.assertIn("尚未啟用驗證器。", page)
-        for old in ("二階", "恢復碼", "authenticator 驗證器"):
+        self.assertIn("尚未啟用", page)
+        # P25: one set of terms on every two-factor page.
+        for old in ("二階", "恢復碼", "authenticator 驗證器", "雙重驗證", "帳戶", "您", "QR 碼", "驗證器代碼"):
             self.assertNotIn(old, page)
 
     def test_compiled_translations_match_the_catalogue(self):
@@ -295,7 +303,7 @@ class AccountTests(TestCase):
         self.assertEqual(len(set(codes)), 10)
         row = Authenticator.objects.get(user=self.viewer)
         self.assertNotEqual(row.data["secret"], secret)
-        self.assertEqual(row.data["recovery_verifiers"], [recovery_verifier(code) for code in codes])
+        self.assertEqual(row.data["recovery_verifiers"], [recovery_verifier(code.replace("-", "")) for code in codes])  # P25: kept normalised
         self.assertEqual(old_session.get(reverse("auth_me")).status_code, 403)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 200)
         self.assertNotContains(self.client.get(reverse("mfa_index")), codes[0])
@@ -304,12 +312,12 @@ class AccountTests(TestCase):
         pending = Client()
         self.assertRedirects(self.login(self.viewer, pending), challenge)
         self.assertEqual(pending.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(pending.post(challenge, {"code": codes[0]}), "/app/", fetch_redirect_response=False)
+        self.assertRedirects(past_trust(pending, pending.post(challenge, {"code": codes[0]})), "/app/", fetch_redirect_response=False)
         retry = Client()
         self.assertRedirects(self.login(self.viewer, retry), challenge)
         self.assertEqual(retry.post(challenge, {"code": codes[0]}).status_code, 200)
         self.assertEqual(retry.get(reverse("auth_me")).status_code, 403)
-        self.assertRedirects(retry.post(challenge, {"code": current_totp(secret)}), "/app/", fetch_redirect_response=False)
+        self.assertRedirects(past_trust(retry, retry.post(challenge, {"code": current_totp(secret)})), "/app/", fetch_redirect_response=False)
 
     def test_password_reset_does_not_grant_session_or_bypass_mfa(self):
         self.enable_mfa(self.viewer)
@@ -432,7 +440,7 @@ class GoogleTests(TestCase):
         self.assertRedirects(response, challenge)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 403)
         self.assertNotIn("fixture-oauth-token", str(dict(self.client.session)))
-        self.assertRedirects(self.client.post(challenge, {"code": current_totp(secret)}), "/app/", fetch_redirect_response=False)
+        self.assertRedirects(past_trust(self.client, self.client.post(challenge, {"code": current_totp(secret)})), "/app/", fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse("auth_me")).status_code, 200)
 
         self.user.is_active = False

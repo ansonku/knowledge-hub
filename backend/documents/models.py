@@ -260,6 +260,8 @@ class SiteSettings(models.Model):
     html_max_mb = models.PositiveSmallIntegerField(null=True, blank=True)
     image_max_mb = models.PositiveSmallIntegerField(null=True, blank=True)
     video_max_mb = models.PositiveSmallIntegerField(null=True, blank=True)
+    # P25: admins must use two-factor to manage the site. Sites made by the setup wizard start with it on.
+    require_admin_mfa = models.BooleanField(default=False)
 
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]

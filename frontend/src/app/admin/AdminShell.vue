@@ -2,6 +2,8 @@
 // P19 (E2＋): the frame of every management page — a two-row menu (groups, then the group's pages) that
 // sticks to the top while scrolling, with marks where something needs attention. The page renders below.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import MfaRequired from './MfaRequired.vue'
+import { mfaBlocked } from '../../mfaGate'
 import GettingStarted from './GettingStarted.vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAttention } from '../../stores/attention'
@@ -12,6 +14,7 @@ import UiIcon from '../components/UiIcon.vue'
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
+const mfaHeld = computed(() => session.isAdmin && (!!session.mfa?.required || mfaBlocked.value))
 const attention = useAttention()
 const groups = computed(() => groupsFor(session.canEdit, session.isAdmin))
 const routeName = computed(() => String(route.name ?? ''))
@@ -98,8 +101,12 @@ onBeforeUnmount(() => {
         </RouterLink>
       </nav>
     </div>
-    <GettingStarted v-if="session.isAdmin" />
-    <RouterView />
+    <!-- P25c: the site requires admins to use two-factor and this admin has not turned it on yet. -->
+    <MfaRequired v-if="mfaHeld" />
+    <template v-else>
+      <GettingStarted v-if="session.isAdmin" />
+      <RouterView />
+    </template>
   </div>
 </template>
 

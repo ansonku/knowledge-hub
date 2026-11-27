@@ -11,7 +11,7 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from users.models import User
-from users.permissions import has_role
+from users.permissions import ensure_admin_mfa, has_role
 
 from . import activity, limits, quota, search, storage
 from .models import ArticlePublication, Document, DocumentImage, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
@@ -261,6 +261,7 @@ def delete_version(actor, document_id, version_id, *, number, reason=""):
     """
     if not has_role(actor, User.Role.ADMIN):
         raise PermissionDenied("只有 Admin 可以刪除版本。")
+    ensure_admin_mfa(actor)
     with transaction.atomic():
         with connection.cursor() as cursor:
             # Shared like every other write, so a storage check never sees a half-deleted version.
@@ -304,6 +305,7 @@ MERGE_LIMIT = 50
 def require_admin(user):
     if not has_role(user, User.Role.ADMIN):
         raise PermissionDenied("只有 Admin 可以合併標籤。")
+    ensure_admin_mfa(user)
 
 
 @transaction.atomic
