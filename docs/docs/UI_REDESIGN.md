@@ -2898,3 +2898,30 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - 後端全部 254 項通過，`ruff`、`smoke.sh` 通過。
   - 回歸：`adminnav_e2` 26、`doc_covers` 21、`videos_api` 16、`videos` 27 項通過（`videos.py` 需要約 2 MB 的 H.264 範例影片，太小的檔案會在檢查上傳進度前就傳完）。
   - 一次 `videos.py` 因範例影片太小而中斷，留下一份測試文件（建立者 `uitest-editor`），已永久刪除。
+
+### P23c 單一檔案上限：由管理員設定（2026-11-27）
+
+- 新模組 `documents/limits.py`：各類的範圍與預設（Markdown 1～50 MB、HTML 1～100 MB、圖片 1～30 MB、影片 10 MB～1 GB；預設 50、50、10、200 MB）、生效的上限、中文訊息（例如「影片超過上限 200 MB。」）、給成員與給管理員的資料。
+- `SiteSettings` 新增 `markdown_max_mb`、`html_max_mb`、`image_max_mb`、`video_max_mb`（MB，空值表示預設）。遷移 `0024_file_limits`。設成與預設相同的值時存成空值，之後預設改變也會跟著套用。
+- 後端檢查：
+  - 上傳文件與新版本依副檔名使用 Markdown 或 HTML 的上限，先比對檔案大小再讀取；`storage.stage()` 改為必須提供上限與訊息。
+  - 新增 Markdown 文件（只有標題）用 Markdown 的上限。
+  - 還原舊版本不受目前上限影響（以舊版本本身的大小為準），避免調低上限後無法還原。
+  - 圖片（`read_limited`）與影片（`add_video`、`receive`）改用管理員的上限。
+- `GET/PUT /api/admin/storage/` 加上 `file_limits`：每類的目前值、範圍與預設；`PUT {"file_limits": {...}}` 可以只改其中幾類，`null` 表示回到預設，超出範圍回應 400；有變更時寫入稽核紀錄 `file_limits_updated`（記錄改前與改後的 MB）。`limit` 與 `file_limits` 都改為選填，兩者都沒有時回應 400。
+- 成員的 `limits`（`/api/auth/me` 與文件清單）改為 `markdown_bytes`、`html_bytes`、`image_bytes`、`video_bytes` 與 `batch`；系統狀態的 `config.max_upload_bytes` 改為 `config.file_limits`。
+- 移除 `.env` 的 `DOCUMENT_MAX_BYTES`、`VIDEO_MAX_BYTES`（`compose.yaml`、`.env.example`、`README.md` 一併更新）；舊的 `.env` 若還留著這兩行也不會再被讀取。
+- nginx：文件路徑的上傳上限 51 MB 改為 101 MB，影片路徑 201 MB 改為 1025 MB，並把影片路徑的 `proxy_read_timeout`／`proxy_send_timeout` 延長到 300 秒；gunicorn 加上 `--timeout 300`，避免 1 GB 影片在雜湊與寫入時被中斷。nginx 會先把整個上傳收完再交給 Django，大檔案會暫存在 nginx 容器內。
+- 前端：
+  - 新模組 `fileLimits.ts`：限制的型別與預設、`overLimit()` 產生「影片超過上限 50 MB（這個檔案 120 MB）。」。
+  - 送出前檢查：上傳匣（新文件與批次，依副檔名）、上傳新版本對話框（依文件格式，並顯示「上限 50 MB」）、編輯器的圖片與影片、封面的上傳／貼上／拖放；超過時不送出請求。
+  - 文件清單載入時更新 session 中的上限；管理員儲存後，自己的上限立即更新，其他成員在下次載入頁面時更新（伺服器仍會檢查）。
+  - 「儲存空間」區塊新增 `FileLimits.vue`：四種檔案各一列，拉桿與數字欄位同步（超出範圍時自動調整到範圍內）；影片用對數刻度，方向鍵每次 1 MB，並標出 10、50、100、200、500 MB、1 GB 的刻度（其他三類以文字說明範圍，不畫刻度）；影片超過 100 MB 時顯示 Cloudflare 提醒；「儲存」「恢復預設值」按鈕。
+  - 系統狀態的設定區塊改為列出四個上限。
+- 實作時修正：
+  - 手機寬度下，線性拉桿的最大值刻度被隱藏、只剩最小值，而且刻度與「範圍」文字重複；改為只有影片顯示刻度。
+  - 「儲存空間」區塊現在有兩個「儲存」按鈕，`storage_limit.py` 改為指定總上限的表單。
+- 驗證：
+  - 後端：新增 `FileLimitTests`（5 項）：預設值與成員的 `limits`；Markdown 與 HTML 各自的上限；圖片上限；還原舊版本不受上限影響；範圍檢查、權限、稽核紀錄、回到預設。影片的上限測試改為設定管理員的值。全部 259 項通過，`ruff` 通過。
+  - Playwright：新增 `file_limits.py`（22 項）：四類的目前值、數字與拉桿同步、超出範圍自動調整、Cloudflare 提醒出現與消失、對數拉桿方向鍵 1 MB、儲存；Editor 的上傳匣、新版本對話框、編輯器圖片與影片、封面都在送出前顯示訊息且沒有送出請求；伺服器也拒絕；500 px 深色模式；恢復預設值；結束時還原原本的值。
+  - 回歸：`dropzone` 8、`images` 21、`versions` 19、`doc_covers` 21、`videos` 27、`storage_limit`（ui）9 項通過，`system` 沒有失敗。

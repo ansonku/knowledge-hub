@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from users.lifecycle import audit
 from users.permissions import IsAdmin
 
-from . import storage
+from . import limits, storage
 from .models import DocumentImage, DocumentVideo, SiteSettings, Version, VersionImage, VersionVideo
 
 logger = logging.getLogger(__name__)
@@ -109,8 +109,22 @@ def check_space(incoming):
         })
 
 
+class FileLimitsInput(serializers.Serializer):
+    """P23c: whole MB within each kind's range; null goes back to the default."""
+    markdown = serializers.IntegerField(required=False, allow_null=True, min_value=limits.RANGES["markdown"][1], max_value=limits.RANGES["markdown"][2])
+    html = serializers.IntegerField(required=False, allow_null=True, min_value=limits.RANGES["html"][1], max_value=limits.RANGES["html"][2])
+    image = serializers.IntegerField(required=False, allow_null=True, min_value=limits.RANGES["image"][1], max_value=limits.RANGES["image"][2])
+    video = serializers.IntegerField(required=False, allow_null=True, min_value=limits.RANGES["video"][1], max_value=limits.RANGES["video"][2])
+
+
 class LimitInput(serializers.Serializer):
-    limit = serializers.IntegerField(min_value=MIN_LIMIT, allow_null=True)
+    limit = serializers.IntegerField(min_value=MIN_LIMIT, allow_null=True, required=False)
+    file_limits = FileLimitsInput(required=False)
+
+    def validate(self, data):
+        if not data:
+            raise serializers.ValidationError("請提供要修改的上限。")
+        return data
 
 
 def report():
@@ -120,6 +134,7 @@ def report():
         "limit": limit, "used": used["total"], "parts": used["parts"], "images": used["images"], "videos": used["videos"],
         "share": used["total"] / limit if limit else None, "level": level(used["total"], limit), "disk": disk(),
         "min_free_bytes": settings.UPLOAD_MIN_FREE_BYTES,
+        "file_limits": limits.for_admins(),
     }
 
 
@@ -131,12 +146,26 @@ def storage_settings(request):
     if request.method == "PUT":
         payload = LimitInput(data=request.data)
         payload.is_valid(raise_exception=True)
-        value = payload.validated_data["limit"]
+        data = payload.validated_data
         with transaction.atomic():
             site, _ = SiteSettings.objects.select_for_update().get_or_create(pk=1)
-            if site.storage_limit != value:
-                audit("storage_limit_updated", request.user, actor=request.user, limit={"from": site.storage_limit, "to": value})
-                site.storage_limit = value
+            changed = False
+            if "limit" in data and site.storage_limit != data["limit"]:
+                audit("storage_limit_updated", request.user, actor=request.user, limit={"from": site.storage_limit, "to": data["limit"]})
+                site.storage_limit = data["limit"]
+                changed = True
+            changes = {}
+            for kind, value in data.get("file_limits", {}).items():
+                field = limits.FIELDS[kind]
+                # A value equal to the default is stored as the default, so a later change of default applies.
+                value = None if value == limits.RANGES[kind][3] else value
+                if getattr(site, field) != value:
+                    changes[kind] = {"from": limits.megabytes(kind, site), "to": value or limits.RANGES[kind][3]}
+                    setattr(site, field, value)
+            if changes:
+                audit("file_limits_updated", request.user, actor=request.user, limits=changes)
+                changed = True
+            if changed:
                 site.updated_by = request.user
                 site.save()
     return Response(report())

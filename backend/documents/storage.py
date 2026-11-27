@@ -15,8 +15,8 @@ def root():
 
 
 @contextmanager
-def stage(upload, *, max_bytes=None):
-    limit = settings.DOCUMENT_MAX_BYTES if max_bytes is None else max_bytes
+def stage(upload, *, max_bytes, too_big="檔案超過大小上限。"):
+    limit = max_bytes
     directory = root() / "staging"
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     sha = hashlib.sha256()
@@ -27,7 +27,7 @@ def stage(upload, *, max_bytes=None):
             for chunk in upload.chunks():
                 size += len(chunk)
                 if size > limit:
-                    raise ValidationError({"file": "檔案超過大小上限。"})
+                    raise ValidationError({"file": too_big})
                 decoder.decode(chunk)
                 sha.update(chunk)
                 temporary.write(chunk)

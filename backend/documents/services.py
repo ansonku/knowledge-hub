@@ -13,7 +13,7 @@ from rest_framework.exceptions import APIException, PermissionDenied, Validation
 from users.models import User
 from users.permissions import has_role
 
-from . import activity, quota, search, storage
+from . import activity, limits, quota, search, storage
 from .models import ArticlePublication, Document, DocumentImage, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
 from .publication import withdraw_publication
 
@@ -52,10 +52,13 @@ def add_upload(actor, data, document_id=None):
     suffix = Path(upload.name).suffix.lower().removeprefix(".")
     if suffix not in Document.Format.values:
         raise ValidationError({"file": "只接受 .html 或 .md 檔案。"})
+    kind = limits.kind_of(suffix)
+    if upload.size > limits.max_bytes(kind):  # P23c: before reading it
+        raise ValidationError({"file": limits.too_big(kind)})
     if base_version is None:
         # P23: uploads count against the limit; saving Markdown text in the editor does not (too small to matter).
         quota.check_space(upload.size)
-    with storage.stage(upload) as (temporary, sha256, size), transaction.atomic():
+    with storage.stage(upload, max_bytes=limits.max_bytes(kind), too_big=limits.too_big(kind)) as (temporary, sha256, size), transaction.atomic():
         lock_storage(sha256)
         if document_id is None:
             duplicate = Version.objects.filter(sha256=sha256, document__is_trashed=False).exists()
@@ -111,7 +114,7 @@ def create_markdown(actor, data):
         raise ValidationError({"title": "請輸入標題。"})
     filename = markdown_filename(title)
     upload = SimpleUploadedFile(filename, f"# {title}\n\n".encode())
-    with storage.stage(upload) as (temporary, sha256, size), transaction.atomic():
+    with storage.stage(upload, max_bytes=limits.max_bytes("markdown")) as (temporary, sha256, size), transaction.atomic():
         lock_storage(sha256)
         document = Document.objects.create(
             title=title, format=Document.Format.MARKDOWN, category=data.get("category"), created_by=actor,

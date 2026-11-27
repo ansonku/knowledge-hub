@@ -4,6 +4,8 @@ import Select from 'primevue/select'
 import { useToast } from 'primevue/usetoast'
 import { computed, ref, watch } from 'vue'
 import { api, upload } from '../../api'
+import { overLimit } from '../../fileLimits'
+import { useSession } from '../../stores/session'
 import { useTaxonomy } from '../../stores/taxonomy'
 import type { DocumentDetails } from '../composables/useDocument'
 import { formatLabel, longDateTime } from '../types'
@@ -14,6 +16,7 @@ const emit = defineEmits<{ updated: [document: Partial<DocumentDetails>] }>()
 
 const taxonomy = useTaxonomy()
 const toast = useToast()
+const session = useSession()
 const presentations = [{ value: 'article', label: '文章' }, { value: 'gallery', label: '相簿' }]
 const layouts = [{ value: '', label: '跟隨系統預設' }, ...GALLERY_LAYOUTS.map(value => ({ value, label: LAYOUT_LABELS[value] }))]
 const category = ref<string | null>(null)
@@ -118,6 +121,11 @@ function dropCover(event: DragEvent) {
 
 async function uploadCover(file: File) {
   if (uploadingCover.value) return
+  const tooBig = overLimit('image', file.size, session.limits)  // P23c: never send an oversized picture
+  if (tooBig) {
+    toast.add({ severity: 'error', summary: '無法上傳封面', detail: tooBig, life: 5000 })
+    return
+  }
   uploadingCover.value = true
   try {
     const form = new FormData()

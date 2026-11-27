@@ -31,7 +31,7 @@ from rest_framework.throttling import UserRateThrottle
 from users.models import User
 from users.permissions import CanReadLibrary, has_role
 
-from . import quota, services, storage
+from . import limits, quota, services, storage
 from .images import GRACE, collect_occasionally, lock_storage, remove_files
 from .models import ArticlePublication, Document, DocumentVideo, VersionVideo
 
@@ -74,7 +74,7 @@ def video_folder(document_id):
 
 def receive(upload, folder):
     """Copy the upload next to its final place while hashing it. Returns (temporary path, sha256, size)."""
-    limit = settings.VIDEO_MAX_BYTES
+    limit = limits.max_bytes("video")  # P23c
     digest = hashlib.sha256()
     size = 0
     temporary = tempfile.NamedTemporaryFile(dir=folder, prefix=".upload-", delete=False)
@@ -83,7 +83,7 @@ def receive(upload, folder):
             for chunk in upload.chunks():
                 size += len(chunk)
                 if size > limit:
-                    raise ValidationError({"file": f"影片超過 {limit // (1024 * 1024)} MB。"})
+                    raise ValidationError({"file": limits.too_big("video")})
                 digest.update(chunk)
                 temporary.write(chunk)
             temporary.flush()
@@ -102,8 +102,8 @@ def add_video(actor, document_id, upload):
         raise ValidationError({"file": "只有 Markdown 文件可以插入影片。"})
     if not upload.size:
         raise ValidationError({"file": "檔案不得為空。"})
-    if upload.size > settings.VIDEO_MAX_BYTES:
-        raise ValidationError({"file": f"影片超過 {settings.VIDEO_MAX_BYTES // (1024 * 1024)} MB。"})
+    if upload.size > limits.max_bytes("video"):
+        raise ValidationError({"file": limits.too_big("video")})
     head = upload.read(64)
     upload.seek(0)
     name = sniff(head)

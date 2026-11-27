@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { editor, KeyCode, KeyMod, Range, Selection } from './monaco'
+import { overLimit } from './fileLimits'
+import { useSession } from './stores/session'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import UiIcon, { type IconName } from './app/components/UiIcon.vue'
 import { GALLERY_LAYOUTS, LAYOUT_LABELS } from './gallery'
@@ -264,8 +266,6 @@ const visibleGroups = computed(() => groups.map(group => group.filter(tool =>
 // ---- Images and videos: paste, drop or pick; each gets a placeholder until its upload finishes ----
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 const VIDEO_TYPES = ['video/mp4', 'video/webm']
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_VIDEO_BYTES = 200 * 1024 * 1024 // VIDEO_MAX_BYTES on the server
 const PLACEHOLDER = { image: '![上傳中…]()', video: '![影片上傳中…]()' } as const
 type Kind = keyof typeof PLACEHOLDER
 const picker = ref<HTMLInputElement>()
@@ -301,8 +301,9 @@ function refusal(file: File, kind: Kind | undefined) {
       ? `「${file.name}」不是可以插入的圖片或影片（PNG、JPEG、GIF、WebP、MP4、WebM）。`
       : `「${file.name}」不是 PNG、JPEG、GIF 或 WebP 圖片。`
   }
-  if (kind === 'image' && file.size > MAX_IMAGE_BYTES) return `「${file.name}」超過 10 MB。`
-  if (kind === 'video' && file.size > MAX_VIDEO_BYTES) return `「${file.name}」超過 200 MB。`
+  // P23c: the admin's per-file limits; the server checks them again.
+  const tooBig = overLimit(kind, file.size, useSession().limits)
+  if (tooBig) return `「${file.name}」：${tooBig}`
   if (!file.size) return `「${file.name}」是空白檔案。`
 }
 

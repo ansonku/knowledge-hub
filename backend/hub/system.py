@@ -15,6 +15,7 @@ from django.views.decorators.cache import never_cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from documents import limits
 from documents.images import unused_images
 from documents.videos import unused_videos
 from documents.models import (
@@ -152,7 +153,7 @@ def system_status(request):
             "smtp": bool(settings.EMAIL_HOST),
             "mfa_key": bool(settings.MFA_ENCRYPTION_KEY),
             "html_preview": settings.LOCAL_HTML_PREVIEW,
-            "max_upload_bytes": settings.DOCUMENT_MAX_BYTES,
+            "file_limits": limits.for_members(),
             "max_batch": settings.DOCUMENT_MAX_BATCH,
         },
     }

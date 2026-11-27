@@ -137,7 +137,9 @@ onMounted(() => {
               <span class="flag-text"><strong>{{ flag.label }}</strong><span>{{ flag.on ? flag.onText : flag.offText }}</span></span>
             </li>
           </ul>
-          <p class="note">上傳上限：每檔 {{ bytes(report.config.max_upload_bytes) }}，每批 {{ report.config.max_batch }} 檔。</p>
+          <p class="note">
+            單一檔案上限：Markdown {{ bytes(report.config.file_limits.markdown_bytes) }}、HTML {{ bytes(report.config.file_limits.html_bytes) }}、圖片 {{ bytes(report.config.file_limits.image_bytes) }}、影片 {{ bytes(report.config.file_limits.video_bytes) }}（在「儲存空間」調整）；每批 {{ report.config.max_batch }} 檔。
+          </p>
         </section>
       </div>
     </template>

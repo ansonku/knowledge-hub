@@ -7,12 +7,14 @@ import { useToast } from 'primevue/usetoast'
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api'
 import { useAttention } from '../../stores/attention'
+import FileLimits, { type FileLimitSet } from './FileLimits.vue'
 import { bytes } from './system'
 
 type Storage = {
   limit: number | null; used: number; share: number | null; level: 'notice' | 'warning' | 'full' | null
   parts: Record<'database' | 'versions_current' | 'versions_old' | 'images' | 'videos' | 'trash', number>
   disk: { total_bytes: number; free_bytes: number } | null; min_free_bytes: number
+  file_limits: FileLimitSet
 }
 
 const emit = defineEmits<{ changed: [] }>()
@@ -111,6 +113,8 @@ async function save(value: number | null) {
         <p v-if="belowUsage" class="level warn" role="status">目前用量已超過這個上限，儲存後所有新的上傳都會被拒絕。</p>
         <p class="note">超過上限時拒絕上傳文件、新版本、圖片與影片；在編輯器儲存 Markdown 文字不受影響。最小 1 GB，留空表示不限制。</p>
       </form>
+
+      <FileLimits :limits="data.file_limits" @saved="response => { if (data) data.file_limits = response.file_limits; emit('changed') }" />
 
       <div v-if="data.disk" class="disk">
         <div class="disk-line">

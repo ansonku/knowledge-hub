@@ -1,3 +1,4 @@
+import type { Limits } from '../fileLimits'
 import type { SearchMatches } from '../searchTerms'
 export type Format = 'html' | 'md'
 export type Label = { id: string; name: string }
@@ -46,7 +47,7 @@ export type DocumentPage = {
   page: number
   page_size: number
   results: DocumentRow[]
-  limits: { bytes: number; batch: number }
+  limits: Limits
   /** The order the server used (relevance only when searching). */
   ordering?: string
 }

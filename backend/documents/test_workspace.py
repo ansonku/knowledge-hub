@@ -179,7 +179,7 @@ class WorkspaceTests(TransactionTestCase):
         self.assertEqual((category["document_count"], category["description"], category["color"]), (1, "Specs", "teal"))
         self.assertEqual(self.as_user(self.viewer).patch(f"/api/categories/{category_id}/", {"description": "x"}, content_type="application/json").status_code, 403)
         limits = self.client.get("/api/auth/me").json()["limits"]
-        self.assertEqual(set(limits), {"bytes", "batch"})
+        self.assertEqual(set(limits), {"markdown_bytes", "html_bytes", "image_bytes", "video_bytes", "batch"})
 
     # ---- bulk changes -----------------------------------------------------------
 

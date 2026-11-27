@@ -1,6 +1,5 @@
 from uuid import UUID
 
-from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from django.db import IntegrityError, connection, transaction
@@ -20,7 +19,7 @@ from users.lifecycle import audit
 from users.models import User
 from users.permissions import CanReadLibrary, IsAdmin
 
-from . import search, services, storage, trash
+from . import limits, search, services, storage, trash
 from .models import (
     AUTO_COLLECTION_COLORS, ArticlePublication, Category, Document, DocumentActivity, DocumentView, Favorite, SiteSettings, Tag,
     Version,
@@ -146,7 +145,7 @@ def documents(request):
         "page_size": size,
         "ordering": ordering,
         "results": results,
-        "limits": {"bytes": settings.DOCUMENT_MAX_BYTES, "batch": settings.DOCUMENT_MAX_BATCH},
+        "limits": limits.for_members(),
     })
 
 

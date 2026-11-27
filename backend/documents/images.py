@@ -31,13 +31,12 @@ from rest_framework.throttling import UserRateThrottle
 from users.models import User
 from users.permissions import CanReadLibrary, has_role
 
-from . import quota, services, storage
+from . import limits, quota, services, storage
 from .image_sizes import sizes
 from .models import ArticlePublication, Document, DocumentImage, VersionImage
 
 logger = logging.getLogger(__name__)
 
-MAX_BYTES = 10 * 1024 * 1024
 # An image no version refers to is kept this long after its last upload, then removed.
 GRACE = timedelta(hours=24)
 MAX_PIXELS = 40_000_000
@@ -70,11 +69,14 @@ def sniff(head):
 
 
 def read_limited(upload):
+    limit = limits.max_bytes("image")  # P23c
+    if upload.size and upload.size > limit:
+        raise ValidationError({"file": limits.too_big("image")})
     data = bytearray()
     for chunk in upload.chunks():
         data += chunk
-        if len(data) > MAX_BYTES:
-            raise ValidationError({"file": "圖片超過 10 MB。"})
+        if len(data) > limit:
+            raise ValidationError({"file": limits.too_big("image")})
     if not data:
         raise ValidationError({"file": "檔案不得為空。"})
     return bytes(data)

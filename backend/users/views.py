@@ -57,6 +57,12 @@ def account_payload(user):
     }
 
 
+def file_limits():
+    """P23c: per-file limits the browser checks before sending. documents imports users, so import it here."""
+    from documents.limits import for_members
+    return for_members()
+
+
 @never_cache
 @ensure_csrf_cookie
 @api_view(["GET", "PATCH"])
@@ -69,7 +75,7 @@ def me(request):
         save_profile(request.user)
     return Response({
         **account_payload(request.user), "csrf_token": get_token(request),
-        "limits": {"bytes": settings.DOCUMENT_MAX_BYTES, "batch": settings.DOCUMENT_MAX_BATCH},
+        "limits": file_limits(),
     })
 
 
