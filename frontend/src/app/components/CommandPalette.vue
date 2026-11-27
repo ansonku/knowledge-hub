@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import HighlightText from '../../HighlightText.vue'
 import { matchedFields, searchTerms } from '../../searchTerms'
 import { groupsFor } from '../admin/adminNav'
+import { currentPublicArticle, openPublic } from '../publicLink'
 import { api } from '../../api'
 import { useSession } from '../../stores/session'
 import { useTaxonomy } from '../../stores/taxonomy'
@@ -42,6 +43,12 @@ const navigation = computed<Command[]>(() => [
   { id: 'nav-favorites', group: '前往', label: '收藏', icon: 'star', run: () => go({ name: 'app-favorites' }) },
   { id: 'nav-published', group: '前往', label: '已公開文章', icon: 'globe', run: () => go({ name: 'app-published' }) },
   ...(session.canEdit ? [{ id: 'nav-trash', group: '前往', label: '回收桶', icon: 'trash' as const, run: () => go({ name: 'app-trash' }) }] : []),
+  { id: 'nav-portal', group: '前往', label: '閱讀入口', icon: 'book', run: () => { open.value = false; window.location.assign('/read/') } },
+  { id: 'nav-public', group: '前往', label: '公開站', hint: '新分頁', keywords: 'articles 訪客', icon: 'external', run: () => { open.value = false; openPublic() } },
+  ...(currentPublicArticle.value ? [{
+    id: 'nav-public-article', group: '前往', label: '在公開站查看這篇文章', hint: currentPublicArticle.value.title, keywords: '公開站 articles 訪客',
+    icon: 'external' as const, run: () => { open.value = false; openPublic(`/articles/${currentPublicArticle.value!.id}/`) },
+  }] : []),
 ])
 const actions = computed<Command[]>(() => [
   ...(session.canEdit ? [
