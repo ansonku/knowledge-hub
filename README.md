@@ -47,11 +47,22 @@ docker compose run --rm --user "$(id -u):$(id -g)" \
 
 ## M1 帳號與登入
 
-啟動服務後，從部署主機建立第一位管理員。指令會互動提示輸入密碼。
+第一次啟動、系統裡還沒有管理員時，打開網站會進入**首次設定精靈**（`/setup/`）：介紹系統、確認授權與開發者資訊、建立第一位管理員、網站基本設定與系統檢查，完成後以新管理員進入管理中心。
 
-```bash
-docker compose exec backend python manage.py create_hub_admin <帳號名稱> <電子郵件>
-```
+- 服務啟動後一小時內可以直接設定。超過一小時需要輸入設定碼；設定碼只寫在主機的檔案中（後端記錄只寫出檔案位置）：
+
+  ```bash
+  docker compose exec backend cat /var/lib/knowledge-hub/documents/setup-code.txt
+  ```
+
+  重新啟動服務會重新開放一小時，並產生新的設定碼。設定完成後設定碼立即失效。
+- 也可以不用瀏覽器，直接在主機上建立第一位管理員（指令會互動提示輸入密碼，同樣會讓設定碼失效）：
+
+  ```bash
+  docker compose exec backend python manage.py create_hub_admin <帳號名稱> <電子郵件>
+  ```
+
+版本、開發者、授權與條款在管理中心的「關於」頁（內容來自 `backend/hub/about.py` 與 `backend/hub/terms.md`）。
 
 在 [本機登入頁](http://localhost:18080/accounts/login/) 使用電子郵件和密碼登入。從「帳號管理」邀請使用者。使用者透過啟用信設定密碼，連結有效期為 24 小時，重寄會使舊連結失效。管理員亦可停用或重新啟用帳號、變更角色及寄送密碼重設信。停用會撤銷既有 Session。
 
