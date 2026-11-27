@@ -86,9 +86,9 @@ class VideoTests(VideoFixture):
         self.assertFalse(DocumentVideo.objects.exists())
 
     def test_low_disk_space_refuses_the_upload(self):
-        with override_settings(VIDEO_MIN_FREE_BYTES=10 ** 18), self.assertLogs("documents.videos", "ERROR"):
+        with override_settings(UPLOAD_MIN_FREE_BYTES=10 ** 18), self.assertLogs("documents.quota", "ERROR"):
             response = self.upload_video(mp4())
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 413)
         self.assertIn("磁碟空間不足", str(response.json()))
         self.assertFalse(DocumentVideo.objects.exists())
 

@@ -13,7 +13,6 @@ import hashlib
 import logging
 import os
 import re
-import shutil
 import tempfile
 
 from django.conf import settings
@@ -32,7 +31,7 @@ from rest_framework.throttling import UserRateThrottle
 from users.models import User
 from users.permissions import CanReadLibrary, has_role
 
-from . import services, storage
+from . import quota, services, storage
 from .images import GRACE, collect_occasionally, lock_storage, remove_files
 from .models import ArticlePublication, Document, DocumentVideo, VersionVideo
 
@@ -73,16 +72,6 @@ def video_folder(document_id):
     return base / str(document_id)
 
 
-def check_free_space(size):
-    try:
-        free = shutil.disk_usage(storage.root()).free
-    except OSError:
-        return
-    if free - size < settings.VIDEO_MIN_FREE_BYTES:
-        logger.error("Video upload refused: less than %d bytes of disk space would remain.", settings.VIDEO_MIN_FREE_BYTES)
-        raise ValidationError({"file": "伺服器磁碟空間不足，暫時無法上傳影片。請通知管理員清理空間。"})
-
-
 def receive(upload, folder):
     """Copy the upload next to its final place while hashing it. Returns (temporary path, sha256, size)."""
     limit = settings.VIDEO_MAX_BYTES
@@ -118,7 +107,7 @@ def add_video(actor, document_id, upload):
     head = upload.read(64)
     upload.seek(0)
     name = sniff(head)
-    check_free_space(upload.size)
+    quota.check_space(upload.size)  # P23: the limit and at least 2 GB of the disk left free
     folder = video_folder(document.pk)
     temporary, digest, size = receive(upload, folder)
     try:

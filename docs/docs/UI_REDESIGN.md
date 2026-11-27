@@ -2832,3 +2832,20 @@ Mockup 中的人名、文件與數字均為示意資料；頁尾 `[團隊名稱]
   - Viewer 的狀態標籤不是按鈕；管理員的標籤仍開啟「發布」分頁；落後時的說明。
   - 500 px 深色模式不會橫向捲動；驗證文件結束時永久刪除。
   - 回歸：`adminnav_e2` 26、`doc_covers` 21 項通過。
+
+### P23a 儲存空間上限：後端（2026-11-27）
+
+- `SiteSettings.storage_limit`（位元組，空值表示不限制）。遷移 `0023_storage_limit`。
+- 新模組 `documents/quota.py`：
+  - `usage()`：由資料庫記錄的大小加總，明細為資料庫、目前版本、舊版本、圖片、影片、回收桶（回收桶中文件的版本、圖片與影片）；圖片與影片另外區分目前版本使用中、只有舊版本使用、沒有版本使用。
+  - `level()`：80% 為 `notice`、90% 為 `warning`、100% 為 `full`。
+  - `check_space(incoming)`：先檢查上傳後磁碟至少剩 `UPLOAD_MIN_FREE_BYTES`（2 GB），再檢查「目前用量＋這次的大小」是否超過上限；不通過時回應 413，訊息例如「儲存空間已達上限（已用 98.0 GB／上限 100.0 GB），請聯絡管理員。」，並附 `reason`（`disk` 或 `limit`）。
+- 檢查的地方：上傳文件、上傳新版本（`add_upload`，Markdown 編輯器的文字儲存除外）、圖片（含封面、貼上、拖放）、影片。批次上傳是逐一送出，每份檔案都會用最新的用量檢查，所以等於以總大小計算。
+- 影片原本自己的磁碟檢查（`check_free_space`、`VIDEO_MIN_FREE_BYTES`）改為共用的 `check_space` 與 `UPLOAD_MIN_FREE_BYTES`，磁碟不足時改回應 413。
+- `GET /api/admin/storage/`（Admin）：上限、用量、明細、比例、等級、磁碟總量與剩餘；`PUT {"limit": 位元組或 null}` 設定或清除上限（最小 1 GB），有變更時寫入稽核紀錄 `storage_limit_updated`。
+- 系統狀態（`/api/admin/system/`）的 `storage` 加上 `limit_bytes`、`counted_bytes`、`limit_level`；達 80% 時加上提醒（`warning`），90% 與 100% 時加上警告（`danger`），管理入口的提示點沿用 P19。
+- 實際資料：目前用量 57.7 MB（資料庫 15.3 MB、圖片 40.0 MB、影片 2.0 MB），計算一次約 41 ms。
+- 驗證：
+  - 新增 `test_quota.py`（9 項）：用量明細（目前版本、舊版本、回收桶、圖片、資料庫）與總和；等級；超過上限時上傳文件、新版本、圖片回應 413；Markdown 儲存不受影響；不限制時不檢查；所有上傳的磁碟剩餘空間保護；設定 API 的讀取、設定、清除、稽核紀錄、最小值與權限；系統警告的三個等級。
+  - 原本影片磁碟不足的測試改為 413 與新的設定名稱。
+  - 全部 254 項通過，`ruff`、`smoke.sh` 通過。

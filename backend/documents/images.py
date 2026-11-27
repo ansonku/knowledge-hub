@@ -31,7 +31,7 @@ from rest_framework.throttling import UserRateThrottle
 from users.models import User
 from users.permissions import CanReadLibrary, has_role
 
-from . import services, storage
+from . import quota, services, storage
 from .image_sizes import sizes
 from .models import ArticlePublication, Document, DocumentImage, VersionImage
 
@@ -149,6 +149,7 @@ def add_image(actor, document_id, upload):
     services.require_editor(actor)
     document = get_object_or_404(services.active_documents(), pk=document_id)
     # P22: HTML documents take pictures too, only to use as their cover (their content never refers to them).
+    quota.check_space(upload.size)  # P23
     encoded, name, width, height = reencode(read_limited(upload))
     digest = hashlib.sha256(encoded).hexdigest()
     with transaction.atomic():

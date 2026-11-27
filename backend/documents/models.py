@@ -253,6 +253,8 @@ class SiteSettings(models.Model):
     lightbox_reduced_motion = models.BooleanField(default=True)
     # P20: seconds between pictures when the lightbox plays them as a slideshow.
     lightbox_interval = models.PositiveSmallIntegerField(default=5, choices=[(3, "3 秒"), (5, "5 秒"), (8, "8 秒"), (12, "12 秒")])
+    # P23: overall storage limit in bytes (database, every version, images, videos); null means no limit.
+    storage_limit = models.PositiveBigIntegerField(null=True, blank=True)
 
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="site_settings_singleton")]

@@ -149,7 +149,8 @@ DOCUMENT_MAX_BATCH = int(os.getenv("DOCUMENT_MAX_BATCH") or 20)
 # Videos embedded in Markdown (P10). nginx serves them from DOCUMENT_STORAGE/videos/ after Django checks access;
 # keep VIDEO_MAX_BYTES below the nginx client_max_body_size of the video upload location.
 VIDEO_MAX_BYTES = int(os.getenv("VIDEO_MAX_BYTES") or 200 * 1024 * 1024)
-VIDEO_MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
+# P23: every upload (not only videos) keeps this much of the disk free.
+UPLOAD_MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 VIDEO_ACCEL_PREFIX = "/_protected/videos/"
 
 LOCAL_HTML_PREVIEW = os.getenv("LOCAL_HTML_PREVIEW", "false").lower() == "true"

@@ -13,7 +13,7 @@ from rest_framework.exceptions import APIException, PermissionDenied, Validation
 from users.models import User
 from users.permissions import has_role
 
-from . import activity, search, storage
+from . import activity, quota, search, storage
 from .models import ArticlePublication, Document, DocumentImage, DocumentTrashAudit, Tag, Version, VersionRestoreAudit
 from .publication import withdraw_publication
 
@@ -52,6 +52,9 @@ def add_upload(actor, data, document_id=None):
     suffix = Path(upload.name).suffix.lower().removeprefix(".")
     if suffix not in Document.Format.values:
         raise ValidationError({"file": "只接受 .html 或 .md 檔案。"})
+    if base_version is None:
+        # P23: uploads count against the limit; saving Markdown text in the editor does not (too small to matter).
+        quota.check_space(upload.size)
     with storage.stage(upload) as (temporary, sha256, size), transaction.atomic():
         lock_storage(sha256)
         if document_id is None:
